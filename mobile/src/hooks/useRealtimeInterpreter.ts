@@ -21,14 +21,21 @@ type InterpreterStatus =
 
 type ClientSecretResponse = {
   value?: string;
+  details?: unknown;
   error?: string;
 };
 
 type RealtimeEvent = {
+  delta?: string;
   type?: string;
   error?: {
     message?: string;
   };
+  response?: {
+    status?: string;
+    status_details?: unknown;
+  };
+  transcript?: string;
 };
 
 type RemoteTrackEvent = {
@@ -43,10 +50,50 @@ function getApiBaseUrl() {
 function formatRequestError(payload: string) {
   try {
     const parsed = JSON.parse(payload) as ClientSecretResponse;
+    if (parsed.details && typeof parsed.details === 'object') {
+      const detailsError =
+        'error' in parsed.details ? parsed.details.error : undefined;
+      if (
+        detailsError &&
+        typeof detailsError === 'object' &&
+        'message' in detailsError &&
+        typeof detailsError.message === 'string'
+      ) {
+        return detailsError.message;
+      }
+    }
+
     return parsed.error ?? payload;
   } catch {
     return payload;
   }
+}
+
+function formatRealtimeResponseError(event: RealtimeEvent) {
+  const status = event.response?.status ?? 'unknown';
+  const details = event.response?.status_details;
+
+  if (details && typeof details === 'object') {
+    const error = 'error' in details ? details.error : undefined;
+    if (
+      error &&
+      typeof error === 'object' &&
+      'message' in error &&
+      typeof error.message === 'string'
+    ) {
+      return error.message;
+    }
+
+    if (
+      'reason' in details &&
+      typeof details.reason === 'string' &&
+      details.reason.length > 0
+    ) {
+      return details.reason;
+    }
+  }
+
+  return `OpenAI Realtime response ended with status: ${status}.`;
 }
 
 export function useRealtimeInterpreter(
@@ -55,6 +102,10 @@ export function useRealtimeInterpreter(
 ) {
   const [status, setStatus] = useState<InterpreterStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [diagnosticMessage, setDiagnosticMessage] = useState<string | null>(
+    null,
+  );
+  const [transcript, setTranscript] = useState<string | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const dataChannelRef = useRef<
     ReturnType<RTCPeerConnection['createDataChannel']> | null
@@ -62,7 +113,26 @@ export function useRealtimeInterpreter(
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const remoteAudioTrackRef = useRef<MediaStreamTrack | null>(null);
+  const transcriptBufferRef = useRef('');
+  const transcriptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startingRef = useRef(false);
+
+  const showTranscriptTemporarily = useCallback((text: string) => {
+    const visibleText = text.trim();
+    if (!visibleText) {
+      return;
+    }
+
+    setTranscript(visibleText);
+    if (transcriptTimerRef.current) {
+      clearTimeout(transcriptTimerRef.current);
+    }
+    transcriptTimerRef.current = setTimeout(() => {
+      setTranscript(null);
+      transcriptBufferRef.current = '';
+      transcriptTimerRef.current = null;
+    }, 8000);
+  }, []);
 
   const routeAudioToSpeaker = useCallback(() => {
     InCallManager.start({ auto: true, media: 'audio' });
@@ -81,6 +151,13 @@ export function useRealtimeInterpreter(
     remoteAudioTrackRef.current?.stop();
     remoteAudioTrackRef.current = null;
     remoteStreamRef.current = null;
+    transcriptBufferRef.current = '';
+    if (transcriptTimerRef.current) {
+      clearTimeout(transcriptTimerRef.current);
+      transcriptTimerRef.current = null;
+    }
+    setTranscript(null);
+    setDiagnosticMessage(null);
 
     peerConnectionRef.current?.close();
     peerConnectionRef.current = null;
@@ -101,6 +178,8 @@ export function useRealtimeInterpreter(
 
     startingRef.current = true;
     setErrorMessage(null);
+    setTranscript(null);
+    transcriptBufferRef.current = '';
     setStatus('connecting');
 
     try {
@@ -110,6 +189,7 @@ export function useRealtimeInterpreter(
           'EXPO_PUBLIC_API_BASE_URL is missing from the mobile environment.',
         );
       }
+      setDiagnosticMessage('Backend URL loaded');
 
       if (Platform.OS === 'android') {
         const permission = await PermissionsAndroid.request(
@@ -134,9 +214,11 @@ export function useRealtimeInterpreter(
       });
       console.log('[Interpreter.ai] Microphone permission granted');
       localStreamRef.current = localStream;
+      setDiagnosticMessage('Microphone granted');
 
       routeAudioToSpeaker();
 
+      setDiagnosticMessage('Contacting backend');
       const sessionResponse = await fetch(
         `${apiBaseUrl}/api/realtime/session`,
         {
@@ -166,6 +248,7 @@ export function useRealtimeInterpreter(
       if (!clientSecret) {
         throw new Error('The server did not return a Realtime client secret.');
       }
+      setDiagnosticMessage('Session secret received');
 
       const peerConnection = new RTCPeerConnection();
       peerConnectionRef.current = peerConnection;
@@ -199,6 +282,7 @@ export function useRealtimeInterpreter(
           });
 
           routeAudioToSpeaker();
+          setDiagnosticMessage('Remote audio track received');
         } catch (error) {
           const message =
             error instanceof Error
@@ -223,6 +307,7 @@ export function useRealtimeInterpreter(
         );
 
         if (peerConnection.connectionState === 'connected') {
+          setDiagnosticMessage('Peer connected');
           setStatus('listening');
         } else if (
           peerConnection.connectionState === 'failed' ||
@@ -237,6 +322,7 @@ export function useRealtimeInterpreter(
       dataChannelRef.current = dataChannel;
       dataChannel.onopen = () => {
         console.log('[Interpreter.ai] Data channel opened');
+        setDiagnosticMessage('Data channel open');
         setStatus('listening');
       };
       dataChannel.onerror = (event: unknown) => {
@@ -247,23 +333,68 @@ export function useRealtimeInterpreter(
       dataChannel.onmessage = (event: { data?: unknown }) => {
         try {
           const realtimeEvent = JSON.parse(String(event.data)) as RealtimeEvent;
+          if (__DEV__) {
+            console.log(
+              '[Interpreter.ai] OpenAI Realtime event',
+              realtimeEvent.type ?? 'unknown',
+            );
+          }
 
           if (realtimeEvent.type === 'input_audio_buffer.speech_started') {
+            setDiagnosticMessage('Speech detected');
             setStatus('listening');
           } else if (
             realtimeEvent.type === 'input_audio_buffer.speech_stopped'
           ) {
             setStatus('translating');
+          } else if (realtimeEvent.type === 'response.created') {
+            transcriptBufferRef.current = '';
+            setTranscript(null);
+            if (transcriptTimerRef.current) {
+              clearTimeout(transcriptTimerRef.current);
+              transcriptTimerRef.current = null;
+            }
+            setDiagnosticMessage('Response started');
+            setStatus('translating');
           } else if (
             realtimeEvent.type === 'output_audio_buffer.started' ||
             realtimeEvent.type === 'response.output_audio.delta'
           ) {
+            setDiagnosticMessage('Audio output started');
             setStatus('speaking');
           } else if (
+            realtimeEvent.type === 'response.output_audio_transcript.delta'
+          ) {
+            transcriptBufferRef.current = (
+              transcriptBufferRef.current + (realtimeEvent.delta ?? '')
+            ).slice(-500);
+            showTranscriptTemporarily(transcriptBufferRef.current);
+          } else if (
+            realtimeEvent.type === 'response.output_audio_transcript.done'
+          ) {
+            const completedTranscript =
+              realtimeEvent.transcript ?? transcriptBufferRef.current;
+            transcriptBufferRef.current = completedTranscript;
+            showTranscriptTemporarily(completedTranscript);
+          } else if (
             realtimeEvent.type === 'output_audio_buffer.stopped' ||
-            realtimeEvent.type === 'response.done'
+            realtimeEvent.type === 'output_audio_buffer.cleared'
           ) {
             setStatus('listening');
+          } else if (realtimeEvent.type === 'response.done') {
+            const responseStatus = realtimeEvent.response?.status ?? 'unknown';
+            console.log('[Interpreter.ai] response.done', {
+              errorDetails: realtimeEvent.response?.status_details ?? null,
+              status: responseStatus,
+            });
+
+            if (
+              responseStatus === 'failed' ||
+              responseStatus === 'incomplete'
+            ) {
+              setErrorMessage(formatRealtimeResponseError(realtimeEvent));
+              setStatus('error');
+            }
           } else if (realtimeEvent.type === 'error') {
             console.error(
               '[Interpreter.ai] OpenAI Realtime error',
@@ -274,11 +405,18 @@ export function useRealtimeInterpreter(
             );
             setStatus('error');
           }
-        } catch {
-          // Ignore non-JSON data-channel messages.
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? `Unable to read OpenAI Realtime event: ${error.message}`
+              : 'Unable to read an OpenAI Realtime event.';
+          console.error('[Interpreter.ai] Realtime event parsing error', error);
+          setErrorMessage(message);
+          setStatus('error');
         }
       };
 
+      setDiagnosticMessage('Creating WebRTC offer');
       const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(offer);
 
@@ -302,6 +440,7 @@ export function useRealtimeInterpreter(
           answerSdp || `Realtime connection failed (${sdpResponse.status}).`,
         );
       }
+      setDiagnosticMessage('SDP answer received');
 
       await peerConnection.setRemoteDescription(
         new RTCSessionDescription({ sdp: answerSdp, type: 'answer' }),
@@ -326,15 +465,23 @@ export function useRealtimeInterpreter(
     } finally {
       startingRef.current = false;
     }
-  }, [languageOne, languageTwo, routeAudioToSpeaker, stop]);
+  }, [
+    languageOne,
+    languageTwo,
+    routeAudioToSpeaker,
+    showTranscriptTemporarily,
+    stop,
+  ]);
 
   useEffect(() => stop, [stop]);
 
   return {
+    diagnosticMessage,
     errorMessage,
     isActive: status !== 'idle' && status !== 'error',
     start,
     status,
     stop,
+    transcript,
   };
 }

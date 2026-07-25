@@ -14,8 +14,15 @@ const LANGUAGE_ONE = 'English';
 const LANGUAGE_TWO = 'Brazilian Portuguese';
 
 export default function InterpreterScreen() {
-  const { errorMessage, isActive, start, status, stop } =
-    useRealtimeInterpreter(LANGUAGE_ONE, LANGUAGE_TWO);
+  const {
+    diagnosticMessage,
+    errorMessage,
+    isActive,
+    start,
+    status,
+    stop,
+    transcript,
+  } = useRealtimeInterpreter(LANGUAGE_ONE, LANGUAGE_TWO);
   const audioLevel = useDemoAudioLevel(isActive);
   const statusText =
     status === 'connecting'
@@ -72,7 +79,12 @@ export default function InterpreterScreen() {
           <AudioWaveform active={isActive} audioLevel={audioLevel} />
           <ListeningStatus
             active={isActive}
-            detail={errorMessage ?? (isActive ? 'LIVE INTERPRETATION' : 'READY')}
+            detail={
+              errorMessage ??
+              transcript ??
+              diagnosticMessage ??
+              (isActive ? 'LIVE INTERPRETATION' : 'READY')
+            }
             status={statusText}
           />
         </View>

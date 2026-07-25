@@ -27,18 +27,48 @@ app.get("/health", (req, res) => {
   });
 });
 
+function normalizeLanguage(value, fallback) {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const normalized = value
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .trim()
+    .slice(0, 80);
+
+  return normalized || fallback;
+}
+
 app.post("/api/realtime/session", async (req, res) => {
+  const timestamp = new Date().toISOString();
+  const languageOne = normalizeLanguage(req.body?.languageOne, "English");
+  const languageTwo = normalizeLanguage(
+    req.body?.languageTwo,
+    "Brazilian Portuguese"
+  );
+
+  console.log("[Realtime session] Route received", {
+    timestamp,
+    route: "/api/realtime/session",
+    requestedLanguages: {
+      languageOne,
+      languageTwo
+    }
+  });
+
   try {
     if (!process.env.OPENAI_API_KEY) {
+      console.error("[Realtime session] Backend configuration error", {
+        timestamp,
+        route: "/api/realtime/session",
+        message: "OPENAI_API_KEY is not configured"
+      });
+
       return res.status(503).json({
         error: "OPENAI_API_KEY is not configured"
       });
     }
-
-    const {
-      languageOne = "English",
-      languageTwo = "Brazilian Portuguese"
-    } = req.body || {};
 
     const instructions = `
 You are Interpreter.ai, a live two-way voice interpreter.
@@ -99,9 +129,27 @@ Rules:
     );
 
     const data = await openAIResponse.json();
+    const clientSecretReturned = Boolean(
+      data && typeof data.value === "string" && data.value.length > 0
+    );
+
+    console.log("[Realtime session] OpenAI response", {
+      timestamp,
+      route: "/api/realtime/session",
+      openAIResponseStatus: openAIResponse.status,
+      clientSecretReturned
+    });
 
     if (!openAIResponse.ok) {
-      console.error("OpenAI session error:", data);
+      console.error("[Realtime session] OpenAI request failed", {
+        timestamp,
+        route: "/api/realtime/session",
+        openAIResponseStatus: openAIResponse.status,
+        message:
+          data?.error?.message ||
+          data?.error ||
+          "Unable to create realtime client secret"
+      });
 
       return res.status(openAIResponse.status).json({
         error: "Unable to create realtime client secret",
@@ -111,7 +159,12 @@ Rules:
 
     return res.status(200).json(data);
   } catch (error) {
-    console.error("Session creation failed:", error);
+    console.error("[Realtime session] Caught backend error", {
+      timestamp,
+      route: "/api/realtime/session",
+      name: error instanceof Error ? error.name : "UnknownError",
+      message: error instanceof Error ? error.message : String(error)
+    });
 
     return res.status(500).json({
       error: "Internal server error"
