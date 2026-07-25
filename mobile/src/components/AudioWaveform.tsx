@@ -93,7 +93,7 @@ export function AudioWaveform({ active, audioLevel }: AudioWaveformProps) {
   return (
     <View
       accessibilityLabel={
-        active ? 'Simulated speech activity waveform' : 'Idle audio line'
+        active ? 'Live interpretation activity' : 'Idle audio line'
       }
       style={[styles.container, { width }]}
     >

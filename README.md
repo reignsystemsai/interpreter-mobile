@@ -1,55 +1,52 @@
-# Interpreter.ai mobile
+# Interpreter.ai MVP
 
-A focused Expo SDK 54 visual prototype for Android and iOS. The app uses Expo
-Router, TypeScript, React Native Reanimated, SVG, and `expo-linear-gradient`.
+The existing Express server mints short-lived OpenAI Realtime client secrets at
+`POST /api/realtime/session`. The Expo app uses that endpoint, then establishes a
+direct WebRTC connection to OpenAI for full-duplex microphone and translated
+speech audio.
 
-The illuminated “I” toggles an entirely local demo animation. This version does
-not request microphone access, connect to the backend, or contain an OpenAI API
-key.
+## Required environment variables
 
-## Run from the repository root on Windows
+- Backend: `OPENAI_API_KEY`
+- Mobile: `EXPO_PUBLIC_API_BASE_URL` (the public HTTPS origin of the backend,
+  without a trailing slash)
 
-Install the current Node.js LTS release from [nodejs.org](https://nodejs.org/)
-first. Then open PowerShell in the repository root and run:
+`PORT` is supported by `server.js`, but Render supplies it automatically. Do not
+set it manually on Render.
 
-```powershell
-npm install --global pnpm
-cd mobile
-pnpm install --frozen-lockfile
-pnpm typecheck
-pnpm start
+## Render backend settings
+
+Create a **Web Service** connected to
+`reignsystemsai/interpreter-mobile` with:
+
+- Branch: `main`
+- Root Directory: leave blank
+- Runtime: `Node`
+- Build Command: `pnpm install --frozen-lockfile`
+- Start Command: `pnpm start:server`
+- Health Check Path: `/health`
+- Auto-Deploy: `Yes`
+- Environment variable: `OPENAI_API_KEY` = a server-side OpenAI project API key
+
+After deployment, verify:
+
+```text
+https://YOUR-SERVICE.onrender.com/health
 ```
 
-The dependency and Expo commands run inside the `mobile` folder. The first
-`cd mobile` command moves PowerShell into that folder.
+The response must show `"ok": true` and `"openaiConfigured": true`.
 
-## Open on Android or iOS with Expo Go
+## Deploy the backend
 
-1. Install or update **Expo Go** from Google Play or the iOS App Store.
-2. Put the phone and development computer on the same Wi-Fi network.
-3. Run the commands above and leave the Expo terminal open.
-4. On Android, open Expo Go, choose **Scan QR code**, and scan the QR code in
-   PowerShell.
-5. On iOS, scan the QR code with the Camera app, then approve opening it in
-   Expo Go.
+1. Push this repository to GitHub on `main`.
+2. In Render, choose **New > Web Service** and select the repository.
+3. Enter the settings above.
+4. Add `OPENAI_API_KEY` under **Environment**.
+5. Choose an instance type and click **Create Web Service**.
+6. Wait for `/health` to pass and copy the service's HTTPS URL.
 
-Tap the illuminated “I” to switch between idle and simulated listening modes.
+## Run the mobile app
 
-If LAN discovery is blocked or the devices are on different networks, stop
-Expo with `Ctrl+C` and start tunnel mode from `mobile`:
-
-```powershell
-pnpm exec expo start --tunnel
-```
-
-Scan the newly displayed QR code. Tunnel mode is slower than LAN but works
-around many public Wi-Fi, guest-network, firewall, and device-isolation issues.
-
-## Validation
-
-From `mobile`:
-
-```powershell
-pnpm typecheck
-pnpm exec expo config --type public
-```
+See [mobile/README.md](mobile/README.md). This app requires a custom development
+build because WebRTC and speaker routing use native modules; it cannot run in
+Expo Go.

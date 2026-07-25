@@ -1,53 +1,126 @@
 # Interpreter.ai mobile
 
-A focused Expo SDK 54 visual prototype for Android and iOS. The app uses Expo
-Router, TypeScript, React Native Reanimated, SVG, and `expo-linear-gradient`.
+Expo SDK 54 mobile client for automatic English ↔ Brazilian Portuguese voice
+interpretation. It requests microphone access, creates a session through the
+existing Express endpoint, and uses WebRTC for live microphone input and
+translated speech output.
 
-The illuminated “I” toggles an entirely local demo animation. This version does
-not request microphone access, connect to the backend, or contain an OpenAI API
-key.
+## Required mobile environment variable
 
-## Run from the repository root on Windows
+Create `mobile/.env`:
 
-Install the current Node.js LTS release from [nodejs.org](https://nodejs.org/)
-first. Then open PowerShell in the repository root and run:
+```dotenv
+EXPO_PUBLIC_API_BASE_URL=https://YOUR-SERVICE.onrender.com
+```
+
+Use the deployed Render HTTPS origin with no trailing slash. Never put
+`OPENAI_API_KEY` in this file or in the app.
+
+## Install
+
+From the repository root:
 
 ```powershell
-npm install --global pnpm
 cd mobile
 pnpm install --frozen-lockfile
-pnpm typecheck
-pnpm start
 ```
 
-The dependency and Expo commands run inside the `mobile` folder. The first
-`cd mobile` command moves PowerShell into that folder.
+This app uses native WebRTC and audio-routing modules. **Expo Go is not
+supported.** Install a development build as described below.
 
-## Open on Android or iOS with Expo Go
+## Android
 
-1. Install or update **Expo Go** from Google Play or the iOS App Store.
-2. Put the phone and development computer on the same Wi-Fi network.
-3. Run the commands above and leave the Expo terminal open.
-4. On Android, open Expo Go, choose **Scan QR code**, and scan the QR code in
-   PowerShell.
-5. On iOS, scan the QR code with the Camera app, then approve opening it in
-   Expo Go.
+### Local Android build
 
-Tap the illuminated “I” to switch between idle and simulated listening modes.
-
-If LAN discovery is blocked or the devices are on different networks, stop
-Expo with `Ctrl+C` and start tunnel mode from `mobile`:
+Install Android Studio, an Android SDK, and either start an emulator or connect
+an Android phone with USB debugging enabled. Then run:
 
 ```powershell
-pnpm exec expo start --tunnel
+cd mobile
+pnpm exec expo run:android
 ```
 
-Scan the newly displayed QR code. Tunnel mode is slower than LAN but works
-around many public Wi-Fi, guest-network, firewall, and device-isolation issues.
+After the app is installed, later development sessions only need:
+
+```powershell
+cd mobile
+pnpm exec expo start --dev-client
+```
+
+### Android build through EAS
+
+```powershell
+cd mobile
+pnpm dlx eas-cli login
+pnpm dlx eas-cli build --platform android --profile development
+```
+
+Open the resulting install URL on the Android device and install the APK. Then
+start Metro:
+
+```powershell
+pnpm exec expo start --dev-client --tunnel
+```
+
+Open the installed Interpreter.ai development client and connect to the running
+project.
+
+## iPhone
+
+Local iOS compilation requires macOS, Xcode, an Apple signing identity, and a
+connected iPhone:
+
+```bash
+cd mobile
+pnpm install --frozen-lockfile
+pnpm exec expo run:ios --device
+```
+
+On Windows or when using cloud signing, use EAS and an Apple Developer account:
+
+```powershell
+cd mobile
+pnpm dlx eas-cli login
+pnpm dlx eas-cli device:create
+pnpm dlx eas-cli build --platform ios --profile development
+```
+
+Register the iPhone when prompted, open the resulting install URL on that
+iPhone, and install the development build. Then run:
+
+```powershell
+pnpm exec expo start --dev-client --tunnel
+```
+
+Open the installed Interpreter.ai development client and connect to the running
+project.
+
+## Production mobile builds
+
+Set `EXPO_PUBLIC_API_BASE_URL` in the EAS `production` environment before
+building:
+
+```powershell
+pnpm dlx eas-cli env:create --environment production --name EXPO_PUBLIC_API_BASE_URL --value https://YOUR-SERVICE.onrender.com --visibility plaintext
+pnpm dlx eas-cli build --platform android --profile production
+pnpm dlx eas-cli build --platform ios --profile production
+```
+
+Submit store-ready builds with:
+
+```powershell
+pnpm dlx eas-cli submit --platform android
+pnpm dlx eas-cli submit --platform ios
+```
+
+## Use
+
+Tap the illuminated **I**, approve microphone access, and speak either English
+or Brazilian Portuguese. Server VAD detects completed speech turns, and the
+Realtime model speaks the translation in the other language. Tap the **I** again
+to stop.
 
 ## Validation
-
-From `mobile`:
 
 ```powershell
 pnpm typecheck
