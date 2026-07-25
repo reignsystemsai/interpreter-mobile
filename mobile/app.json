@@ -6,17 +6,26 @@
     "orientation": "portrait",
     "scheme": "interpreterai",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ai.interpreter.mobile"
+      "bundleIdentifier": "ai.interpreter.mobile",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Interpreter.ai uses the microphone to translate live speech."
+      }
     },
     "android": {
       "package": "ai.interpreter.mobile",
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-dev-client",
+      "@config-plugins/react-native-webrtc"
     ],
     "experiments": {
       "typedRoutes": true

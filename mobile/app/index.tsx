@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,11 +7,28 @@ import { IlluminatedI } from '../src/components/IlluminatedI';
 import { LanguageDisplay } from '../src/components/LanguageDisplay';
 import { ListeningStatus } from '../src/components/ListeningStatus';
 import { useDemoAudioLevel } from '../src/hooks/useDemoAudioLevel';
+import { useRealtimeInterpreter } from '../src/hooks/useRealtimeInterpreter';
 import { colors } from '../src/theme/colors';
 
+const LANGUAGE_ONE = 'English';
+const LANGUAGE_TWO = 'Brazilian Portuguese';
+
 export default function InterpreterScreen() {
-  const [isListening, setIsListening] = useState(false);
-  const audioLevel = useDemoAudioLevel(isListening);
+  const { errorMessage, isActive, start, status, stop } =
+    useRealtimeInterpreter(LANGUAGE_ONE, LANGUAGE_TWO);
+  const audioLevel = useDemoAudioLevel(isActive);
+  const statusText =
+    status === 'connecting'
+      ? 'Connecting…'
+      : status === 'translating'
+        ? 'Translating…'
+        : status === 'speaking'
+          ? 'Speaking…'
+          : status === 'error'
+            ? 'Connection error'
+            : isActive
+              ? 'Listening…'
+              : 'Tap to begin';
 
   return (
     <View style={styles.page}>
@@ -44,14 +60,27 @@ export default function InterpreterScreen() {
 
         <View style={styles.centerStage}>
           <IlluminatedI
-            active={isListening}
-            onPress={() => setIsListening((current) => !current)}
+            active={isActive}
+            onPress={() => {
+              if (isActive) {
+                stop();
+              } else {
+                void start();
+              }
+            }}
           />
-          <AudioWaveform active={isListening} audioLevel={audioLevel} />
-          <ListeningStatus active={isListening} />
+          <AudioWaveform active={isActive} audioLevel={audioLevel} />
+          <ListeningStatus
+            active={isActive}
+            detail={errorMessage ?? (isActive ? 'LIVE INTERPRETATION' : 'READY')}
+            status={statusText}
+          />
         </View>
 
-        <LanguageDisplay languageOne="English" languageTwo="Auto Detect" />
+        <LanguageDisplay
+          languageOne={LANGUAGE_ONE}
+          languageTwo={LANGUAGE_TWO}
+        />
       </SafeAreaView>
     </View>
   );

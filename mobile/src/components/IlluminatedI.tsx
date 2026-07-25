@@ -89,9 +89,9 @@ export function IlluminatedI({ active, onPress }: IlluminatedIProps) {
 
   return (
     <AnimatedPressable
-      accessibilityHint="Toggles the simulated listening animation"
+      accessibilityHint="Starts or stops live voice interpretation"
       accessibilityLabel={
-        active ? 'Stop simulated listening' : 'Begin simulated listening'
+        active ? 'Stop live interpretation' : 'Begin live interpretation'
       }
       accessibilityRole="button"
       accessibilityState={{ checked: active }}

@@ -10,9 +10,15 @@ import { colors } from '../theme/colors';
 
 type ListeningStatusProps = {
   active: boolean;
+  detail: string;
+  status: string;
 };
 
-export function ListeningStatus({ active }: ListeningStatusProps) {
+export function ListeningStatus({
+  active,
+  detail,
+  status,
+}: ListeningStatusProps) {
   const animatedStyle = useAnimatedStyle(() => {
     const progress = withTiming(active ? 1 : 0, { duration: 360 });
 
@@ -34,10 +40,10 @@ export function ListeningStatus({ active }: ListeningStatusProps) {
   return (
     <View accessibilityLiveRegion="polite" style={styles.container}>
       <Animated.Text style={[styles.status, animatedStyle]}>
-        {active ? 'Listening…' : 'Tap to begin'}
+        {status}
       </Animated.Text>
-      <Text style={styles.demoLabel}>
-        {active ? 'SIMULATED SPEECH' : 'DEMO MODE'}
+      <Text numberOfLines={2} style={styles.detail}>
+        {detail}
       </Text>
     </View>
   );
@@ -46,7 +52,7 @@ export function ListeningStatus({ active }: ListeningStatusProps) {
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    height: 52,
+    height: 62,
     marginTop: 2,
   },
   status: {
@@ -54,11 +60,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     letterSpacing: 0.3,
   },
-  demoLabel: {
+  detail: {
     color: '#4E5A72',
     fontSize: 8,
     fontWeight: '700',
     letterSpacing: 1.6,
     marginTop: 10,
+    maxWidth: 300,
+    textAlign: 'center',
   },
 });
