@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Interpreter.ai",
+    "slug": "interpreter-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "interpreterai",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.interpreter.mobile"
+    },
+    "android": {
+      "package": "ai.interpreter.mobile",
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
