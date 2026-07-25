@@ -3,9 +3,10 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import InCallManager from 'react-native-incall-manager';
 import {
   mediaDevices,
+  MediaStream,
   RTCPeerConnection,
   RTCSessionDescription,
-  type MediaStream,
+  type MediaStreamTrack,
 } from 'react-native-webrtc';
 
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
@@ -28,6 +29,11 @@ type RealtimeEvent = {
   error?: {
     message?: string;
   };
+};
+
+type RemoteTrackEvent = {
+  streams?: MediaStream[];
+  track?: MediaStreamTrack | null;
 };
 
 function getApiBaseUrl() {
@@ -54,7 +60,15 @@ export function useRealtimeInterpreter(
     ReturnType<RTCPeerConnection['createDataChannel']> | null
   >(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
+  const remoteAudioTrackRef = useRef<MediaStreamTrack | null>(null);
   const startingRef = useRef(false);
+
+  const routeAudioToSpeaker = useCallback(() => {
+    InCallManager.start({ auto: true, media: 'audio' });
+    InCallManager.setForceSpeakerphoneOn(true);
+    InCallManager.setSpeakerphoneOn(true);
+  }, []);
 
   const stop = useCallback(() => {
     startingRef.current = false;
@@ -63,6 +77,10 @@ export function useRealtimeInterpreter(
 
     localStreamRef.current?.getTracks().forEach((track) => track.stop());
     localStreamRef.current = null;
+
+    remoteAudioTrackRef.current?.stop();
+    remoteAudioTrackRef.current = null;
+    remoteStreamRef.current = null;
 
     peerConnectionRef.current?.close();
     peerConnectionRef.current = null;
@@ -114,11 +132,10 @@ export function useRealtimeInterpreter(
         audio: true,
         video: false,
       });
+      console.log('[Interpreter.ai] Microphone permission granted');
       localStreamRef.current = localStream;
 
-      InCallManager.start({ auto: true, media: 'audio' });
-      InCallManager.setForceSpeakerphoneOn(true);
-      InCallManager.setSpeakerphoneOn(true);
+      routeAudioToSpeaker();
 
       const sessionResponse = await fetch(
         `${apiBaseUrl}/api/realtime/session`,
@@ -132,6 +149,10 @@ export function useRealtimeInterpreter(
         },
       );
       const sessionPayload = await sessionResponse.text();
+      console.log('[Interpreter.ai] Session endpoint response', {
+        ok: sessionResponse.ok,
+        status: sessionResponse.status,
+      });
 
       if (!sessionResponse.ok) {
         throw new Error(
@@ -149,6 +170,46 @@ export function useRealtimeInterpreter(
       const peerConnection = new RTCPeerConnection();
       peerConnectionRef.current = peerConnection;
 
+      peerConnection.ontrack = (event: unknown) => {
+        const trackEvent = event as unknown as RemoteTrackEvent;
+        const remoteTrack = trackEvent.track;
+
+        if (!remoteTrack || remoteTrack.kind !== 'audio') {
+          const message = 'OpenAI connected without a playable audio track.';
+          console.error('[Interpreter.ai] Remote audio playback error', message);
+          setErrorMessage(message);
+          setStatus('error');
+          return;
+        }
+
+        try {
+          const remoteStream = trackEvent.streams?.[0] ?? new MediaStream([
+            remoteTrack,
+          ]);
+          remoteStreamRef.current = remoteStream;
+          remoteAudioTrackRef.current = remoteTrack;
+          remoteTrack.enabled = true;
+          remoteTrack._setVolume(1);
+
+          console.log('[Interpreter.ai] Remote audio track received', {
+            enabled: remoteTrack.enabled,
+            id: remoteTrack.id,
+            kind: remoteTrack.kind,
+            streamId: remoteStream.id,
+          });
+
+          routeAudioToSpeaker();
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? `Unable to route translated audio to the speaker: ${error.message}`
+              : 'Unable to route translated audio to the speaker.';
+          console.error('[Interpreter.ai] Remote audio playback error', error);
+          setErrorMessage(message);
+          setStatus('error');
+        }
+      };
+
       const microphoneTrack = localStream.getAudioTracks()[0];
       if (!microphoneTrack) {
         throw new Error('No microphone audio track is available.');
@@ -156,6 +217,11 @@ export function useRealtimeInterpreter(
       peerConnection.addTrack(microphoneTrack, localStream);
 
       peerConnection.onconnectionstatechange = () => {
+        console.log(
+          '[Interpreter.ai] Peer connection state',
+          peerConnection.connectionState,
+        );
+
         if (peerConnection.connectionState === 'connected') {
           setStatus('listening');
         } else if (
@@ -169,7 +235,15 @@ export function useRealtimeInterpreter(
 
       const dataChannel = peerConnection.createDataChannel('oai-events');
       dataChannelRef.current = dataChannel;
-      dataChannel.onopen = () => setStatus('listening');
+      dataChannel.onopen = () => {
+        console.log('[Interpreter.ai] Data channel opened');
+        setStatus('listening');
+      };
+      dataChannel.onerror = (event: unknown) => {
+        console.error('[Interpreter.ai] Realtime data channel error', event);
+        setErrorMessage('The Realtime control channel encountered an error.');
+        setStatus('error');
+      };
       dataChannel.onmessage = (event: { data?: unknown }) => {
         try {
           const realtimeEvent = JSON.parse(String(event.data)) as RealtimeEvent;
@@ -191,6 +265,10 @@ export function useRealtimeInterpreter(
           ) {
             setStatus('listening');
           } else if (realtimeEvent.type === 'error') {
+            console.error(
+              '[Interpreter.ai] OpenAI Realtime error',
+              realtimeEvent.error,
+            );
             setErrorMessage(
               realtimeEvent.error?.message ?? 'OpenAI Realtime returned an error.',
             );
@@ -231,10 +309,14 @@ export function useRealtimeInterpreter(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unable to start interpreting.';
+      console.error('[Interpreter.ai] Connection or playback error', error);
       dataChannelRef.current?.close();
       dataChannelRef.current = null;
       localStreamRef.current?.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
+      remoteAudioTrackRef.current?.stop();
+      remoteAudioTrackRef.current = null;
+      remoteStreamRef.current = null;
       peerConnectionRef.current?.close();
       peerConnectionRef.current = null;
       InCallManager.setForceSpeakerphoneOn(null);
@@ -244,7 +326,7 @@ export function useRealtimeInterpreter(
     } finally {
       startingRef.current = false;
     }
-  }, [languageOne, languageTwo, stop]);
+  }, [languageOne, languageTwo, routeAudioToSpeaker, stop]);
 
   useEffect(() => stop, [stop]);
 
