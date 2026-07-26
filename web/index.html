@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1220" />
+    <title>Interpreter.ai</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header>
+        <p class="eyebrow">LIVE VOICE TRANSLATION</p>
+        <h1>Interpreter.ai</h1>
+      </header>
+
+      <section class="status-card" aria-live="polite">
+        <span class="status-dot" id="statusDot"></span>
+        <div>
+          <p class="label">CONNECTION STATUS</p>
+          <p class="status" id="status">Ready</p>
+        </div>
+      </section>
+
+      <section class="language-card">
+        <div class="language-row">
+          <div>
+            <p class="label">SOURCE LANGUAGE</p>
+            <p class="source">Auto Detect</p>
+          </div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <label>
+            <span class="label">TARGET LANGUAGE</span>
+            <select id="targetLanguage">
+              <option value="English">English</option>
+              <option value="Spanish">Spanish</option>
+              <option value="Brazilian Portuguese" selected>Brazilian Portuguese</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <button class="primary-button" id="toggleButton" type="button">
+        Start Interpreting
+      </button>
+
+      <section class="transcript-card">
+        <p class="label">TRANSLATED OUTPUT</p>
+        <p class="transcript" id="transcript">Translated speech will appear here.</p>
+      </section>
+
+      <p class="privacy">Microphone audio is used only during the live interpreting session.</p>
+      <audio id="remoteAudio" autoplay playsinline></audio>
+    </main>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>
