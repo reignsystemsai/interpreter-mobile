@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: interpreter-ai-server
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_REALTIME_MODEL
+        value: gpt-realtime
+      - key: OPENAI_REALTIME_VOICE
+        value: marin
+      - key: OPENAI_SAFETY_IDENTIFIER
+        value: interpreter-ai-anonymous-mobile

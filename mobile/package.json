@@ -1,0 +1,40 @@
+{
+  "name": "interpreter-ai-mobile",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@config-plugins/react-native-webrtc": "^15.0.1",
+    "expo": "~57.0.8",
+    "expo-build-properties": "~57.0.5",
+    "expo-dev-client": "~57.0.7",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.0",
+    "react-native-incall-manager": "^4.2.1",
+    "react-native-webrtc": "124.0.7"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "start:dev": "expo start --dev-client",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "check": "tsc --noEmit",
+    "config": "expo config --type public"
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-incall-manager",
+          "react-native-webrtc"
+        ]
+      }
+    }
+  },
+  "private": true
+}

@@ -1,0 +1,10 @@
+node_modules/
+.pnpm-store/
+.claude/
+.env
+.expo/
+mobile/.expo/
+mobile/android/
+mobile/ios/
+.mobile-git-backup/
+*.log

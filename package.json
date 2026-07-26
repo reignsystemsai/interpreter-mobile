@@ -1,0 +1,13 @@
+{
+  "name": "interpreter-ai",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "mobile",
+    "server"
+  ],
+  "scripts": {
+    "check": "npm run check --workspace server && npm run check --workspace mobile",
+    "test": "npm test --workspace server"
+  }
+}
