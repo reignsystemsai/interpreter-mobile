@@ -1,22 +1,25 @@
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
+const path = require("path");
 require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        connectSrc: ["'self'", "https://api.openai.com"],
+        mediaSrc: ["'self'", "blob:"]
+      }
+    }
+  })
+);
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
-
-app.get("/", (req, res) => {
-  res.json({
-    service: "Interpreter.ai API",
-    status: "online",
-    version: "0.2.0"
-  });
-});
+app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/health", (req, res) => {
   res.status(200).json({
@@ -42,6 +45,7 @@ function normalizeLanguage(value, fallback) {
 
 app.post("/api/realtime/session", async (req, res) => {
   const timestamp = new Date().toISOString();
+  const browserOneWay = req.body?.mode === "browser-one-way";
   const languageOne = normalizeLanguage(req.body?.languageOne, "English");
   const languageTwo = normalizeLanguage(
     req.body?.languageTwo,
@@ -54,7 +58,8 @@ app.post("/api/realtime/session", async (req, res) => {
     requestedLanguages: {
       languageOne,
       languageTwo
-    }
+    },
+    mode: browserOneWay ? "browser-one-way" : "two-way"
   });
 
   try {
@@ -70,7 +75,24 @@ app.post("/api/realtime/session", async (req, res) => {
       });
     }
 
-    const instructions = `
+    const instructions = browserOneWay
+      ? `
+You are Interpreter.ai, a live one-way voice interpreter.
+
+Listen only for spoken English. Translate its meaning naturally and accurately
+into Brazilian Portuguese, then speak only the Brazilian Portuguese translation.
+
+Rules:
+- Never answer the speaker or have a conversation.
+- Never add advice, facts, opinions, commentary, explanations, or greetings.
+- Never repeat or speak the original English.
+- Preserve names, numbers, dates, currency amounts, addresses, tone, intent,
+  uncertainty, and technical terms accurately.
+- Keep the translation natural, concise, and appropriate for Brazilian Portuguese.
+- If the English is unclear, say only "Por favor, repita" in Brazilian Portuguese.
+- Do not announce that you are translating.
+`
+      : `
 You are Interpreter.ai, a live two-way voice interpreter.
 
 The active languages are:
@@ -94,6 +116,24 @@ Rules:
 - Do not announce that you are translating.
 `;
 
+    const inputAudio = {
+      turn_detection: {
+        type: "server_vad",
+        threshold: 0.5,
+        prefix_padding_ms: 300,
+        silence_duration_ms: 500,
+        create_response: true,
+        interrupt_response: true
+      }
+    };
+
+    if (browserOneWay) {
+      inputAudio.transcription = {
+        model: "gpt-4o-mini-transcribe",
+        language: "en"
+      };
+    }
+
     const openAIResponse = await fetch(
       "https://api.openai.com/v1/realtime/client_secrets",
       {
@@ -109,16 +149,7 @@ Rules:
             instructions,
             output_modalities: ["audio"],
             audio: {
-              input: {
-                turn_detection: {
-                  type: "server_vad",
-                  threshold: 0.5,
-                  prefix_padding_ms: 300,
-                  silence_duration_ms: 500,
-                  create_response: true,
-                  interrupt_response: true
-                }
-              },
+              input: inputAudio,
               output: {
                 voice: "alloy"
               }

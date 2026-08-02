@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#07111f" />
+    <title>Interpreter</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header>
+        <p class="eyebrow">English → Brazilian Portuguese</p>
+        <h1>Interpreter</h1>
+      </header>
+
+      <section class="status-card" aria-live="polite">
+        <span class="status-dot" id="status-dot" data-state="idle"></span>
+        <div>
+          <span class="status-label">Status</span>
+          <strong id="status-text">Ready</strong>
+        </div>
+      </section>
+
+      <section class="controls" aria-label="Interpreter controls">
+        <button class="primary-button" id="start-button" type="button">
+          Start Interpreter
+        </button>
+        <button class="stop-button" id="stop-button" type="button" disabled>
+          Stop
+        </button>
+      </section>
+
+      <section class="transcript-card">
+        <h2>English</h2>
+        <p id="english-transcript" class="transcript" aria-live="polite">
+          Your English speech will appear here.
+        </p>
+      </section>
+
+      <section class="transcript-card">
+        <h2>Brazilian Portuguese</h2>
+        <p id="portuguese-transcript" class="transcript" lang="pt-BR" aria-live="polite">
+          A tradução em português aparecerá aqui.
+        </p>
+      </section>
+
+      <audio id="translated-audio" autoplay playsinline></audio>
+    </main>
+  </body>
+</html>

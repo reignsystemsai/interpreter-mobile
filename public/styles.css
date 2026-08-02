@@ -1,0 +1,180 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  background: #050b14;
+  color: #eef6ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  background:
+    radial-gradient(circle at top, rgba(31, 118, 255, 0.18), transparent 42%),
+    #050b14;
+}
+
+button {
+  font: inherit;
+}
+
+.app-shell {
+  width: min(100%, 42rem);
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(2rem, env(safe-area-inset-top)) 1.25rem
+    max(2rem, env(safe-area-inset-bottom));
+}
+
+header {
+  margin-bottom: 1.5rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  color: #70d5ff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2.25rem, 10vw, 3.5rem);
+  line-height: 1;
+}
+
+.status-card,
+.transcript-card {
+  border: 1px solid rgba(148, 180, 218, 0.2);
+  border-radius: 1rem;
+  background: rgba(13, 28, 47, 0.82);
+  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.2);
+}
+
+.status-card {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-height: 4.5rem;
+  padding: 1rem 1.1rem;
+}
+
+.status-dot {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #73859b;
+  box-shadow: 0 0 0 0.35rem rgba(115, 133, 155, 0.12);
+}
+
+.status-dot[data-state="working"] {
+  background: #ffc857;
+  box-shadow: 0 0 0 0.35rem rgba(255, 200, 87, 0.13);
+}
+
+.status-dot[data-state="listening"] {
+  background: #35e0a1;
+  box-shadow: 0 0 0 0.35rem rgba(53, 224, 161, 0.13);
+}
+
+.status-dot[data-state="speaking"] {
+  background: #6da8ff;
+  box-shadow: 0 0 0 0.35rem rgba(109, 168, 255, 0.15);
+}
+
+.status-dot[data-state="error"] {
+  background: #ff6b78;
+  box-shadow: 0 0 0 0.35rem rgba(255, 107, 120, 0.14);
+}
+
+.status-label {
+  display: block;
+  margin-bottom: 0.15rem;
+  color: #91a7c0;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#status-text {
+  display: block;
+  line-height: 1.35;
+}
+
+.controls {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+
+.controls button {
+  width: 100%;
+  min-height: 4.25rem;
+  border: 0;
+  border-radius: 1rem;
+  cursor: pointer;
+  font-size: 1.05rem;
+  font-weight: 800;
+  touch-action: manipulation;
+}
+
+.primary-button {
+  background: #168fff;
+  color: white;
+  box-shadow: 0 0.8rem 2rem rgba(22, 143, 255, 0.24);
+}
+
+.stop-button {
+  background: #e64e5d;
+  color: white;
+}
+
+.controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+  box-shadow: none;
+}
+
+.controls button:focus-visible {
+  outline: 3px solid #eef6ff;
+  outline-offset: 3px;
+}
+
+.transcript-card {
+  min-height: 8.5rem;
+  margin-top: 1rem;
+  padding: 1.1rem;
+}
+
+.transcript-card h2 {
+  margin: 0 0 0.75rem;
+  color: #8db4dc;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.transcript {
+  margin: 0;
+  color: #f4f8ff;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 34rem) {
+  .controls {
+    grid-template-columns: 2fr 1fr;
+  }
+}
