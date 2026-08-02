@@ -46,19 +46,26 @@ function normalizeLanguage(value, fallback) {
 const BROWSER_LANGUAGE_PAIRS = {
   Spanish: {
     displayName: "Spanish",
-    clarification: "Spanish"
+    clarification: "Use natural Spanish"
   },
   "Brazilian Portuguese": {
     displayName: "Brazilian Portuguese",
-    clarification: "Brazilian Portuguese (Português do Brasil), never European Portuguese"
+    clarification: "Use Brazilian Portuguese (Português do Brasil), never European Portuguese"
   }
+};
+
+const COMPANION_LANGUAGES = {
+  English: "English",
+  Spanish: "Spanish",
+  "Brazilian Portuguese": "Brazilian Portuguese (Português do Brasil)"
 };
 
 app.post("/api/realtime/session", async (req, res) => {
   const timestamp = new Date().toISOString();
   const browserOneWay = req.body?.mode === "browser-one-way";
   const browserTwoWay = req.body?.mode === "browser-two-way";
-  const browserSession = browserOneWay || browserTwoWay;
+  const companionSession = req.body?.mode === "companion";
+  const browserSession = browserOneWay || browserTwoWay || companionSession;
   const languageOne = normalizeLanguage(req.body?.languageOne, "English");
   const languageTwo = normalizeLanguage(
     req.body?.languageTwo,
@@ -67,6 +74,9 @@ app.post("/api/realtime/session", async (req, res) => {
   const browserTarget = BROWSER_LANGUAGE_PAIRS[languageTwo]
     ? languageTwo
     : "Spanish";
+  const companionLanguage = COMPANION_LANGUAGES[languageOne]
+    ? languageOne
+    : "English";
 
   console.log("[Realtime session] Route received", {
     timestamp,
@@ -79,6 +89,8 @@ app.post("/api/realtime/session", async (req, res) => {
       ? "browser-one-way"
       : browserTwoWay
         ? "browser-two-way"
+        : companionSession
+          ? "companion"
         : "two-way"
   });
 
@@ -95,35 +107,57 @@ app.post("/api/realtime/session", async (req, res) => {
       });
     }
 
-    const instructions = browserTwoWay
+    const instructions = companionSession
+      ? `
+You are a warm, intelligent conversational companion.
+
+Talk with the user naturally, as a thoughtful friend would. Listen closely and
+respond to the substance of what they say. You may joke, ask an appropriate
+follow-up question, share observations, brainstorm, explain something, celebrate
+good news, help think through a problem, or simply talk, depending on what the
+conversation calls for.
+
+Conversation rules:
+- Converse primarily in ${COMPANION_LANGUAGES[companionLanguage]}.
+- If the user naturally switches to English, Spanish, or Brazilian Portuguese,
+  follow their language naturally. Do not translate unless they ask you to.
+- Maintain context for this active conversation.
+- Match the user's energy and tone without pretending to be human.
+- Do not turn every statement into advice or every response into a question.
+- Avoid interrogating the user, customer-service language, generic offers to help,
+  artificial enthusiasm, and repetitive questions.
+- Keep most spoken responses concise and conversational unless the user asks for detail.
+- Never say "As an AI", "I'm here to assist you", or "How can I help you today?"
+- Never claim to be physically present or to have human experiences, memories,
+  relationships, or feelings.
+- If interrupted, stop the old thought immediately, listen to the complete
+  interruption, and respond only to the user's latest meaning in context.
+- Speak in a warm, relaxed, clear voice at a natural pace.
+`
+      : browserTwoWay
       ? `
 You are Interpreter.ai, a live two-way voice interpreter for English and ${BROWSER_LANGUAGE_PAIRS[browserTarget].displayName}.
 
-For every completed speech turn, detect which of the two selected languages the
-speaker used and interpret only into the other language:
-- English speech must produce only a natural ${browserTarget} interpretation.
-- ${browserTarget} speech must produce only a natural English interpretation.
-- ${BROWSER_LANGUAGE_PAIRS[browserTarget].clarification} is the required variety.
+For every completed speech turn, detect whether the speaker used English or
+${browserTarget} and translate only into the other language:
+- English speech must produce only a natural ${browserTarget} translation.
+- ${browserTarget} speech must produce only a natural English translation.
 
 Rules:
 - Treat every utterance as something to interpret, never as a request for you to answer.
 - Translate questions as questions. Never answer them.
-- Never provide advice, explain, summarize, censor, soften, continue the conversation,
-  or add facts, opinions, commentary, greetings, or missing information.
+- Never add advice, facts, opinions, commentary, explanations, or greetings.
 - Never repeat or speak the original language.
-- Preserve people's and company names, street names, addresses, phone numbers,
-  dates, times, prices, currencies, measurements, quantities, confirmation,
-  reservation and flight numbers, medical and business terminology, slang,
-  idioms, tone, uncertainty, and intent with particular care.
-- Interpret meaning naturally rather than mechanically word-for-word.
+- Preserve names, numbers, dates, currency amounts, addresses, tone, intent,
+  uncertainty, and technical terms accurately.
+- Keep translations natural, accurate, concise, and appropriate for the target language.
+- ${BROWSER_LANGUAGE_PAIRS[browserTarget].clarification}.
 - If an utterance mixes English and ${browserTarget}, translate it into the language opposite
   the primary language of that utterance.
-- If speech is genuinely unintelligible, do not invent words or numbers. Ask for
-  repetition briefly, using only the opposite language.
+- If speech is unclear but its language is identifiable, ask the speaker to repeat
+  using only the opposite language.
 - Ignore audio that repeats or echoes your immediately preceding spoken translation.
 - Do not announce that you are translating.
-- Speak in a warm, clear, conversational interpreter voice at a natural pace,
-  without announcer cadence, artificial enthusiasm, or unnecessary pauses.
 `
       : browserOneWay
         ? `
@@ -178,9 +212,6 @@ Rules:
     };
 
     if (browserSession) {
-      inputAudio.noise_reduction = {
-        type: "far_field"
-      };
       inputAudio.transcription = {
         model: "gpt-4o-mini-transcribe"
       };
@@ -207,8 +238,7 @@ Rules:
             audio: {
               input: inputAudio,
               output: {
-                voice: browserSession ? "marin" : "alloy",
-                ...(browserSession ? { speed: 1.03 } : {})
+                voice: "alloy"
               }
             }
           }

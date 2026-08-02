@@ -1,13 +1,19 @@
 # Interpreter.ai browser MVP
 
 The Express service serves a mobile-friendly browser client and mints short-lived
-OpenAI Realtime client secrets at `POST /api/realtime/session`. The browser uses
-that endpoint, then establishes a direct WebRTC connection to OpenAI for
-continuous two-way speech interpretation for either English ↔ Spanish or
-English ↔ Brazilian Portuguese.
+OpenAI Realtime client secrets at `POST /api/realtime/session`. The browser then
+connects directly to OpenAI over WebRTC; Render does not proxy live audio.
 
-The permanent OpenAI API key remains on the server. It is never included in the
-browser files or session response.
+The browser has two separate modes:
+
+- **Interpreter** provides continuous English ↔ Spanish or English ↔ Brazilian
+  Portuguese interpretation. It translates only and does not join the conversation.
+- **Companion** provides a direct, contextual voice conversation in English,
+  Spanish, or Brazilian Portuguese.
+
+The permanent OpenAI API key remains on the server and is never included in
+browser files or session responses. Conversation context and transcripts exist
+only in the active browser/Realtime session; there is no database or history.
 
 ## Required environment variables
 
@@ -15,96 +21,64 @@ browser files or session response.
 - Existing native mobile app: `EXPO_PUBLIC_API_BASE_URL` (the public HTTPS origin
   of the backend, without a trailing slash)
 
-`PORT` is supported by `server.js`, but Render supplies it automatically. Do not
-set it manually on Render.
+`PORT` is supported by `server.js`, but Render supplies it automatically.
 
 ## Render backend settings
 
-Create a **Web Service** connected to
-`reignsystemsai/interpreter-mobile` with:
-
+- Service: existing `interpreter-api` Web Service
 - Branch: `main`
-- Root Directory: leave blank
-- Runtime: `Node`
 - Build Command: `npm install`
 - Start Command: `node server.js`
 - Health Check Path: `/health`
 - Auto-Deploy: `Yes`
-- Environment variable: `OPENAI_API_KEY` = a server-side OpenAI project API key
+- Environment variable: existing server-side `OPENAI_API_KEY`
 
-After deployment, verify:
+No additional Render environment variables are required.
 
-```text
-https://YOUR-SERVICE.onrender.com/health
-```
-
-The response must show `"ok": true` and `"openaiConfigured": true`.
-
-## Run and test the browser locally
-
-Localhost is treated as a secure browser context, so microphone access works
-without a local TLS certificate.
+## Run locally
 
 ```powershell
 npm install
 npm run start:server
 ```
 
-Then:
+Open `http://localhost:10000` in Chrome or Edge. Local session creation requires
+a valid `OPENAI_API_KEY` in a local `.env` file. Never put it in `public/`.
 
-1. Open `http://localhost:10000` in Chrome or Edge.
-2. Choose **Spanish** or **Português (Brasil)**. The selected pair is locked while a session is active.
-3. Press **Start Interpreter** and allow microphone access.
-4. For Spanish, say: `Good evening. I have a reservation for two people at seven thirty.`
-5. Confirm the original English and translated Spanish appear, and only Spanish is spoken.
-6. Wait for the status to return to listening, then say: `Sí, su reservación está
-   confirmada para las siete y media.`
-7. Confirm the original Spanish and translated English appear, and only English is spoken.
-8. For Portuguese, stop, choose **Português (Brasil)**, restart, and say:
-   `Good morning. I need to go to the airport at six thirty tomorrow morning.`
-9. After its Portuguese translation, say: `Claro. Posso chamar um carro para você às seis e quinze.`
-10. Confirm Portuguese is interpreted into English, then alternate at least four turns.
-11. Press **Stop** and confirm the microphone indicator turns off.
-12. Press **Start Interpreter** again to verify the session can restart.
+## Test Interpreter
 
-The local server still needs a valid `OPENAI_API_KEY` in a local `.env` file to
-create the short-lived Realtime credential. Never put this key in `public/`.
+1. Select **INTERPRETER**.
+2. Choose **Spanish**.
+3. Press **Start Interpreter**, allow microphone access, and speak English.
+4. Confirm only Spanish is spoken and both original/translation panels update.
+5. Respond in Spanish and confirm only English is spoken.
+6. Stop, choose **Português (Brasil)**, and restart.
+7. Test English → Brazilian Portuguese and Brazilian Portuguese → English.
+8. Press **Stop**, then Start again, to verify restart behavior.
 
-## Test the deployed browser
+Interpreter retains the prior working behavior: `alloy` voice, the existing
+server VAD configuration, browser echo cancellation/noise suppression, and a
+600 ms microphone restore delay after translated speaker audio finishes.
 
-1. Open the Render service's HTTPS root URL on Android Chrome.
-2. Press **Start Interpreter**.
-3. Choose **Allow** when Chrome requests microphone access.
-4. Choose the desired pair before starting. Speak one short English sentence,
-   pause, and confirm only the selected target language is spoken.
-5. Wait for the listening status, respond in Spanish or Brazilian Portuguese,
-   and confirm only English is spoken.
-6. Alternate at least four turns without changing direction or pressing Stop.
-7. At normal speaker volume, confirm the app does not interpret its own output.
-8. Begin the next reply shortly after the listening status returns and confirm
-   it is captured.
-9. Press **Stop**, then **Start Interpreter**, and verify a new session works.
+## Test Companion
 
-The first request can take longer when a free Render instance is waking up. Once
-the page loads, microphone audio travels directly between the browser and OpenAI
-over WebRTC; Render is used only to mint the short-lived credential.
+1. Select **COMPANION**.
+2. Choose **English**, **Español**, or **Português (Brasil)**.
+3. Press **START CONVERSATION** and say: `Hey, I had a really long day today.`
+4. Continue for at least five turns and confirm Companion responds naturally
+   instead of translating.
+5. While it is speaking, say: `Wait, that's not what I meant.`
+6. Confirm its old audio stops, the interruption is captured, and the cancelled
+   response does not resume.
+7. Repeat within the first second of a response and several times in one session.
+8. Test multi-turn Spanish and Brazilian Portuguese conversations.
+9. Test: Companion → Stop → Interpreter → Stop → Companion.
 
-To reduce translation feedback loops, the browser requests acoustic echo
-cancellation, noise suppression, mono speech capture, and Realtime far-field
-input noise reduction. It disables its outgoing track only while translation
-audio is generated and played, restores it 180 ms after OpenAI reports that the
-speaker buffer is drained, and rejects a close duplicate of the immediately
-preceding translation during a short echo window.
-
-The browser session retains conservative server VAD settings: threshold `0.5`,
-`300 ms` prefix padding, and `500 ms` end-of-speech silence. This tolerates short
-natural pauses without adding a large delay after a completed sentence. Browser
-sessions use the `marin` voice at `1.03×` speed; the model and direct WebRTC
-architecture are unchanged. Existing mobile sessions retain their previous
-voice and behavior.
+Companion keeps the microphone live while speaking. Server VAD detects barge-in;
+the browser cancels the active response, clears queued WebRTC output audio, and
+truncates the assistant item to the audio duration already heard. A new response
+is created only after the user's interrupted turn finishes.
 
 ## Existing mobile app
 
-See [mobile/README.md](mobile/README.md). This app requires a custom development
-build because WebRTC and speaker routing use native modules; it cannot run in
-Expo Go.
+See [mobile/README.md](mobile/README.md). The mobile implementation is unchanged.

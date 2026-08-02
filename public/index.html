@@ -10,20 +10,47 @@
   </head>
   <body>
     <main class="app-shell">
+      <nav class="mode-switch" aria-label="Operating mode">
+        <button id="interpreter-mode" type="button" aria-pressed="true">
+          INTERPRETER
+        </button>
+        <button id="companion-mode" type="button" aria-pressed="false">
+          COMPANION
+        </button>
+      </nav>
+
       <header>
-        <h1>INTERPRETER</h1>
+        <p class="eyebrow" id="mode-eyebrow">ENGLISH ↔ SPANISH</p>
+        <h1 id="mode-title">Interpreter</h1>
       </header>
 
-      <section class="language-card" aria-label="Conversation languages">
-        <div class="language-choice">
-          <span class="choice-label">Language one</span>
-          <strong>English</strong>
-        </div>
-        <span class="swap-arrow" aria-hidden="true">↕</span>
-        <label class="language-choice" for="target-language">
-          <span class="choice-label">Language two</span>
+      <section
+        class="language-card interpreter-language-card"
+        id="interpreter-language-card"
+        aria-label="Interpreter language pair"
+      >
+        <span>English</span>
+        <span aria-hidden="true">↔</span>
+        <label for="target-language">
+          <span class="sr-only">Second language</span>
           <select id="target-language">
             <option value="Spanish">Spanish</option>
+            <option value="Brazilian Portuguese">Português (Brasil)</option>
+          </select>
+        </label>
+      </section>
+
+      <section
+        class="language-card companion-language-card"
+        id="companion-language-card"
+        aria-label="Companion language"
+        hidden
+      >
+        <label for="companion-language">
+          <span>Language</span>
+          <select id="companion-language">
+            <option value="English">English</option>
+            <option value="Spanish">Español</option>
             <option value="Brazilian Portuguese">Português (Brasil)</option>
           </select>
         </label>
@@ -37,7 +64,7 @@
         </div>
       </section>
 
-      <section class="controls" aria-label="Interpreter controls">
+      <section class="controls" aria-label="Voice controls">
         <button class="primary-button" id="start-button" type="button">
           Start Interpreter
         </button>
@@ -46,11 +73,27 @@
         </button>
       </section>
 
-      <section class="transcript-card conversation-card">
+      <div id="interpreter-transcripts">
+        <section class="transcript-card">
+          <h2>Latest original speech</h2>
+          <p id="original-transcript" class="transcript" aria-live="polite">
+            The latest English or Spanish speech will appear here.
+          </p>
+        </section>
+
+        <section class="transcript-card">
+          <h2>Translated result</h2>
+          <p id="translation-transcript" class="transcript" aria-live="polite">
+            The translation will appear here.
+          </p>
+        </section>
+      </div>
+
+      <section class="transcript-card" id="companion-transcript-card" hidden>
         <h2>Conversation</h2>
         <div id="conversation-log" class="conversation-log" aria-live="polite">
           <p class="conversation-placeholder">
-            Recent original speech and translations will appear here.
+            Your conversation with Companion will appear here.
           </p>
         </div>
       </section>
