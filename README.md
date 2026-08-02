@@ -3,7 +3,7 @@
 The Express service serves a mobile-friendly browser client and mints short-lived
 OpenAI Realtime client secrets at `POST /api/realtime/session`. The browser uses
 that endpoint, then establishes a direct WebRTC connection to OpenAI for English
-microphone input and spoken Brazilian Portuguese translation.
+microphone input and spoken Spanish translation.
 
 The permanent OpenAI API key remains on the server. It is never included in the
 browser files or session response.
@@ -56,7 +56,7 @@ Then:
 3. Allow microphone access.
 4. Say: `Good morning. My appointment is on August fifteenth at three thirty PM.`
 5. Confirm the English transcript appears.
-6. Confirm a natural Brazilian Portuguese translation appears and is spoken.
+6. Confirm a natural Spanish translation appears and is spoken.
 7. Press **Stop** and confirm the microphone indicator turns off.
 8. Press **Start Interpreter** again to verify the session can restart.
 
@@ -69,7 +69,7 @@ create the short-lived Realtime credential. Never put this key in `public/`.
 2. Press **Start Interpreter**.
 3. Choose **Allow** when Chrome requests microphone access.
 4. Speak one short English sentence, then pause.
-5. Listen for only the Brazilian Portuguese translation.
+5. Listen for only the Spanish translation.
 6. Confirm both transcript areas update.
 7. Press **Stop** before closing the page.
 

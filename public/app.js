@@ -3,17 +3,14 @@
 
   const REALTIME_CALLS_URL = "https://api.openai.com/v1/realtime/calls";
   const ENGLISH_PLACEHOLDER = "Your English speech will appear here.";
-  const PORTUGUESE_PLACEHOLDER =
-    "A tradução em português aparecerá aqui.";
+  const SPANISH_PLACEHOLDER = "La traducción al español aparecerá aquí.";
 
   const statusDot = document.querySelector("#status-dot");
   const statusText = document.querySelector("#status-text");
   const startButton = document.querySelector("#start-button");
   const stopButton = document.querySelector("#stop-button");
   const englishTranscript = document.querySelector("#english-transcript");
-  const portugueseTranscript = document.querySelector(
-    "#portuguese-transcript"
-  );
+  const spanishTranscript = document.querySelector("#spanish-transcript");
   const translatedAudio = document.querySelector("#translated-audio");
 
   let peerConnection = null;
@@ -23,7 +20,7 @@
   let intentionallyStopping = false;
   let connectionGeneration = 0;
   let englishBuffer = "";
-  let portugueseBuffer = "";
+  let spanishBuffer = "";
 
   function setStatus(message, state = "idle") {
     statusText.textContent = message;
@@ -41,9 +38,9 @@
 
   function clearTranscripts() {
     englishBuffer = "";
-    portugueseBuffer = "";
+    spanishBuffer = "";
     setTranscript(englishTranscript, "", ENGLISH_PLACEHOLDER);
-    setTranscript(portugueseTranscript, "", PORTUGUESE_PLACEHOLDER);
+    setTranscript(spanishTranscript, "", SPANISH_PLACEHOLDER);
   }
 
   function releaseConnection({ resetStatus = true } = {}) {
@@ -107,12 +104,12 @@
     setTranscript(englishTranscript, englishBuffer, ENGLISH_PLACEHOLDER);
   }
 
-  function appendPortuguese(delta) {
-    portugueseBuffer = `${portugueseBuffer}${delta || ""}`.slice(-2000);
+  function appendSpanish(delta) {
+    spanishBuffer = `${spanishBuffer}${delta || ""}`.slice(-2000);
     setTranscript(
-      portugueseTranscript,
-      portugueseBuffer,
-      PORTUGUESE_PLACEHOLDER
+      spanishTranscript,
+      spanishBuffer,
+      SPANISH_PLACEHOLDER
     );
   }
 
@@ -128,9 +125,9 @@
     switch (event.type) {
       case "input_audio_buffer.speech_started":
         englishBuffer = "";
-        portugueseBuffer = "";
+        spanishBuffer = "";
         setTranscript(englishTranscript, "", "Listening…");
-        setTranscript(portugueseTranscript, "", "Waiting for translation…");
+        setTranscript(spanishTranscript, "", "Waiting for translation…");
         setStatus("Listening to English…", "listening");
         break;
       case "input_audio_buffer.speech_stopped":
@@ -144,19 +141,19 @@
         setTranscript(englishTranscript, englishBuffer, ENGLISH_PLACEHOLDER);
         break;
       case "response.output_audio_transcript.delta":
-        appendPortuguese(event.delta);
+        appendSpanish(event.delta);
         break;
       case "response.output_audio_transcript.done":
-        portugueseBuffer = event.transcript || portugueseBuffer;
+        spanishBuffer = event.transcript || spanishBuffer;
         setTranscript(
-          portugueseTranscript,
-          portugueseBuffer,
-          PORTUGUESE_PLACEHOLDER
+          spanishTranscript,
+          spanishBuffer,
+          SPANISH_PLACEHOLDER
         );
         break;
       case "output_audio_buffer.started":
       case "response.output_audio.delta":
-        setStatus("Speaking Portuguese…", "speaking");
+        setStatus("Speaking Spanish…", "speaking");
         break;
       case "output_audio_buffer.stopped":
       case "output_audio_buffer.cleared":
@@ -236,7 +233,7 @@
         },
         body: JSON.stringify({
           languageOne: "English",
-          languageTwo: "Brazilian Portuguese",
+          languageTwo: "Spanish",
           mode: "browser-one-way"
         })
       });
