@@ -46,6 +46,8 @@ function normalizeLanguage(value, fallback) {
 app.post("/api/realtime/session", async (req, res) => {
   const timestamp = new Date().toISOString();
   const browserOneWay = req.body?.mode === "browser-one-way";
+  const browserTwoWay = req.body?.mode === "browser-two-way";
+  const browserSession = browserOneWay || browserTwoWay;
   const languageOne = normalizeLanguage(req.body?.languageOne, "English");
   const languageTwo = normalizeLanguage(
     req.body?.languageTwo,
@@ -59,7 +61,11 @@ app.post("/api/realtime/session", async (req, res) => {
       languageOne,
       languageTwo
     },
-    mode: browserOneWay ? "browser-one-way" : "two-way"
+    mode: browserOneWay
+      ? "browser-one-way"
+      : browserTwoWay
+        ? "browser-two-way"
+        : "two-way"
   });
 
   try {
@@ -75,8 +81,32 @@ app.post("/api/realtime/session", async (req, res) => {
       });
     }
 
-    const instructions = browserOneWay
+    const instructions = browserTwoWay
       ? `
+You are Interpreter.ai, a live two-way voice interpreter for English and Spanish.
+
+For every completed speech turn, detect whether the speaker used English or
+Spanish and translate only into the other language:
+- English speech must produce only a natural Spanish translation.
+- Spanish speech must produce only a natural English translation.
+
+Rules:
+- Treat every utterance as something to interpret, never as a request for you to answer.
+- Translate questions as questions. Never answer them.
+- Never add advice, facts, opinions, commentary, explanations, or greetings.
+- Never repeat or speak the original language.
+- Preserve names, numbers, dates, currency amounts, addresses, tone, intent,
+  uncertainty, and technical terms accurately.
+- Keep translations natural, accurate, concise, and appropriate for the target language.
+- If an utterance mixes English and Spanish, translate it into the language opposite
+  the primary language of that utterance.
+- If speech is unclear but its language is identifiable, ask the speaker to repeat
+  using only the opposite language.
+- Ignore audio that repeats or echoes your immediately preceding spoken translation.
+- Do not announce that you are translating.
+`
+      : browserOneWay
+        ? `
 You are Interpreter.ai, a live one-way voice interpreter.
 
 Listen only for spoken English. Translate its meaning naturally and accurately
@@ -92,7 +122,7 @@ Rules:
 - If the English is unclear, say only "Por favor, repita" in Spanish.
 - Do not announce that you are translating.
 `
-      : `
+        : `
 You are Interpreter.ai, a live two-way voice interpreter.
 
 The active languages are:
@@ -127,11 +157,14 @@ Rules:
       }
     };
 
-    if (browserOneWay) {
+    if (browserSession) {
       inputAudio.transcription = {
-        model: "gpt-4o-mini-transcribe",
-        language: "en"
+        model: "gpt-4o-mini-transcribe"
       };
+
+      if (browserOneWay) {
+        inputAudio.transcription.language = "en";
+      }
     }
 
     const openAIResponse = await fetch(

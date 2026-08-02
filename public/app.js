@@ -2,15 +2,20 @@
   "use strict";
 
   const REALTIME_CALLS_URL = "https://api.openai.com/v1/realtime/calls";
-  const ENGLISH_PLACEHOLDER = "Your English speech will appear here.";
-  const SPANISH_PLACEHOLDER = "La traducción al español aparecerá aquí.";
+  const LISTENING_STATUS = "Listening for English or Spanish…";
+  const ORIGINAL_PLACEHOLDER =
+    "The latest English or Spanish speech will appear here.";
+  const TRANSLATION_PLACEHOLDER = "The translation will appear here.";
+  const MICROPHONE_RESUME_DELAY_MS = 600;
 
   const statusDot = document.querySelector("#status-dot");
   const statusText = document.querySelector("#status-text");
   const startButton = document.querySelector("#start-button");
   const stopButton = document.querySelector("#stop-button");
-  const englishTranscript = document.querySelector("#english-transcript");
-  const spanishTranscript = document.querySelector("#spanish-transcript");
+  const originalTranscript = document.querySelector("#original-transcript");
+  const translationTranscript = document.querySelector(
+    "#translation-transcript"
+  );
   const translatedAudio = document.querySelector("#translated-audio");
 
   let peerConnection = null;
@@ -19,8 +24,10 @@
   let starting = false;
   let intentionallyStopping = false;
   let connectionGeneration = 0;
-  let englishBuffer = "";
-  let spanishBuffer = "";
+  let microphoneResumeTimer = null;
+  let outputAudioActive = false;
+  let originalBuffer = "";
+  let translationBuffer = "";
 
   function setStatus(message, state = "idle") {
     statusText.textContent = message;
@@ -37,15 +44,48 @@
   }
 
   function clearTranscripts() {
-    englishBuffer = "";
-    spanishBuffer = "";
-    setTranscript(englishTranscript, "", ENGLISH_PLACEHOLDER);
-    setTranscript(spanishTranscript, "", SPANISH_PLACEHOLDER);
+    originalBuffer = "";
+    translationBuffer = "";
+    setTranscript(originalTranscript, "", ORIGINAL_PLACEHOLDER);
+    setTranscript(translationTranscript, "", TRANSLATION_PLACEHOLDER);
+  }
+
+  function clearMicrophoneResumeTimer() {
+    if (microphoneResumeTimer) {
+      window.clearTimeout(microphoneResumeTimer);
+      microphoneResumeTimer = null;
+    }
+  }
+
+  function setMicrophoneEnabled(enabled) {
+    localStream?.getAudioTracks().forEach((track) => {
+      track.enabled = enabled;
+    });
+  }
+
+  function muteMicrophoneForTranslation() {
+    clearMicrophoneResumeTimer();
+    setMicrophoneEnabled(false);
+  }
+
+  function resumeMicrophoneAfterPlayback() {
+    clearMicrophoneResumeTimer();
+    microphoneResumeTimer = window.setTimeout(() => {
+      microphoneResumeTimer = null;
+      if (!localStream || !peerConnection || intentionallyStopping) {
+        return;
+      }
+
+      setMicrophoneEnabled(true);
+      setStatus(LISTENING_STATUS, "listening");
+    }, MICROPHONE_RESUME_DELAY_MS);
   }
 
   function releaseConnection({ resetStatus = true } = {}) {
     intentionallyStopping = true;
     connectionGeneration += 1;
+    clearMicrophoneResumeTimer();
+    outputAudioActive = false;
 
     if (dataChannel) {
       dataChannel.onopen = null;
@@ -99,17 +139,17 @@
     }
   }
 
-  function appendEnglish(delta) {
-    englishBuffer = `${englishBuffer}${delta || ""}`.slice(-2000);
-    setTranscript(englishTranscript, englishBuffer, ENGLISH_PLACEHOLDER);
+  function appendOriginal(delta) {
+    originalBuffer = `${originalBuffer}${delta || ""}`.slice(-2000);
+    setTranscript(originalTranscript, originalBuffer, ORIGINAL_PLACEHOLDER);
   }
 
-  function appendSpanish(delta) {
-    spanishBuffer = `${spanishBuffer}${delta || ""}`.slice(-2000);
+  function appendTranslation(delta) {
+    translationBuffer = `${translationBuffer}${delta || ""}`.slice(-2000);
     setTranscript(
-      spanishTranscript,
-      spanishBuffer,
-      SPANISH_PLACEHOLDER
+      translationTranscript,
+      translationBuffer,
+      TRANSLATION_PLACEHOLDER
     );
   }
 
@@ -124,40 +164,49 @@
 
     switch (event.type) {
       case "input_audio_buffer.speech_started":
-        englishBuffer = "";
-        spanishBuffer = "";
-        setTranscript(englishTranscript, "", "Listening…");
-        setTranscript(spanishTranscript, "", "Waiting for translation…");
-        setStatus("Listening to English…", "listening");
+        originalBuffer = "";
+        translationBuffer = "";
+        setTranscript(originalTranscript, "", "Listening…");
+        setTranscript(translationTranscript, "", "Waiting for translation…");
+        setStatus(LISTENING_STATUS, "listening");
         break;
       case "input_audio_buffer.speech_stopped":
         setStatus("Translating…", "working");
         break;
       case "conversation.item.input_audio_transcription.delta":
-        appendEnglish(event.delta);
+        appendOriginal(event.delta);
         break;
       case "conversation.item.input_audio_transcription.completed":
-        englishBuffer = event.transcript || englishBuffer;
-        setTranscript(englishTranscript, englishBuffer, ENGLISH_PLACEHOLDER);
+        originalBuffer = event.transcript || originalBuffer;
+        setTranscript(originalTranscript, originalBuffer, ORIGINAL_PLACEHOLDER);
+        break;
+      case "response.created":
+        outputAudioActive = false;
+        muteMicrophoneForTranslation();
+        setStatus("Translating…", "working");
         break;
       case "response.output_audio_transcript.delta":
-        appendSpanish(event.delta);
+        appendTranslation(event.delta);
         break;
       case "response.output_audio_transcript.done":
-        spanishBuffer = event.transcript || spanishBuffer;
+        translationBuffer = event.transcript || translationBuffer;
         setTranscript(
-          spanishTranscript,
-          spanishBuffer,
-          SPANISH_PLACEHOLDER
+          translationTranscript,
+          translationBuffer,
+          TRANSLATION_PLACEHOLDER
         );
         break;
       case "output_audio_buffer.started":
       case "response.output_audio.delta":
-        setStatus("Speaking Spanish…", "speaking");
+        outputAudioActive = true;
+        muteMicrophoneForTranslation();
+        setStatus("Speaking translation…", "speaking");
         break;
       case "output_audio_buffer.stopped":
       case "output_audio_buffer.cleared":
-        setStatus("Listening to English…", "listening");
+        outputAudioActive = false;
+        setStatus("Preventing speaker echo…", "working");
+        resumeMicrophoneAfterPlayback();
         break;
       case "response.done":
         if (
@@ -166,6 +215,8 @@
         ) {
           const detail = event.response?.status_details?.error?.message;
           fail(detail || "OpenAI could not complete the translation.");
+        } else if (!outputAudioActive) {
+          resumeMicrophoneAfterPlayback();
         }
         break;
       case "error":
@@ -212,6 +263,7 @@
           return;
         }
         localStream = microphoneStream;
+        setMicrophoneEnabled(true);
       } catch (error) {
         if (
           error?.name === "NotAllowedError" ||
@@ -234,7 +286,7 @@
         body: JSON.stringify({
           languageOne: "English",
           languageTwo: "Spanish",
-          mode: "browser-one-way"
+          mode: "browser-two-way"
         })
       });
       const sessionPayload = await sessionResponse.text();
@@ -277,7 +329,7 @@
         }
 
         if (peerConnection.connectionState === "connected") {
-          setStatus("Listening to English…", "listening");
+          setStatus(LISTENING_STATUS, "listening");
         } else if (peerConnection.connectionState === "failed") {
           fail("The WebRTC connection to OpenAI failed.");
         } else if (
@@ -296,7 +348,7 @@
 
       dataChannel = peerConnection.createDataChannel("oai-events");
       dataChannel.onopen = () => {
-        setStatus("Listening to English…", "listening");
+        setStatus(LISTENING_STATUS, "listening");
       };
       dataChannel.onmessage = handleRealtimeEvent;
       dataChannel.onerror = () => {
