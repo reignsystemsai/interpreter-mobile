@@ -43,6 +43,17 @@ function normalizeLanguage(value, fallback) {
   return normalized || fallback;
 }
 
+const BROWSER_LANGUAGE_PAIRS = {
+  Spanish: {
+    displayName: "Spanish",
+    clarification: "Spanish"
+  },
+  "Brazilian Portuguese": {
+    displayName: "Brazilian Portuguese",
+    clarification: "Brazilian Portuguese (Português do Brasil), never European Portuguese"
+  }
+};
+
 app.post("/api/realtime/session", async (req, res) => {
   const timestamp = new Date().toISOString();
   const browserOneWay = req.body?.mode === "browser-one-way";
@@ -53,6 +64,9 @@ app.post("/api/realtime/session", async (req, res) => {
     req.body?.languageTwo,
     "Brazilian Portuguese"
   );
+  const browserTarget = BROWSER_LANGUAGE_PAIRS[languageTwo]
+    ? languageTwo
+    : "Spanish";
 
   console.log("[Realtime session] Route received", {
     timestamp,
@@ -83,27 +97,33 @@ app.post("/api/realtime/session", async (req, res) => {
 
     const instructions = browserTwoWay
       ? `
-You are Interpreter.ai, a live two-way voice interpreter for English and Spanish.
+You are Interpreter.ai, a live two-way voice interpreter for English and ${BROWSER_LANGUAGE_PAIRS[browserTarget].displayName}.
 
-For every completed speech turn, detect whether the speaker used English or
-Spanish and translate only into the other language:
-- English speech must produce only a natural Spanish translation.
-- Spanish speech must produce only a natural English translation.
+For every completed speech turn, detect which of the two selected languages the
+speaker used and interpret only into the other language:
+- English speech must produce only a natural ${browserTarget} interpretation.
+- ${browserTarget} speech must produce only a natural English interpretation.
+- ${BROWSER_LANGUAGE_PAIRS[browserTarget].clarification} is the required variety.
 
 Rules:
 - Treat every utterance as something to interpret, never as a request for you to answer.
 - Translate questions as questions. Never answer them.
-- Never add advice, facts, opinions, commentary, explanations, or greetings.
+- Never provide advice, explain, summarize, censor, soften, continue the conversation,
+  or add facts, opinions, commentary, greetings, or missing information.
 - Never repeat or speak the original language.
-- Preserve names, numbers, dates, currency amounts, addresses, tone, intent,
-  uncertainty, and technical terms accurately.
-- Keep translations natural, accurate, concise, and appropriate for the target language.
-- If an utterance mixes English and Spanish, translate it into the language opposite
+- Preserve people's and company names, street names, addresses, phone numbers,
+  dates, times, prices, currencies, measurements, quantities, confirmation,
+  reservation and flight numbers, medical and business terminology, slang,
+  idioms, tone, uncertainty, and intent with particular care.
+- Interpret meaning naturally rather than mechanically word-for-word.
+- If an utterance mixes English and ${browserTarget}, translate it into the language opposite
   the primary language of that utterance.
-- If speech is unclear but its language is identifiable, ask the speaker to repeat
-  using only the opposite language.
+- If speech is genuinely unintelligible, do not invent words or numbers. Ask for
+  repetition briefly, using only the opposite language.
 - Ignore audio that repeats or echoes your immediately preceding spoken translation.
 - Do not announce that you are translating.
+- Speak in a warm, clear, conversational interpreter voice at a natural pace,
+  without announcer cadence, artificial enthusiasm, or unnecessary pauses.
 `
       : browserOneWay
         ? `
@@ -158,6 +178,9 @@ Rules:
     };
 
     if (browserSession) {
+      inputAudio.noise_reduction = {
+        type: "far_field"
+      };
       inputAudio.transcription = {
         model: "gpt-4o-mini-transcribe"
       };
@@ -184,7 +207,8 @@ Rules:
             audio: {
               input: inputAudio,
               output: {
-                voice: "alloy"
+                voice: browserSession ? "marin" : "alloy",
+                ...(browserSession ? { speed: 1.03 } : {})
               }
             }
           }

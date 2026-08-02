@@ -11,9 +11,23 @@
   <body>
     <main class="app-shell">
       <header>
-        <p class="eyebrow">ENGLISH ↔ SPANISH</p>
-        <h1>Interpreter</h1>
+        <h1>INTERPRETER</h1>
       </header>
+
+      <section class="language-card" aria-label="Conversation languages">
+        <div class="language-choice">
+          <span class="choice-label">Language one</span>
+          <strong>English</strong>
+        </div>
+        <span class="swap-arrow" aria-hidden="true">↕</span>
+        <label class="language-choice" for="target-language">
+          <span class="choice-label">Language two</span>
+          <select id="target-language">
+            <option value="Spanish">Spanish</option>
+            <option value="Brazilian Portuguese">Português (Brasil)</option>
+          </select>
+        </label>
+      </section>
 
       <section class="status-card" aria-live="polite">
         <span class="status-dot" id="status-dot" data-state="idle"></span>
@@ -32,18 +46,13 @@
         </button>
       </section>
 
-      <section class="transcript-card">
-        <h2>Latest original speech</h2>
-        <p id="original-transcript" class="transcript" aria-live="polite">
-          The latest English or Spanish speech will appear here.
-        </p>
-      </section>
-
-      <section class="transcript-card">
-        <h2>Translated result</h2>
-        <p id="translation-transcript" class="transcript" aria-live="polite">
-          The translation will appear here.
-        </p>
+      <section class="transcript-card conversation-card">
+        <h2>Conversation</h2>
+        <div id="conversation-log" class="conversation-log" aria-live="polite">
+          <p class="conversation-placeholder">
+            Recent original speech and translations will appear here.
+          </p>
+        </div>
       </section>
 
       <audio id="translated-audio" autoplay playsinline></audio>

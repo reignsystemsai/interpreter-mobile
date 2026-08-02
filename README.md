@@ -3,7 +3,8 @@
 The Express service serves a mobile-friendly browser client and mints short-lived
 OpenAI Realtime client secrets at `POST /api/realtime/session`. The browser uses
 that endpoint, then establishes a direct WebRTC connection to OpenAI for
-continuous English ↔ Spanish speech interpretation.
+continuous two-way speech interpretation for either English ↔ Spanish or
+English ↔ Brazilian Portuguese.
 
 The permanent OpenAI API key remains on the server. It is never included in the
 browser files or session response.
@@ -52,16 +53,19 @@ npm run start:server
 Then:
 
 1. Open `http://localhost:10000` in Chrome or Edge.
-2. Press **Start Interpreter**.
-3. Allow microphone access.
-4. Say: `Good morning. My appointment is on August fifteenth at three thirty PM.`
+2. Choose **Spanish** or **Português (Brasil)**. The selected pair is locked while a session is active.
+3. Press **Start Interpreter** and allow microphone access.
+4. For Spanish, say: `Good evening. I have a reservation for two people at seven thirty.`
 5. Confirm the original English and translated Spanish appear, and only Spanish is spoken.
-6. Wait for the status to return to listening, then say: `Buenos días. Mi cita es
-   el quince de agosto a las tres y media de la tarde.`
+6. Wait for the status to return to listening, then say: `Sí, su reservación está
+   confirmada para las siete y media.`
 7. Confirm the original Spanish and translated English appear, and only English is spoken.
-8. Alternate one short English turn and one short Spanish turn.
-9. Press **Stop** and confirm the microphone indicator turns off.
-10. Press **Start Interpreter** again to verify the session can restart.
+8. For Portuguese, stop, choose **Português (Brasil)**, restart, and say:
+   `Good morning. I need to go to the airport at six thirty tomorrow morning.`
+9. After its Portuguese translation, say: `Claro. Posso chamar um carro para você às seis e quinze.`
+10. Confirm Portuguese is interpreted into English, then alternate at least four turns.
+11. Press **Stop** and confirm the microphone indicator turns off.
+12. Press **Start Interpreter** again to verify the session can restart.
 
 The local server still needs a valid `OPENAI_API_KEY` in a local `.env` file to
 create the short-lived Realtime credential. Never put this key in `public/`.
@@ -71,22 +75,33 @@ create the short-lived Realtime credential. Never put this key in `public/`.
 1. Open the Render service's HTTPS root URL on Android Chrome.
 2. Press **Start Interpreter**.
 3. Choose **Allow** when Chrome requests microphone access.
-4. Speak one short English sentence, then pause and listen for only Spanish.
-5. Wait for the listening status, speak one short Spanish sentence, then pause
-   and listen for only English.
-6. Alternate English and Spanish turns and confirm both transcript areas update.
-7. Confirm the app does not translate its own speaker output back again.
-8. Press **Stop** before closing the page.
+4. Choose the desired pair before starting. Speak one short English sentence,
+   pause, and confirm only the selected target language is spoken.
+5. Wait for the listening status, respond in Spanish or Brazilian Portuguese,
+   and confirm only English is spoken.
+6. Alternate at least four turns without changing direction or pressing Stop.
+7. At normal speaker volume, confirm the app does not interpret its own output.
+8. Begin the next reply shortly after the listening status returns and confirm
+   it is captured.
+9. Press **Stop**, then **Start Interpreter**, and verify a new session works.
 
 The first request can take longer when a free Render instance is waking up. Once
 the page loads, microphone audio travels directly between the browser and OpenAI
 over WebRTC; Render is used only to mint the short-lived credential.
 
 To reduce translation feedback loops, the browser requests acoustic echo
-cancellation and temporarily disables its outgoing microphone track while
-translated audio is generated and played. It restores the microphone shortly
-after OpenAI reports that the output audio buffer is fully drained. Speakers
-should take turns and wait for the listening status before speaking again.
+cancellation, noise suppression, mono speech capture, and Realtime far-field
+input noise reduction. It disables its outgoing track only while translation
+audio is generated and played, restores it 180 ms after OpenAI reports that the
+speaker buffer is drained, and rejects a close duplicate of the immediately
+preceding translation during a short echo window.
+
+The browser session retains conservative server VAD settings: threshold `0.5`,
+`300 ms` prefix padding, and `500 ms` end-of-speech silence. This tolerates short
+natural pauses without adding a large delay after a completed sentence. Browser
+sessions use the `marin` voice at `1.03×` speed; the model and direct WebRTC
+architecture are unchanged. Existing mobile sessions retain their previous
+voice and behavior.
 
 ## Existing mobile app
 
