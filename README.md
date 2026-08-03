@@ -18,7 +18,9 @@ browser or Android source, nor returned in an API response.
 - Auto-Deploy: enabled
 - Required environment variable: existing server-side `OPENAI_API_KEY`
 
-No additional Render environment variables are required.
+No additional Render environment variables are required for the existing
+Realtime interpreter. Account and membership modules remain disabled until the
+separate server-only values documented below are configured.
 
 ## Browser
 
@@ -41,3 +43,19 @@ Romanian, Turkish, Arabic, Hebrew, Hindi, Japanese, Korean, Mandarin Chinese,
 Cantonese, Vietnamese, and Thai. Transcripts are not shown on the home screen.
 
 See [mobile/README.md](mobile/README.md) for build and test steps.
+
+## Account and membership foundation
+
+The existing low-latency OpenAI Realtime route remains unchanged. Account,
+membership, notification, and usage data is isolated under versioned `/api/v1`
+modules so it can scale independently from live interpretation.
+
+Production account features require server-only `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`, and `REVENUECAT_WEBHOOK_AUTH` values. Apply
+`supabase/migrations/202608030001_account_membership_foundation.sql` before
+enabling accounts, then configure RevenueCat's authorized webhook at
+`POST /api/v1/subscriptions/revenuecat/webhook`.
+
+Google Play products use `interpreter_pro_monthly` and
+`interpreter_unlimited_monthly`. The Free allowance is 2 interpreted minutes per
+day. Paid unused minutes roll over for one billing cycle, then expire.

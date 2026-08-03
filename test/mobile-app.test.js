@@ -50,5 +50,5 @@ test("final MVP uses explicit mirrored directions without transcripts", () => {
   assert.match(serverSource, /mobile-pair/);
   assert.doesNotMatch(appSource, /showTranscript|conversationOpen|diagnosticMessage/);
   assert.equal(appConfig.expo.name, "interpreter");
-  assert.equal(appConfig.expo.android.versionCode, 8);
+  assert.equal(appConfig.expo.android.versionCode, 9);
 });

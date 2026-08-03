@@ -22,6 +22,8 @@ import Animated, {
 import { AudioWaveform } from '../src/components/AudioWaveform';
 import { useDemoAudioLevel } from '../src/hooks/useDemoAudioLevel';
 import { useRealtimeInterpreter } from '../src/hooks/useRealtimeInterpreter';
+import { AppMenu, type MenuDestination } from '../src/features/menu/AppMenu';
+import { DestinationSheet } from '../src/features/menu/DestinationSheet';
 
 const LANGUAGES = [
   'English', 'Spanish', 'Brazilian Portuguese', 'French', 'German', 'Italian',
@@ -36,7 +38,7 @@ const LANGUAGE_LABELS: Record<string, string> = {
 
 type Gender = 'female' | 'male';
 type LanguageSide = 'one' | 'two';
-type Overlay = 'menu' | 'settings' | 'history' | 'help' | 'privacy' | 'about' | 'language' | null;
+type Overlay = 'menu' | 'language' | MenuDestination | null;
 
 const PINK = '#FF3E91';
 const BLUE = '#075BFF';
@@ -200,9 +202,12 @@ export default function InterpreterScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      <MenuSheet onClose={() => setOverlay(null)} onNavigate={setOverlay} visible={overlay === 'menu'} />
+      <AppMenu onClose={() => setOverlay(null)} onNavigate={setOverlay} visible={overlay === 'menu'} />
       <LanguageSheet onClose={() => setOverlay(null)} onSelect={chooseLanguage} selectedLanguage={languageSide === 'one' ? languageOne : languageTwo} visible={overlay === 'language'} />
-      <InformationSheet kind={overlay} languageOne={languageOne} languageTwo={languageTwo} onClose={() => setOverlay('menu')} visible={['settings', 'history', 'help', 'privacy', 'about'].includes(overlay ?? '')} />
+      <DestinationSheet
+        destination={overlay && overlay !== 'menu' && overlay !== 'language' ? overlay : null}
+        onClose={() => setOverlay('menu')}
+      />
     </View>
   );
 }
@@ -236,29 +241,6 @@ function LanguageButton({ color, disabled, language, onPress }: { color: string;
   );
 }
 
-function MenuSheet({ onClose, onNavigate, visible }: { onClose: () => void; onNavigate: (overlay: Overlay) => void; visible: boolean }) {
-  return (
-    <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
-      <Pressable onPress={onClose} style={styles.modalBackdrop}>
-        <Pressable accessibilityViewIsModal onPress={() => undefined} style={styles.sheet}>
-          <View style={styles.sheetHandle} /><Text style={styles.sheetTitle}>Menu</Text>
-          {([
-            ['settings', 'Settings', 'Language defaults and audio'],
-            ['history', 'History', 'Recent conversations'],
-            ['help', 'Help / FAQ', 'How live interpretation works'],
-            ['privacy', 'Privacy Policy', 'Audio and data handling'],
-            ['about', 'About', 'Interpreter information'],
-          ] as const).map(([kind, label, subtitle]) => (
-            <Pressable key={kind} onPress={() => onNavigate(kind)} style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}>
-              <View style={styles.menuRowText}><Text style={styles.menuRowLabel}>{label}</Text><Text style={styles.menuRowSubtitle}>{subtitle}</Text></View><ChevronIcon right />
-            </Pressable>
-          ))}
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
 function LanguageSheet({ onClose, onSelect, selectedLanguage, visible }: { onClose: () => void; onSelect: (language: string) => void; selectedLanguage: string; visible: boolean }) {
   return (
     <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
@@ -270,31 +252,6 @@ function LanguageSheet({ onClose, onSelect, selectedLanguage, visible }: { onClo
               <Text style={styles.languageOptionText}>{languageLabel(language)}</Text>{selectedLanguage === language ? <Text style={styles.checkmark}>✓</Text> : null}
             </Pressable>
           ))}</ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
-function InformationSheet({ kind, languageOne, languageTwo, onClose, visible }: { kind: Overlay; languageOne: string; languageTwo: string; onClose: () => void; visible: boolean }) {
-  const content: Record<string, { title: string; body: string }> = {
-    settings: { title: 'Settings', body: `Current conversation: ${languageLabel(languageOne)} ↔ ${languageLabel(languageTwo)}. Audio uses a natural neutral voice, speaker output, echo cancellation, and automatic reconnection.` },
-    history: { title: 'History', body: 'No saved conversations. Live audio is not stored permanently, and conversation text is retained only for the active session.' },
-    help: { title: 'Help / FAQ', body: 'Choose the language for each speaker, then tap Start Conversation. Speaker 1 is translated into Speaker 2’s language, and Speaker 2 is translated back into Speaker 1’s language.' },
-    privacy: { title: 'Privacy Policy', body: 'Microphone audio is sent directly to OpenAI through a secure, short-lived Realtime session. The permanent API key never leaves the Interpreter server. Raw audio is not saved by this app.' },
-    about: { title: 'About interpreter', body: 'Interpreter is a live two-way voice interpreter designed to help two people speak naturally using one phone.' },
-  };
-  const selected = content[kind ?? 'about'] ?? {
-    title: 'About interpreter',
-    body: 'Interpreter is a live two-way voice interpreter designed for natural conversations.',
-  };
-  return (
-    <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
-      <Pressable onPress={onClose} style={styles.modalBackdrop}>
-        <Pressable accessibilityViewIsModal onPress={() => undefined} style={styles.infoSheet}>
-          <Image resizeMode="contain" source={require('../assets/interpreter-bubble.png')} style={styles.infoLogo} />
-          <Text style={styles.infoTitle}>{selected.title}</Text><Text style={styles.infoBody}>{selected.body}</Text>
-          <Pressable onPress={onClose} style={styles.doneButton}><Text style={styles.doneText}>Done</Text></Pressable>
         </Pressable>
       </Pressable>
     </Modal>

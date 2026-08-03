@@ -13,10 +13,11 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test:browser": "node --test test/browser-app.test.js",
+    "test:browser": "node --test test/*.test.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.111.0",
     "cors": "2.8.5",
     "dotenv": "17.2.0",
     "expo": "~54.0.0",

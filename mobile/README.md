@@ -53,3 +53,32 @@ when Android asks, and install **Interpreter.ai**.
 
 The microphone is paused while translated audio plays and resumes shortly after
 playback ends to reduce speaker echo and self-triggering.
+
+## Accounts, Interpreter Pro, and notifications
+
+The app includes a modular Supabase authentication, RevenueCat subscription,
+and Expo notification foundation. These features fail closed while configuration
+is absent; the live interpreter continues to use the production backend.
+
+Set only public mobile values in the EAS environment:
+
+```text
+EXPO_PUBLIC_SUPABASE_URL
+EXPO_PUBLIC_SUPABASE_ANON_KEY
+EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY
+EXPO_PUBLIC_LEGAL_REVIEW_APPROVED=false
+```
+
+Never place the Supabase service-role key, RevenueCat webhook authorization, or
+OpenAI API key in Expo variables. Configure Google Play and RevenueCat products
+with IDs `interpreter_pro_monthly` and `interpreter_unlimited_monthly`.
+
+Account creation and customer-facing legal links stay disabled while
+`EXPO_PUBLIC_LEGAL_REVIEW_APPROVED` is false. Change it only after final Terms and
+Privacy pages have completed legal review and are hosted at stable public URLs.
+
+- Free: 2 interpreted minutes per day, voice/video calls, basic AI voices.
+- Interpreter Pro: $9.99/month, 500 minutes/month, seven-day trial.
+- Interpreter Unlimited: $19.99/month, 2,000 minutes/month under fair use,
+  seven-day trial.
+- Paid unused minutes roll over for one billing cycle and then expire.

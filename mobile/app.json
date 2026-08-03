@@ -19,7 +19,7 @@
     "android": {
       "package": "ai.interpreter.mobile",
       "edgeToEdgeEnabled": true,
-      "versionCode": 8,
+      "versionCode": 9,
       "adaptiveIcon": {
         "foregroundImage": "./assets/interpreter-mark.png",
         "backgroundColor": "#F8FBFF"
@@ -32,6 +32,13 @@
     "plugins": [
       "expo-router",
       "expo-dev-client",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#075BFF"
+        }
+      ],
       "@config-plugins/react-native-webrtc"
     ],
     "splash": {
