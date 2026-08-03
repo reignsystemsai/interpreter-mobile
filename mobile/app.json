@@ -19,7 +19,7 @@
     "android": {
       "package": "ai.interpreter.mobile",
       "edgeToEdgeEnabled": true,
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/interpreter-mark.png",
         "backgroundColor": "#F8FBFF"

@@ -23,6 +23,7 @@ export type TranscriptTurn = {
 type InterpreterStatus =
   | 'idle'
   | 'connecting'
+  | 'detecting'
   | 'listening'
   | 'translating'
   | 'speaking'
@@ -176,6 +177,10 @@ export function useRealtimeInterpreter(selectedLanguage: string) {
   const userMutedRef = useRef(false);
   const replayingRef = useRef(false);
   const startingRef = useRef(false);
+  const manualStopRef = useRef(true);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startRef = useRef<(() => Promise<void>) | null>(null);
 
   const routeAudioToSpeaker = useCallback(() => {
     InCallManager.start({ auto: true, media: 'audio' });
@@ -189,7 +194,11 @@ export function useRealtimeInterpreter(selectedLanguage: string) {
   }, []);
 
   const stop = useCallback(() => {
+    manualStopRef.current = true;
+    reconnectAttemptsRef.current = 0;
     startingRef.current = false;
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
     if (echoResumeTimerRef.current) clearTimeout(echoResumeTimerRef.current);
     echoResumeTimerRef.current = null;
     dataChannelRef.current?.close();
@@ -210,6 +219,26 @@ export function useRealtimeInterpreter(selectedLanguage: string) {
     setIsMuted(false);
     userMutedRef.current = false;
   }, []);
+
+  const scheduleReconnect = useCallback((message: string) => {
+    if (manualStopRef.current || reconnectTimerRef.current) return;
+    if (reconnectAttemptsRef.current >= 3) {
+      setErrorMessage('Unable to reconnect. End the conversation and start again.');
+      setStatus('error');
+      return;
+    }
+    const nextAttempt = reconnectAttemptsRef.current + 1;
+    reconnectAttemptsRef.current = nextAttempt;
+    setErrorMessage(message);
+    setStatus('error');
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      stop();
+      reconnectAttemptsRef.current = nextAttempt;
+      manualStopRef.current = false;
+      void startRef.current?.();
+    }, 1500);
+  }, [stop]);
 
   const toggleMute = useCallback(() => {
     const nextMuted = !userMutedRef.current;
@@ -247,6 +276,7 @@ export function useRealtimeInterpreter(selectedLanguage: string) {
   const start = useCallback(async () => {
     if (startingRef.current) return;
     if (peerConnectionRef.current) stop();
+    manualStopRef.current = false;
     startingRef.current = true;
     setErrorMessage(null);
     setTurns([]);
@@ -315,22 +345,29 @@ export function useRealtimeInterpreter(selectedLanguage: string) {
       peerConnection.addTrack(microphoneTrack, localStream);
       peerConnection.onconnectionstatechange = () => {
         debugLog('Peer state', peerConnection.connectionState);
-        if (peerConnection.connectionState === 'connected') setStatus('listening');
+        if (peerConnection.connectionState === 'connected') {
+          if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+          reconnectAttemptsRef.current = 0;
+          setErrorMessage(null);
+          setStatus('listening');
+        }
         if (
           peerConnection.connectionState === 'failed' ||
           peerConnection.connectionState === 'disconnected'
         ) {
-          setErrorMessage('The Realtime audio connection was lost. Tap Reconnect.');
-          setStatus('error');
+          scheduleReconnect('The Realtime audio connection was interrupted. Reconnecting automatically.');
         }
       };
 
       const dataChannel = peerConnection.createDataChannel('oai-events');
       dataChannelRef.current = dataChannel;
       dataChannel.onopen = () => setStatus('listening');
+      dataChannel.onclose = () => {
+        scheduleReconnect('The OpenAI connection closed. Reconnecting automatically.');
+      };
       dataChannel.onerror = () => {
-        setErrorMessage('The OpenAI event connection failed. Tap Reconnect.');
-        setStatus('error');
+        scheduleReconnect('The OpenAI connection was interrupted. Reconnecting automatically.');
       };
       dataChannel.onmessage = (event: { data?: unknown }) => {
         try {
@@ -338,7 +375,7 @@ export function useRealtimeInterpreter(selectedLanguage: string) {
           debugLog('Realtime event', realtimeEvent.type ?? 'unknown');
 
           if (realtimeEvent.type === 'input_audio_buffer.speech_started') {
-            setStatus('listening');
+            setStatus('detecting');
           } else if (realtimeEvent.type === 'input_audio_buffer.speech_stopped') {
             setStatus('translating');
           } else if (
@@ -462,10 +499,15 @@ export function useRealtimeInterpreter(selectedLanguage: string) {
   }, [
     selectedLanguage,
     routeAudioToSpeaker,
+    scheduleReconnect,
     setMicrophoneEnabled,
     stop,
     updateTranslation,
   ]);
+
+  useEffect(() => {
+    startRef.current = start;
+  }, [start]);
 
   useEffect(() => stop, [stop]);
 
