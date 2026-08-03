@@ -10,6 +10,9 @@ import {
 } from 'react-native-webrtc';
 
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
+const PRODUCTION_API_BASE_URL = 'https://interpreter-api-fycw.onrender.com';
+
+export type RealtimeMode = 'browser-two-way' | 'companion';
 
 type InterpreterStatus =
   | 'idle'
@@ -44,7 +47,10 @@ type RemoteTrackEvent = {
 };
 
 function getApiBaseUrl() {
-  return process.env.EXPO_PUBLIC_API_BASE_URL?.trim().replace(/\/+$/, '');
+  return (
+    process.env.EXPO_PUBLIC_API_BASE_URL?.trim().replace(/\/+$/, '') ||
+    PRODUCTION_API_BASE_URL
+  );
 }
 
 function formatRequestError(payload: string) {
@@ -99,6 +105,7 @@ function formatRealtimeResponseError(event: RealtimeEvent) {
 export function useRealtimeInterpreter(
   languageOne: string,
   languageTwo: string,
+  mode: RealtimeMode = 'browser-two-way',
 ) {
   const [status, setStatus] = useState<InterpreterStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -115,6 +122,7 @@ export function useRealtimeInterpreter(
   const remoteAudioTrackRef = useRef<MediaStreamTrack | null>(null);
   const transcriptBufferRef = useRef('');
   const transcriptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const echoResumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startingRef = useRef(false);
 
   const showTranscriptTemporarily = useCallback((text: string) => {
@@ -142,6 +150,10 @@ export function useRealtimeInterpreter(
 
   const stop = useCallback(() => {
     startingRef.current = false;
+    if (echoResumeTimerRef.current) {
+      clearTimeout(echoResumeTimerRef.current);
+      echoResumeTimerRef.current = null;
+    }
     dataChannelRef.current?.close();
     dataChannelRef.current = null;
 
@@ -227,7 +239,7 @@ export function useRealtimeInterpreter(
             Accept: 'application/json',
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ languageOne, languageTwo }),
+          body: JSON.stringify({ languageOne, languageTwo, mode }),
         },
       );
       const sessionPayload = await sessionResponse.text();
@@ -360,6 +372,10 @@ export function useRealtimeInterpreter(
             realtimeEvent.type === 'output_audio_buffer.started' ||
             realtimeEvent.type === 'response.output_audio.delta'
           ) {
+            if (mode === 'browser-two-way') {
+              const microphoneTrack = localStreamRef.current?.getAudioTracks()[0];
+              if (microphoneTrack) microphoneTrack.enabled = false;
+            }
             setDiagnosticMessage('Audio output started');
             setStatus('speaking');
           } else if (
@@ -380,7 +396,19 @@ export function useRealtimeInterpreter(
             realtimeEvent.type === 'output_audio_buffer.stopped' ||
             realtimeEvent.type === 'output_audio_buffer.cleared'
           ) {
-            setStatus('listening');
+            if (mode === 'browser-two-way') {
+              if (echoResumeTimerRef.current) {
+                clearTimeout(echoResumeTimerRef.current);
+              }
+              echoResumeTimerRef.current = setTimeout(() => {
+                const microphoneTrack = localStreamRef.current?.getAudioTracks()[0];
+                if (microphoneTrack) microphoneTrack.enabled = true;
+                echoResumeTimerRef.current = null;
+                setStatus('listening');
+              }, 550);
+            } else {
+              setStatus('listening');
+            }
           } else if (realtimeEvent.type === 'response.done') {
             const responseStatus = realtimeEvent.response?.status ?? 'unknown';
             console.log('[Interpreter.ai] response.done', {
@@ -468,6 +496,7 @@ export function useRealtimeInterpreter(
   }, [
     languageOne,
     languageTwo,
+    mode,
     routeAudioToSpeaker,
     showTranscriptTemporarily,
     stop,
