@@ -113,19 +113,11 @@ h1 {
   padding: 0.75rem 1rem;
 }
 
-.interpreter-language-card {
+.language-card {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr);
   align-items: center;
   gap: 0.7rem;
-  font-weight: 750;
-}
-
-.companion-language-card label {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 0.8rem;
   font-weight: 750;
 }
 
@@ -270,10 +262,6 @@ h1 {
 .conversation-turn {
   border-left: 3px solid #567a9f;
   padding-left: 0.85rem;
-}
-
-.conversation-turn.companion {
-  border-left-color: #35e0a1;
 }
 
 .turn-language {

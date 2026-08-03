@@ -4,6 +4,7 @@
     "slug": "interpreter-ai",
     "owner": "www.interpreter.ai",
     "version": "1.1.0",
+    "icon": "./assets/interpreter-mark.png",
     "orientation": "portrait",
     "scheme": "interpreterai",
     "userInterfaceStyle": "light",
@@ -18,7 +19,11 @@
     "android": {
       "package": "ai.interpreter.mobile",
       "edgeToEdgeEnabled": true,
-      "versionCode": 5,
+      "versionCode": 6,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/interpreter-mark.png",
+        "backgroundColor": "#F8FBFF"
+      },
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
@@ -29,6 +34,11 @@
       "expo-dev-client",
       "@config-plugins/react-native-webrtc"
     ],
+    "splash": {
+      "image": "./assets/interpreter-mark.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8FBFF"
+    },
     "experiments": {
       "typedRoutes": true
     },

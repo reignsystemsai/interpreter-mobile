@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
+  Image,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,267 +14,208 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import { AudioWaveform } from '../src/components/AudioWaveform';
 import { useDemoAudioLevel } from '../src/hooks/useDemoAudioLevel';
-import {
-  type RealtimeMode,
-  useRealtimeInterpreter,
-} from '../src/hooks/useRealtimeInterpreter';
+import { useRealtimeInterpreter } from '../src/hooks/useRealtimeInterpreter';
 
-const TARGET_LANGUAGES = [
-  { label: 'Spanish', value: 'Spanish' },
-  { label: 'Português (Brasil)', value: 'Brazilian Portuguese' },
+const LANGUAGES = [
+  'English',
+  'Brazilian Portuguese',
+  'Spanish',
+  'French',
+  'German',
+  'Italian',
+  'Mandarin Chinese',
+  'Japanese',
+  'Korean',
+  'Arabic',
+  'Hindi',
 ] as const;
 
-const COMPANION_LANGUAGES = [
-  { label: 'English', value: 'English' },
-  ...TARGET_LANGUAGES,
-] as const;
+const LANGUAGE_LABELS: Record<string, string> = {
+  'Brazilian Portuguese': 'Português (Brasil)',
+  'Mandarin Chinese': '中文 (Mandarin)',
+};
 
-type Sheet = 'language' | 'menu' | null;
-
-function MenuIcon() {
-  return (
-    <Svg height={32} viewBox="0 0 32 32" width={32}>
-      {[7, 16, 25].map((y) => (
-        <Line
-          key={y}
-          stroke="#075BFF"
-          strokeLinecap="round"
-          strokeWidth={3}
-          x1={5}
-          x2={27}
-          y1={y}
-          y2={y}
-        />
-      ))}
-    </Svg>
-  );
-}
-
-function BrandMark() {
-  return (
-    <View style={styles.brandMark}>
-      <View style={styles.brandTail} />
-      <Text style={styles.brandLetter}>i</Text>
-    </View>
-  );
+function languageLabel(language: string) {
+  return LANGUAGE_LABELS[language] ?? language;
 }
 
 function GlobeIcon() {
   return (
     <Svg height={42} viewBox="0 0 48 48" width={42}>
-      <Circle cx={24} cy={24} fill="none" r={19} stroke="#075BFF" strokeWidth={3} />
-      <Path d="M5 24h38M24 5c6 5 9 11 9 19s-3 14-9 19M24 5c-6 5-9 11-9 19s3 14 9 19" fill="none" stroke="#075BFF" strokeWidth={2.4} />
+      <Circle cx={24} cy={24} fill="none" r={19} stroke="#0A5BFF" strokeWidth={3} />
+      <Path d="M5 24h38M24 5c6 5 9 11 9 19s-3 14-9 19M24 5c-6 5-9 11-9 19s3 14 9 19" fill="none" stroke="#0A5BFF" strokeWidth={2.4} />
     </Svg>
   );
 }
 
 function ChevronIcon() {
+  return <Svg height={24} viewBox="0 0 24 24" width={24}><Path d="m5 8 7 7 7-7" fill="none" stroke="#0A5BFF" strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} /></Svg>;
+}
+
+function MicrophoneIcon({ color = '#075BFF', muted = false }: { color?: string; muted?: boolean }) {
   return (
-    <Svg height={24} viewBox="0 0 24 24" width={24}>
-      <Path d="m5 8 7 7 7-7" fill="none" stroke="#075BFF" strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} />
+    <Svg height={30} viewBox="0 0 34 34" width={30}>
+      <Path d="M12 8a5 5 0 0 1 10 0v9a5 5 0 0 1-10 0V8Z" fill={color} />
+      <Path d="M7 16v1a10 10 0 0 0 20 0v-1M17 27v5M12 32h10" fill="none" stroke={color} strokeLinecap="round" strokeWidth={2.6} />
+      {muted ? <Line stroke="#D92D20" strokeLinecap="round" strokeWidth={3} x1={6} x2={28} y1={6} y2={28} /> : null}
     </Svg>
   );
 }
 
-function MicrophoneIcon({ stopped }: { stopped: boolean }) {
-  return (
-    <Svg height={34} viewBox="0 0 34 34" width={34}>
-      {stopped ? (
-        <Path d="M10 10h14v14H10z" fill="#FFFFFF" />
-      ) : (
-        <>
-          <Path d="M12 8a5 5 0 0 1 10 0v9a5 5 0 0 1-10 0V8Z" fill="#FFFFFF" />
-          <Path d="M7 16v1a10 10 0 0 0 20 0v-1M17 27v5M12 32h10" fill="none" stroke="#FFFFFF" strokeLinecap="round" strokeWidth={2.6} />
-        </>
-      )}
-    </Svg>
-  );
+function ReplayIcon() {
+  return <Svg height={29} viewBox="0 0 32 32" width={29}><Path d="M8 10V4l-5 5 5 5v-4a10 10 0 1 1-1 13" fill="none" stroke="#075BFF" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.7} /></Svg>;
+}
+
+function CloseIcon() {
+  return <Svg height={26} viewBox="0 0 26 26" width={26}><Path d="M5 5l16 16M21 5 5 21" fill="none" stroke="#152238" strokeLinecap="round" strokeWidth={2.5} /></Svg>;
 }
 
 export default function InterpreterScreen() {
-  const { height } = useWindowDimensions();
-  const compact = height < 760;
-  const [mode, setMode] = useState<RealtimeMode>('browser-two-way');
-  const [targetLanguage, setTargetLanguage] = useState('Spanish');
-  const [companionLanguage, setCompanionLanguage] = useState('English');
-  const [sheet, setSheet] = useState<Sheet>(null);
-  const companion = mode === 'companion';
-  const activeLanguage = companion ? companionLanguage : targetLanguage;
-  const languageOptions = companion ? COMPANION_LANGUAGES : TARGET_LANGUAGES;
-  const selectedLanguageLabel =
-    languageOptions.find((option) => option.value === activeLanguage)?.label ??
-    activeLanguage;
-
+  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
+  const [languageSheetOpen, setLanguageSheetOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [conversationOpen, setConversationOpen] = useState(false);
+  const transcriptRef = useRef<ScrollView>(null);
+  const targetLanguage = selectedLanguage ?? 'Spanish';
   const {
-    diagnosticMessage,
+    detectedUserLanguage,
     errorMessage,
     isActive,
+    isMuted,
+    replayLastTranslation,
     start,
     status,
     stop,
-  } = useRealtimeInterpreter(
-    companion ? companionLanguage : 'English',
-    companion ? companionLanguage : targetLanguage,
-    mode,
-  );
+    toggleMute,
+    turns,
+  } = useRealtimeInterpreter(targetLanguage);
   const audioLevel = useDemoAudioLevel(isActive);
 
   const statusText = useMemo(() => {
-    if (status === 'connecting') return 'Connecting…';
-    if (status === 'translating') return companion ? 'Thinking…' : 'Translating…';
-    if (status === 'speaking') return 'Speaking…';
-    if (status === 'error') return 'Tap below to try again';
-    if (isActive) {
-      return companion ? 'Listening…' : `Listening for ${selectedLanguageLabel} or English…`;
-    }
-    return 'Ready to listen';
-  }, [companion, isActive, selectedLanguageLabel, status]);
+    if (status === 'connecting') return 'Connecting';
+    if (status === 'translating') return 'Translating';
+    if (status === 'speaking') return 'Speaking';
+    if (status === 'error') return 'Connection interrupted';
+    if (isActive) return 'Listening';
+    return 'Ready';
+  }, [isActive, status]);
 
-  const closeAndSetMode = (nextMode: RealtimeMode) => {
-    if (isActive) stop();
-    setMode(nextMode);
-    setSheet(null);
+  const beginConversation = async () => {
+    if (!selectedLanguage) return;
+    setConversationOpen(true);
+    await start();
   };
 
-  const chooseLanguage = (value: string) => {
-    if (companion) setCompanionLanguage(value);
-    else setTargetLanguage(value);
-    setSheet(null);
+  const endConversation = () => {
+    stop();
+    setConversationOpen(false);
   };
 
   return (
     <View style={styles.page}>
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-        <ScrollView
-          bounces={false}
-          contentContainerStyle={[styles.content, compact && styles.contentCompact]}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.topBar}>
-            <View style={styles.topSpacer} />
-            <Pressable
-              accessibilityLabel="Open mode menu"
-              accessibilityRole="button"
-              hitSlop={12}
-              onPress={() => setSheet('menu')}
-              style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-            >
-              <MenuIcon />
-            </Pressable>
-          </View>
-
-          <View style={[styles.hero, compact && styles.heroCompact]}>
-            <BrandMark />
-            <Text adjustsFontSizeToFit numberOfLines={1} style={styles.wordmark}>
-              interpreter
-            </Text>
-            <Text style={styles.tagline}>
-              {companion ? 'Talk naturally.' : 'Speak any language.'}
-            </Text>
-          </View>
-
-          <Pressable
-            accessibilityHint="Opens language choices"
-            accessibilityLabel={`${companion ? 'Conversation language' : 'Language to interpret to'}: ${selectedLanguageLabel}`}
-            accessibilityRole="button"
-            disabled={isActive}
-            onPress={() => setSheet('language')}
-            style={({ pressed }) => [
-              styles.languageCard,
-              compact && styles.languageCardCompact,
-              pressed && styles.pressed,
-              isActive && styles.disabled,
-            ]}
-          >
-            <GlobeIcon />
-            <View style={styles.languageText}>
-              <Text style={styles.languageLabel}>
-                {companion ? 'Conversation language' : 'Language to interpret to'}
-              </Text>
-              <Text numberOfLines={1} style={styles.languageValue}>
-                {selectedLanguageLabel}
-              </Text>
-            </View>
-            <ChevronIcon />
-          </Pressable>
-
-          <View style={[styles.listenerWrap, compact && styles.listenerWrapCompact]}>
-            <View style={[styles.listenerGlow, compact && styles.listenerGlowCompact]} />
-            <View style={[styles.listenerCircle, compact && styles.listenerCircleCompact]}>
-              <View style={[styles.dottedCircle, compact && styles.dottedCircleCompact]}>
-                <AudioWaveform active={isActive} audioLevel={audioLevel} />
-                <Text numberOfLines={2} style={styles.statusText}>
-                  {statusText}
-                </Text>
+        {conversationOpen ? (
+          <View style={styles.conversationPage}>
+            <View style={styles.conversationHeader}>
+              <Pressable accessibilityLabel="End conversation" hitSlop={10} onPress={endConversation} style={styles.headerIcon}><CloseIcon /></Pressable>
+              <View style={styles.headerTitleWrap}>
+                <Text numberOfLines={1} style={styles.headerTitle}>{languageLabel(targetLanguage)}</Text>
+                <Text style={styles.connectionText}>{statusText}</Text>
               </View>
+              <Pressable accessibilityRole="button" onPress={endConversation} style={styles.endHeaderButton}><Text style={styles.endHeaderText}>End</Text></Pressable>
+            </View>
+
+            <View style={styles.livePanel}>
+              <View style={[styles.liveOrb, status === 'speaking' && styles.liveOrbSpeaking]}>
+                <AudioWaveform active={isActive} audioLevel={audioLevel} />
+              </View>
+              <Text accessibilityLiveRegion="polite" style={styles.liveStatus}>{statusText}</Text>
+              <Text style={styles.directionText}>
+                {detectedUserLanguage
+                  ? `${detectedUserLanguage} ↔ ${languageLabel(targetLanguage)}`
+                  : `Detecting your language ↔ ${languageLabel(targetLanguage)}`}
+              </Text>
+            </View>
+
+            {errorMessage ? (
+              <View style={styles.errorCard}>
+                <Text style={styles.errorText}>{errorMessage}</Text>
+                <Pressable onPress={() => void start()} style={styles.reconnectButton}><Text style={styles.reconnectText}>Reconnect</Text></Pressable>
+              </View>
+            ) : null}
+
+            <ScrollView
+              contentContainerStyle={styles.transcriptContent}
+              onContentSizeChange={() => transcriptRef.current?.scrollToEnd({ animated: true })}
+              ref={transcriptRef}
+              showsVerticalScrollIndicator={false}
+              style={styles.transcriptList}
+            >
+              {turns.length === 0 ? (
+                <View style={styles.emptyTranscript}>
+                  <Text style={styles.emptyTitle}>Your conversation will appear here</Text>
+                  <Text style={styles.emptyBody}>Speak naturally. Interpreter.ai detects your language and translates each turn.</Text>
+                </View>
+              ) : turns.map((turn) => (
+                <View key={turn.id} style={styles.turnCard}>
+                  <Text style={styles.turnLanguage}>{turn.originalLanguage}</Text>
+                  <Text style={styles.originalText}>{turn.original || 'Listening…'}</Text>
+                  <View style={styles.turnDivider} />
+                  <Text style={styles.turnLanguage}>{turn.translationLanguage}</Text>
+                  <Text style={styles.translationText}>{turn.translation || 'Translating…'}</Text>
+                </View>
+              ))}
+            </ScrollView>
+
+            <View style={styles.controls}>
+              <ControlButton label={isMuted ? 'Unmute' : 'Mute'} onPress={toggleMute}><MicrophoneIcon muted={isMuted} /></ControlButton>
+              <ControlButton disabled={!turns.some((turn) => turn.translation)} label="Replay" onPress={replayLastTranslation}><ReplayIcon /></ControlButton>
+              <Pressable accessibilityRole="button" onPress={endConversation} style={styles.endButton}><Text style={styles.endButtonText}>End conversation</Text></Pressable>
             </View>
           </View>
+        ) : (
+          <ScrollView bounces={false} contentContainerStyle={styles.homeContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.topBar}>
+              <Image resizeMode="contain" source={require('../assets/interpreter-mark.png')} style={styles.smallLogo} />
+              <Text style={styles.smallWordmark}>interpreter.ai</Text>
+              <Pressable accessibilityLabel="About Interpreter.ai" hitSlop={12} onPress={() => setInfoOpen(true)} style={styles.infoButton}><Text style={styles.infoText}>i</Text></Pressable>
+            </View>
 
-          <Text accessibilityLiveRegion="polite" numberOfLines={2} style={[styles.message, errorMessage && styles.errorMessage]}>
-            {errorMessage ?? (isActive ? diagnosticMessage : null) ?? ' '}
-          </Text>
+            <View style={styles.hero}>
+              <Image resizeMode="contain" source={require('../assets/interpreter-mark.png')} style={styles.heroLogo} />
+              <Text adjustsFontSizeToFit numberOfLines={1} style={styles.wordmark}>interpreter.ai</Text>
+              <Text style={styles.tagline}>Speak any language.</Text>
+            </View>
 
-          <Pressable
-            accessibilityLabel={isActive ? 'Stop conversation' : 'Start conversation'}
-            accessibilityRole="button"
-            onPress={() => {
-              if (isActive) stop();
-              else void start();
-            }}
-            style={({ pressed }) => [styles.startButton, pressed && styles.startButtonPressed]}
-          >
-            <LinearGradient
-              colors={isActive ? ['#374151', '#1F2937'] : ['#0879FF', '#0645F5']}
-              end={{ x: 1, y: 0.5 }}
-              start={{ x: 0, y: 0.5 }}
-              style={styles.buttonGradient}
-            >
-              <MicrophoneIcon stopped={isActive} />
-              <Text style={styles.startButtonText}>
-                {isActive ? 'Stop conversation' : 'Start conversation'}
-              </Text>
-            </LinearGradient>
-          </Pressable>
-        </ScrollView>
+            <Pressable accessibilityHint="Opens language choices" accessibilityRole="button" onPress={() => setLanguageSheetOpen(true)} style={({ pressed }) => [styles.languageCard, pressed && styles.pressed]}>
+              <GlobeIcon />
+              <View style={styles.languageText}>
+                <Text style={styles.languageLabel}>Language to interpret</Text>
+                <Text numberOfLines={1} style={[styles.languageValue, !selectedLanguage && styles.placeholder]}>{selectedLanguage ? languageLabel(selectedLanguage) : 'Choose a language'}</Text>
+              </View>
+              <ChevronIcon />
+            </Pressable>
+
+            <Text style={styles.supportText}>We’ll automatically detect the language you speak and interpret both sides of the conversation.</Text>
+
+            <Pressable accessibilityRole="button" disabled={!selectedLanguage} onPress={() => void beginConversation()} style={({ pressed }) => [styles.startButton, !selectedLanguage && styles.startDisabled, pressed && selectedLanguage && styles.pressed]}>
+              <LinearGradient colors={['#0A73FF', '#0848F4']} end={{ x: 1, y: 0.5 }} start={{ x: 0, y: 0.5 }} style={styles.startGradient}>
+                <MicrophoneIcon color="#FFFFFF" />
+                <Text style={styles.startText}>Start Conversation</Text>
+              </LinearGradient>
+            </Pressable>
+          </ScrollView>
+        )}
       </SafeAreaView>
 
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setSheet(null)}
-        transparent
-        visible={sheet !== null}
-      >
-        <Pressable onPress={() => setSheet(null)} style={styles.modalBackdrop}>
-          <Pressable accessibilityViewIsModal onPress={() => undefined} style={styles.sheet}>
-            <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>
-              {sheet === 'menu' ? 'Choose mode' : companion ? 'Conversation language' : 'Interpret to'}
-            </Text>
-            {sheet === 'menu' ? (
-              <>
-                <SheetOption
-                  active={!companion}
-                  label="Interpreter"
-                  onPress={() => closeAndSetMode('browser-two-way')}
-                  subtitle="English ↔ Spanish or Portuguese"
-                />
-                <SheetOption
-                  active={companion}
-                  label="Companion"
-                  onPress={() => closeAndSetMode('companion')}
-                  subtitle="A natural voice conversation"
-                />
-              </>
-            ) : (
-              languageOptions.map((option) => (
-                <SheetOption
-                  active={option.value === activeLanguage}
-                  key={option.value}
-                  label={option.label}
-                  onPress={() => chooseLanguage(option.value)}
-                />
-              ))
-            )}
+      <LanguageSheet onClose={() => setLanguageSheetOpen(false)} onSelect={(language) => { setSelectedLanguage(language); setLanguageSheetOpen(false); }} selectedLanguage={selectedLanguage} visible={languageSheetOpen} />
+      <Modal animationType="fade" onRequestClose={() => setInfoOpen(false)} transparent visible={infoOpen}>
+        <Pressable onPress={() => setInfoOpen(false)} style={styles.modalBackdrop}>
+          <Pressable onPress={() => undefined} style={styles.infoCard}>
+            <Image resizeMode="contain" source={require('../assets/interpreter-mark.png')} style={styles.infoLogo} />
+            <Text style={styles.infoTitle}>Interpreter.ai</Text>
+            <Text style={styles.infoBody}>Live, automatic two-way voice interpretation. Select the language you want to hear, then speak naturally.</Text>
+            <Pressable onPress={() => setInfoOpen(false)} style={styles.doneButton}><Text style={styles.doneText}>Done</Text></Pressable>
           </Pressable>
         </Pressable>
       </Modal>
@@ -282,112 +223,101 @@ export default function InterpreterScreen() {
   );
 }
 
-function SheetOption({
-  active,
-  label,
-  onPress,
-  subtitle,
-}: {
-  active: boolean;
-  label: string;
-  onPress: () => void;
-  subtitle?: string;
-}) {
+function ControlButton({ children, disabled, label, onPress }: { children: React.ReactNode; disabled?: boolean; label: string; onPress: () => void }) {
+  return <Pressable accessibilityLabel={label} accessibilityRole="button" disabled={disabled} onPress={onPress} style={[styles.controlButton, disabled && styles.controlDisabled]}><View style={styles.controlIcon}>{children}</View><Text style={styles.controlLabel}>{label}</Text></Pressable>;
+}
+
+function LanguageSheet({ onClose, onSelect, selectedLanguage, visible }: { onClose: () => void; onSelect: (language: string) => void; selectedLanguage: string | null; visible: boolean }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={({ pressed }) => [styles.sheetOption, active && styles.sheetOptionActive, pressed && styles.pressed]}
-    >
-      <View style={styles.sheetOptionText}>
-        <Text style={styles.sheetOptionLabel}>{label}</Text>
-        {subtitle ? <Text style={styles.sheetOptionSubtitle}>{subtitle}</Text> : null}
-      </View>
-      {active ? <Text style={styles.checkmark}>✓</Text> : null}
-    </Pressable>
+    <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
+      <Pressable onPress={onClose} style={styles.modalBackdrop}>
+        <Pressable accessibilityViewIsModal onPress={() => undefined} style={styles.sheet}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>Language to interpret</Text>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {LANGUAGES.map((language) => (
+              <Pressable accessibilityRole="button" accessibilityState={{ selected: selectedLanguage === language }} key={language} onPress={() => onSelect(language)} style={[styles.languageOption, selectedLanguage === language && styles.languageOptionSelected]}>
+                <Text style={styles.languageOptionText}>{languageLabel(language)}</Text>
+                {selectedLanguage === language ? <Text style={styles.checkmark}>✓</Text> : null}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { backgroundColor: '#FFFFFF', flex: 1 },
+  page: { backgroundColor: '#F8FBFF', flex: 1 },
   safeArea: { flex: 1 },
-  content: { flexGrow: 1, paddingBottom: 22, paddingHorizontal: 28 },
-  contentCompact: { paddingBottom: 14, paddingHorizontal: 22 },
-  topBar: { alignItems: 'flex-end', height: 58, justifyContent: 'center' },
-  topSpacer: { flex: 1 },
-  iconButton: { alignItems: 'center', height: 48, justifyContent: 'center', width: 48 },
-  pressed: { opacity: 0.62 },
-  hero: { alignItems: 'center', marginTop: 18 },
-  heroCompact: { marginTop: 2 },
-  brandMark: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 60,
-    height: 108,
-    justifyContent: 'center',
-    shadowColor: '#0B51D8',
-    shadowOffset: { height: 12, width: 0 },
-    shadowOpacity: 0.12,
-    shadowRadius: 22,
-    width: 108,
-  },
-  brandTail: {
-    backgroundColor: '#FFFFFF',
-    bottom: 1,
-    height: 31,
-    left: 10,
-    position: 'absolute',
-    transform: [{ rotate: '28deg' }],
-    width: 31,
-  },
-  brandLetter: { color: '#075BFF', fontFamily: 'serif', fontSize: 76, fontWeight: '700', lineHeight: 88 },
-  wordmark: { color: '#075BFF', fontFamily: 'serif', fontSize: 54, fontWeight: '700', letterSpacing: -2.2, marginTop: 14, maxWidth: '100%' },
-  tagline: { color: '#697386', fontSize: 21, marginTop: 8 },
-  languageCard: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 32,
-    flexDirection: 'row',
-    marginTop: 40,
-    maxWidth: 480,
-    minHeight: 94,
-    paddingHorizontal: 25,
-    shadowColor: '#075BFF',
-    shadowOffset: { height: 10, width: 0 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    width: '100%',
-  },
-  languageCardCompact: { marginTop: 22, minHeight: 82 },
-  languageText: { flex: 1, marginHorizontal: 20 },
-  languageLabel: { color: '#687793', fontSize: 14 },
-  languageValue: { color: '#0B0B0C', fontSize: 24, marginTop: 5 },
-  disabled: { opacity: 0.62 },
-  listenerWrap: { alignItems: 'center', alignSelf: 'center', height: 300, justifyContent: 'center', marginTop: 34, width: 300 },
-  listenerWrapCompact: { height: 240, marginTop: 20, width: 240 },
-  listenerGlow: { backgroundColor: '#F7FAFF', borderRadius: 150, height: 300, position: 'absolute', shadowColor: '#075BFF', shadowOpacity: 0.17, shadowRadius: 26, width: 300 },
-  listenerGlowCompact: { borderRadius: 120, height: 240, width: 240 },
-  listenerCircle: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#F2F6FF', borderRadius: 136, borderWidth: 10, height: 272, justifyContent: 'center', width: 272 },
-  listenerCircleCompact: { borderRadius: 108, borderWidth: 8, height: 216, width: 216 },
-  dottedCircle: { alignItems: 'center', borderColor: '#075BFF', borderRadius: 118, borderStyle: 'dotted', borderWidth: 2.5, height: 236, justifyContent: 'center', width: 236 },
-  dottedCircleCompact: { borderRadius: 94, height: 188, width: 188 },
-  statusText: { color: '#101216', fontSize: 17, lineHeight: 23, marginTop: 15, maxWidth: 190, textAlign: 'center' },
-  message: { color: '#778196', fontSize: 12, height: 32, lineHeight: 16, marginTop: 2, textAlign: 'center' },
-  errorMessage: { color: '#B42318' },
-  startButton: { alignSelf: 'center', borderRadius: 34, marginTop: 'auto', maxWidth: 480, overflow: 'hidden', shadowColor: '#075BFF', shadowOffset: { height: 10, width: 0 }, shadowOpacity: 0.24, shadowRadius: 18, width: '100%' },
-  startButtonPressed: { opacity: 0.82, transform: [{ scale: 0.985 }] },
-  buttonGradient: { alignItems: 'center', flexDirection: 'row', height: 68, justifyContent: 'center', paddingHorizontal: 22 },
-  startButtonText: { color: '#FFFFFF', fontSize: 21, marginLeft: 18 },
-  modalBackdrop: { backgroundColor: 'rgba(8, 18, 38, 0.28)', flex: 1, justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingBottom: 30, paddingHorizontal: 24, paddingTop: 12 },
-  sheetHandle: { alignSelf: 'center', backgroundColor: '#D5DBE7', borderRadius: 3, height: 5, marginBottom: 20, width: 44 },
-  sheetTitle: { color: '#101216', fontSize: 24, fontWeight: '700', marginBottom: 14 },
-  sheetOption: { alignItems: 'center', borderRadius: 18, flexDirection: 'row', minHeight: 68, paddingHorizontal: 18, paddingVertical: 10 },
-  sheetOptionActive: { backgroundColor: '#EDF4FF' },
-  sheetOptionText: { flex: 1 },
-  sheetOptionLabel: { color: '#101216', fontSize: 18, fontWeight: '600' },
-  sheetOptionSubtitle: { color: '#687793', fontSize: 13, marginTop: 3 },
-  checkmark: { color: '#075BFF', fontSize: 24, fontWeight: '700' },
+  homeContent: { flexGrow: 1, paddingBottom: 28, paddingHorizontal: 26 },
+  topBar: { alignItems: 'center', flexDirection: 'row', height: 62 },
+  smallLogo: { height: 38, width: 38 },
+  smallWordmark: { color: '#075BFF', fontSize: 22, fontWeight: '700', marginLeft: 8 },
+  infoButton: { alignItems: 'center', borderColor: '#0A5BFF', borderRadius: 17, borderWidth: 2, height: 34, justifyContent: 'center', marginLeft: 'auto', width: 34 },
+  infoText: { color: '#0A5BFF', fontFamily: 'serif', fontSize: 23, fontWeight: '800', lineHeight: 26 },
+  hero: { alignItems: 'center', marginTop: 36 },
+  heroLogo: { height: 132, width: 132 },
+  wordmark: { color: '#075BFF', fontSize: 48, fontWeight: '800', letterSpacing: -2, marginTop: 10, maxWidth: '100%' },
+  tagline: { color: '#68758A', fontSize: 21, marginTop: 10 },
+  languageCard: { alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 30, flexDirection: 'row', marginTop: 48, minHeight: 98, paddingHorizontal: 23, shadowColor: '#075BFF', shadowOffset: { height: 10, width: 0 }, shadowOpacity: 0.12, shadowRadius: 22 },
+  pressed: { opacity: 0.76, transform: [{ scale: 0.988 }] },
+  languageText: { flex: 1, marginHorizontal: 18 },
+  languageLabel: { color: '#67758D', fontSize: 15 },
+  languageValue: { color: '#101828', fontSize: 23, marginTop: 5 },
+  placeholder: { color: '#98A2B3' },
+  supportText: { color: '#667085', fontSize: 14, lineHeight: 21, marginHorizontal: 14, marginTop: 22, textAlign: 'center' },
+  startButton: { borderRadius: 34, marginTop: 'auto', overflow: 'hidden', shadowColor: '#075BFF', shadowOffset: { height: 10, width: 0 }, shadowOpacity: 0.22, shadowRadius: 18 },
+  startDisabled: { opacity: 0.42 },
+  startGradient: { alignItems: 'center', flexDirection: 'row', height: 70, justifyContent: 'center' },
+  startText: { color: '#FFFFFF', fontSize: 21, fontWeight: '600', marginLeft: 15 },
+  conversationPage: { flex: 1, paddingHorizontal: 18 },
+  conversationHeader: { alignItems: 'center', borderBottomColor: '#E7ECF4', borderBottomWidth: 1, flexDirection: 'row', minHeight: 66 },
+  headerIcon: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
+  headerTitleWrap: { flex: 1, marginHorizontal: 8 },
+  headerTitle: { color: '#101828', fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  connectionText: { color: '#0A5BFF', fontSize: 12, marginTop: 2, textAlign: 'center' },
+  endHeaderButton: { paddingHorizontal: 8, paddingVertical: 10 },
+  endHeaderText: { color: '#D92D20', fontSize: 16, fontWeight: '700' },
+  livePanel: { alignItems: 'center', paddingBottom: 16, paddingTop: 22 },
+  liveOrb: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#DCE8FF', borderRadius: 56, borderWidth: 2, height: 112, justifyContent: 'center', shadowColor: '#075BFF', shadowOpacity: 0.12, shadowRadius: 18, width: 112 },
+  liveOrbSpeaking: { borderColor: '#0A5BFF', shadowOpacity: 0.24 },
+  liveStatus: { color: '#101828', fontSize: 20, fontWeight: '700', marginTop: 14 },
+  directionText: { color: '#667085', fontSize: 13, marginTop: 5, textAlign: 'center' },
+  errorCard: { alignItems: 'center', backgroundColor: '#FFF1F0', borderRadius: 15, flexDirection: 'row', marginBottom: 10, padding: 12 },
+  errorText: { color: '#B42318', flex: 1, fontSize: 13, lineHeight: 18 },
+  reconnectButton: { backgroundColor: '#FFFFFF', borderRadius: 10, marginLeft: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  reconnectText: { color: '#075BFF', fontSize: 13, fontWeight: '700' },
+  transcriptList: { flex: 1 },
+  transcriptContent: { paddingBottom: 12 },
+  emptyTranscript: { alignItems: 'center', paddingHorizontal: 30, paddingTop: 34 },
+  emptyTitle: { color: '#344054', fontSize: 17, fontWeight: '600', textAlign: 'center' },
+  emptyBody: { color: '#667085', fontSize: 14, lineHeight: 21, marginTop: 8, textAlign: 'center' },
+  turnCard: { backgroundColor: '#FFFFFF', borderColor: '#E4EBF7', borderRadius: 20, borderWidth: 1, marginBottom: 12, padding: 17 },
+  turnLanguage: { color: '#075BFF', fontSize: 11, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase' },
+  originalText: { color: '#344054', fontSize: 16, lineHeight: 23, marginTop: 6 },
+  turnDivider: { backgroundColor: '#EDF1F7', height: 1, marginVertical: 13 },
+  translationText: { color: '#101828', fontSize: 17, fontWeight: '600', lineHeight: 24, marginTop: 6 },
+  controls: { alignItems: 'center', borderTopColor: '#E7ECF4', borderTopWidth: 1, flexDirection: 'row', gap: 8, paddingBottom: 8, paddingTop: 12 },
+  controlButton: { alignItems: 'center', minWidth: 60, padding: 6 },
+  controlDisabled: { opacity: 0.35 },
+  controlIcon: { color: '#075BFF', height: 32 },
+  controlLabel: { color: '#475467', fontSize: 11, marginTop: 3 },
+  endButton: { alignItems: 'center', backgroundColor: '#D92D20', borderRadius: 24, flex: 1, height: 48, justifyContent: 'center', marginLeft: 4 },
+  endButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  modalBackdrop: { alignItems: 'center', backgroundColor: 'rgba(10, 20, 40, 0.3)', flex: 1, justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, maxHeight: '78%', paddingBottom: 24, paddingHorizontal: 22, paddingTop: 12, width: '100%' },
+  sheetHandle: { alignSelf: 'center', backgroundColor: '#D0D5DD', borderRadius: 3, height: 5, marginBottom: 18, width: 44 },
+  sheetTitle: { color: '#101828', fontSize: 23, fontWeight: '700', marginBottom: 12 },
+  languageOption: { alignItems: 'center', borderRadius: 15, flexDirection: 'row', minHeight: 56, paddingHorizontal: 16 },
+  languageOptionSelected: { backgroundColor: '#EEF4FF' },
+  languageOptionText: { color: '#101828', flex: 1, fontSize: 17 },
+  checkmark: { color: '#075BFF', fontSize: 22, fontWeight: '800' },
+  infoCard: { alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 28, marginBottom: 'auto', marginHorizontal: 24, marginTop: 'auto', padding: 28, width: '86%' },
+  infoLogo: { height: 88, width: 88 },
+  infoTitle: { color: '#075BFF', fontSize: 28, fontWeight: '800', marginTop: 10 },
+  infoBody: { color: '#475467', fontSize: 15, lineHeight: 22, marginTop: 12, textAlign: 'center' },
+  doneButton: { backgroundColor: '#075BFF', borderRadius: 20, marginTop: 24, paddingHorizontal: 30, paddingVertical: 12 },
+  doneText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 });

@@ -12,7 +12,13 @@ import {
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
 const PRODUCTION_API_BASE_URL = 'https://interpreter-api-fycw.onrender.com';
 
-export type RealtimeMode = 'browser-two-way' | 'companion';
+export type TranscriptTurn = {
+  id: string;
+  original: string;
+  originalLanguage: string;
+  translation: string;
+  translationLanguage: string;
+};
 
 type InterpreterStatus =
   | 'idle'
@@ -30,11 +36,11 @@ type ClientSecretResponse = {
 
 type RealtimeEvent = {
   delta?: string;
+  item_id?: string;
   type?: string;
-  error?: {
-    message?: string;
-  };
+  error?: { message?: string };
   response?: {
+    id?: string;
     status?: string;
     status_details?: unknown;
   };
@@ -45,6 +51,14 @@ type RemoteTrackEvent = {
   streams?: MediaStream[];
   track?: MediaStreamTrack | null;
 };
+
+function debugLog(...values: unknown[]) {
+  if (__DEV__) console.log('[Interpreter.ai]', ...values);
+}
+
+function debugError(...values: unknown[]) {
+  if (__DEV__) console.error('[Interpreter.ai]', ...values);
+}
 
 function getApiBaseUrl() {
   return (
@@ -68,7 +82,6 @@ function formatRequestError(payload: string) {
         return detailsError.message;
       }
     }
-
     return parsed.error ?? payload;
   } catch {
     return payload;
@@ -78,7 +91,6 @@ function formatRequestError(payload: string) {
 function formatRealtimeResponseError(event: RealtimeEvent) {
   const status = event.response?.status ?? 'unknown';
   const details = event.response?.status_details;
-
   if (details && typeof details === 'object') {
     const error = 'error' in details ? details.error : undefined;
     if (
@@ -89,7 +101,6 @@ function formatRealtimeResponseError(event: RealtimeEvent) {
     ) {
       return error.message;
     }
-
     if (
       'reason' in details &&
       typeof details.reason === 'string' &&
@@ -98,49 +109,73 @@ function formatRealtimeResponseError(event: RealtimeEvent) {
       return details.reason;
     }
   }
-
   return `OpenAI Realtime response ended with status: ${status}.`;
 }
 
-export function useRealtimeInterpreter(
-  languageOne: string,
-  languageTwo: string,
-  mode: RealtimeMode = 'browser-two-way',
+function detectLatinLanguage(text: string) {
+  const normalized = ` ${text.toLocaleLowerCase()} `;
+  const scores: Record<string, number> = {
+    English: 0,
+    French: 0,
+    German: 0,
+    Italian: 0,
+    Spanish: 0,
+    'Brazilian Portuguese': 0,
+  };
+  const markers: Record<string, string[]> = {
+    English: [' the ', ' and ', ' is ', ' are ', ' where ', ' what ', ' please ', ' hello '],
+    French: [' le ', ' la ', ' les ', ' est ', ' où ', ' vous ', ' je ', ' merci ', ' une '],
+    German: [' der ', ' die ', ' das ', ' ist ', ' und ', ' wo ', ' ich ', ' bitte ', ' ein '],
+    Italian: [' il ', ' lo ', ' la ', ' gli ', ' è ', ' dove ', ' io ', ' grazie ', ' una '],
+    Spanish: [' el ', ' la ', ' los ', ' es ', ' dónde ', ' usted ', ' yo ', ' gracias ', ' una '],
+    'Brazilian Portuguese': [' o ', ' a ', ' os ', ' é ', ' onde ', ' você ', ' eu ', ' obrigado ', ' uma ', ' não '],
+  };
+  Object.entries(markers).forEach(([language, words]) => {
+    words.forEach((word) => {
+      if (normalized.includes(word)) scores[language] = (scores[language] ?? 0) + 1;
+    });
+  });
+  if (/[ãõç]/i.test(text)) scores['Brazilian Portuguese'] = (scores['Brazilian Portuguese'] ?? 0) + 3;
+  if (/[¿¡ñ]/i.test(text)) scores.Spanish = (scores.Spanish ?? 0) + 3;
+  if (/[œ]/i.test(text)) scores.French = (scores.French ?? 0) + 3;
+  if (/[äöüß]/i.test(text)) scores.German = (scores.German ?? 0) + 3;
+  return Object.entries(scores).sort((left, right) => right[1] - left[1])[0];
+}
+
+function detectSpokenLanguage(
+  text: string,
+  selectedLanguage: string,
+  retainedLanguage: string | null,
 ) {
+  if (/[\u3040-\u30ff]/u.test(text)) return 'Japanese';
+  if (/[\uac00-\ud7af]/u.test(text)) return 'Korean';
+  if (/[\u0600-\u06ff]/u.test(text)) return 'Arabic';
+  if (/[\u0900-\u097f]/u.test(text)) return 'Hindi';
+  if (/[\u3400-\u9fff]/u.test(text)) return 'Mandarin Chinese';
+
+  const detected = detectLatinLanguage(text);
+  if (detected && detected[1] > 0) return detected[0];
+  return retainedLanguage ?? (selectedLanguage === 'English' ? 'Detected language' : 'English');
+}
+
+export function useRealtimeInterpreter(selectedLanguage: string) {
   const [status, setStatus] = useState<InterpreterStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [diagnosticMessage, setDiagnosticMessage] = useState<string | null>(
-    null,
-  );
-  const [transcript, setTranscript] = useState<string | null>(null);
+  const [turns, setTurns] = useState<TranscriptTurn[]>([]);
+  const [detectedUserLanguage, setDetectedUserLanguage] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const dataChannelRef = useRef<
-    ReturnType<RTCPeerConnection['createDataChannel']> | null
-  >(null);
+  const dataChannelRef = useRef<ReturnType<RTCPeerConnection['createDataChannel']> | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const remoteStreamRef = useRef<MediaStream | null>(null);
   const remoteAudioTrackRef = useRef<MediaStreamTrack | null>(null);
-  const transcriptBufferRef = useRef('');
-  const transcriptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentTurnIdRef = useRef<string | null>(null);
+  const translationBufferRef = useRef('');
+  const detectedUserLanguageRef = useRef<string | null>(null);
   const echoResumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const outputAudioActiveRef = useRef(false);
+  const userMutedRef = useRef(false);
+  const replayingRef = useRef(false);
   const startingRef = useRef(false);
-
-  const showTranscriptTemporarily = useCallback((text: string) => {
-    const visibleText = text.trim();
-    if (!visibleText) {
-      return;
-    }
-
-    setTranscript(visibleText);
-    if (transcriptTimerRef.current) {
-      clearTimeout(transcriptTimerRef.current);
-    }
-    transcriptTimerRef.current = setTimeout(() => {
-      setTranscript(null);
-      transcriptBufferRef.current = '';
-      transcriptTimerRef.current = null;
-    }, 8000);
-  }, []);
 
   const routeAudioToSpeaker = useCallback(() => {
     InCallManager.start({ auto: true, media: 'audio' });
@@ -148,342 +183,273 @@ export function useRealtimeInterpreter(
     InCallManager.setSpeakerphoneOn(true);
   }, []);
 
+  const setMicrophoneEnabled = useCallback((enabled: boolean) => {
+    const microphoneTrack = localStreamRef.current?.getAudioTracks()[0];
+    if (microphoneTrack) microphoneTrack.enabled = enabled;
+  }, []);
+
   const stop = useCallback(() => {
     startingRef.current = false;
-    if (echoResumeTimerRef.current) {
-      clearTimeout(echoResumeTimerRef.current);
-      echoResumeTimerRef.current = null;
-    }
+    if (echoResumeTimerRef.current) clearTimeout(echoResumeTimerRef.current);
+    echoResumeTimerRef.current = null;
     dataChannelRef.current?.close();
     dataChannelRef.current = null;
-
     localStreamRef.current?.getTracks().forEach((track) => track.stop());
     localStreamRef.current = null;
-
     remoteAudioTrackRef.current?.stop();
     remoteAudioTrackRef.current = null;
-    remoteStreamRef.current = null;
-    transcriptBufferRef.current = '';
-    if (transcriptTimerRef.current) {
-      clearTimeout(transcriptTimerRef.current);
-      transcriptTimerRef.current = null;
-    }
-    setTranscript(null);
-    setDiagnosticMessage(null);
-
     peerConnectionRef.current?.close();
     peerConnectionRef.current = null;
-
+    currentTurnIdRef.current = null;
+    translationBufferRef.current = '';
+    outputAudioActiveRef.current = false;
+    replayingRef.current = false;
     InCallManager.setForceSpeakerphoneOn(null);
     InCallManager.stop();
     setStatus('idle');
+    setIsMuted(false);
+    userMutedRef.current = false;
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    const nextMuted = !userMutedRef.current;
+    userMutedRef.current = nextMuted;
+    setIsMuted(nextMuted);
+    setMicrophoneEnabled(!nextMuted && !outputAudioActiveRef.current);
+  }, [setMicrophoneEnabled]);
+
+  const replayLastTranslation = useCallback(() => {
+    const latestTranslation = [...turns].reverse().find((turn) => turn.translation)?.translation;
+    const dataChannel = dataChannelRef.current;
+    if (!latestTranslation || !dataChannel || dataChannel.readyState !== 'open') return;
+    replayingRef.current = true;
+    dataChannel.send(
+      JSON.stringify({
+        type: 'response.create',
+        response: {
+          instructions: `Speak exactly this prior translation again, with no preface or commentary: ${latestTranslation}`,
+          output_modalities: ['audio'],
+        },
+      }),
+    );
+  }, [turns]);
+
+  const updateTranslation = useCallback((text: string) => {
+    const turnId = currentTurnIdRef.current;
+    if (!turnId || replayingRef.current) return;
+    setTurns((current) =>
+      current.map((turn) =>
+        turn.id === turnId ? { ...turn, translation: text.trim() } : turn,
+      ),
+    );
   }, []);
 
   const start = useCallback(async () => {
-    if (startingRef.current) {
-      return;
-    }
-
-    if (peerConnectionRef.current) {
-      stop();
-    }
-
+    if (startingRef.current) return;
+    if (peerConnectionRef.current) stop();
     startingRef.current = true;
     setErrorMessage(null);
-    setTranscript(null);
-    transcriptBufferRef.current = '';
+    setTurns([]);
+    setDetectedUserLanguage(null);
+    detectedUserLanguageRef.current = null;
+    currentTurnIdRef.current = null;
+    translationBufferRef.current = '';
     setStatus('connecting');
 
     try {
-      const apiBaseUrl = getApiBaseUrl();
-      if (!apiBaseUrl) {
-        throw new Error(
-          'EXPO_PUBLIC_API_BASE_URL is missing from the mobile environment.',
-        );
-      }
-      setDiagnosticMessage('Backend URL loaded');
-
       if (Platform.OS === 'android') {
         const permission = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
           {
             title: 'Microphone access',
-            message:
-              'Interpreter.ai needs the microphone to translate live speech.',
+            message: 'Interpreter.ai needs the microphone to interpret live speech.',
             buttonPositive: 'Continue',
             buttonNegative: 'Cancel',
           },
         );
-
         if (permission !== PermissionsAndroid.RESULTS.GRANTED) {
           throw new Error('Microphone permission was not granted.');
         }
       }
 
-      const localStream = await mediaDevices.getUserMedia({
-        audio: true,
-        video: false,
-      });
-      console.log('[Interpreter.ai] Microphone permission granted');
+      const localStream = await mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = localStream;
-      setDiagnosticMessage('Microphone granted');
-
+      debugLog('Microphone ready');
       routeAudioToSpeaker();
 
-      setDiagnosticMessage('Contacting backend');
-      const sessionResponse = await fetch(
-        `${apiBaseUrl}/api/realtime/session`,
-        {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ languageOne, languageTwo, mode }),
-        },
-      );
-      const sessionPayload = await sessionResponse.text();
-      console.log('[Interpreter.ai] Session endpoint response', {
-        ok: sessionResponse.ok,
-        status: sessionResponse.status,
+      const sessionResponse = await fetch(`${getApiBaseUrl()}/api/realtime/session`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          languageOne: 'Auto-detect',
+          languageTwo: selectedLanguage,
+          mode: 'mobile-interpreter',
+        }),
       });
-
+      const sessionPayload = await sessionResponse.text();
       if (!sessionResponse.ok) {
         throw new Error(
-          formatRequestError(sessionPayload) ||
-            `Session request failed (${sessionResponse.status}).`,
+          formatRequestError(sessionPayload) || `Session request failed (${sessionResponse.status}).`,
         );
       }
-
-      const clientSecret = (JSON.parse(sessionPayload) as ClientSecretResponse)
-        .value;
-      if (!clientSecret) {
-        throw new Error('The server did not return a Realtime client secret.');
-      }
-      setDiagnosticMessage('Session secret received');
+      const clientSecret = (JSON.parse(sessionPayload) as ClientSecretResponse).value;
+      if (!clientSecret) throw new Error('The server did not return a Realtime credential.');
 
       const peerConnection = new RTCPeerConnection();
       peerConnectionRef.current = peerConnection;
-
       peerConnection.ontrack = (event: unknown) => {
-        const trackEvent = event as unknown as RemoteTrackEvent;
-        const remoteTrack = trackEvent.track;
-
+        const remoteTrack = (event as RemoteTrackEvent).track;
         if (!remoteTrack || remoteTrack.kind !== 'audio') {
-          const message = 'OpenAI connected without a playable audio track.';
-          console.error('[Interpreter.ai] Remote audio playback error', message);
-          setErrorMessage(message);
+          setErrorMessage('OpenAI connected without a playable audio track.');
           setStatus('error');
           return;
         }
-
-        try {
-          const remoteStream = trackEvent.streams?.[0] ?? new MediaStream([
-            remoteTrack,
-          ]);
-          remoteStreamRef.current = remoteStream;
-          remoteAudioTrackRef.current = remoteTrack;
-          remoteTrack.enabled = true;
-          remoteTrack._setVolume(1);
-
-          console.log('[Interpreter.ai] Remote audio track received', {
-            enabled: remoteTrack.enabled,
-            id: remoteTrack.id,
-            kind: remoteTrack.kind,
-            streamId: remoteStream.id,
-          });
-
-          routeAudioToSpeaker();
-          setDiagnosticMessage('Remote audio track received');
-        } catch (error) {
-          const message =
-            error instanceof Error
-              ? `Unable to route translated audio to the speaker: ${error.message}`
-              : 'Unable to route translated audio to the speaker.';
-          console.error('[Interpreter.ai] Remote audio playback error', error);
-          setErrorMessage(message);
-          setStatus('error');
-        }
+        remoteAudioTrackRef.current = remoteTrack;
+        remoteTrack.enabled = true;
+        remoteTrack._setVolume(1);
+        routeAudioToSpeaker();
       };
 
       const microphoneTrack = localStream.getAudioTracks()[0];
-      if (!microphoneTrack) {
-        throw new Error('No microphone audio track is available.');
-      }
+      if (!microphoneTrack) throw new Error('No microphone audio track is available.');
       peerConnection.addTrack(microphoneTrack, localStream);
-
       peerConnection.onconnectionstatechange = () => {
-        console.log(
-          '[Interpreter.ai] Peer connection state',
-          peerConnection.connectionState,
-        );
-
-        if (peerConnection.connectionState === 'connected') {
-          setDiagnosticMessage('Peer connected');
-          setStatus('listening');
-        } else if (
+        debugLog('Peer state', peerConnection.connectionState);
+        if (peerConnection.connectionState === 'connected') setStatus('listening');
+        if (
           peerConnection.connectionState === 'failed' ||
           peerConnection.connectionState === 'disconnected'
         ) {
-          setErrorMessage('The Realtime audio connection was lost.');
+          setErrorMessage('The Realtime audio connection was lost. Tap Reconnect.');
           setStatus('error');
         }
       };
 
       const dataChannel = peerConnection.createDataChannel('oai-events');
       dataChannelRef.current = dataChannel;
-      dataChannel.onopen = () => {
-        console.log('[Interpreter.ai] Data channel opened');
-        setDiagnosticMessage('Data channel open');
-        setStatus('listening');
-      };
-      dataChannel.onerror = (event: unknown) => {
-        console.error('[Interpreter.ai] Realtime data channel error', event);
-        setErrorMessage('The Realtime control channel encountered an error.');
+      dataChannel.onopen = () => setStatus('listening');
+      dataChannel.onerror = () => {
+        setErrorMessage('The OpenAI event connection failed. Tap Reconnect.');
         setStatus('error');
       };
       dataChannel.onmessage = (event: { data?: unknown }) => {
         try {
           const realtimeEvent = JSON.parse(String(event.data)) as RealtimeEvent;
-          if (__DEV__) {
-            console.log(
-              '[Interpreter.ai] OpenAI Realtime event',
-              realtimeEvent.type ?? 'unknown',
-            );
-          }
+          debugLog('Realtime event', realtimeEvent.type ?? 'unknown');
 
           if (realtimeEvent.type === 'input_audio_buffer.speech_started') {
-            setDiagnosticMessage('Speech detected');
             setStatus('listening');
-          } else if (
-            realtimeEvent.type === 'input_audio_buffer.speech_stopped'
-          ) {
+          } else if (realtimeEvent.type === 'input_audio_buffer.speech_stopped') {
             setStatus('translating');
-          } else if (realtimeEvent.type === 'response.created') {
-            transcriptBufferRef.current = '';
-            setTranscript(null);
-            if (transcriptTimerRef.current) {
-              clearTimeout(transcriptTimerRef.current);
-              transcriptTimerRef.current = null;
+          } else if (
+            realtimeEvent.type === 'conversation.item.input_audio_transcription.completed'
+          ) {
+            const original = realtimeEvent.transcript?.trim();
+            if (!original) return;
+            const originalLanguage = detectSpokenLanguage(
+              original,
+              selectedLanguage,
+              detectedUserLanguageRef.current,
+            );
+            if (
+              !detectedUserLanguageRef.current &&
+              originalLanguage !== selectedLanguage &&
+              originalLanguage !== 'Detected language'
+            ) {
+              detectedUserLanguageRef.current = originalLanguage;
+              setDetectedUserLanguage(originalLanguage);
             }
-            setDiagnosticMessage('Response started');
+            const id = realtimeEvent.item_id ?? `turn-${Date.now()}`;
+            currentTurnIdRef.current = id;
+            const translationLanguage =
+              originalLanguage === selectedLanguage
+                ? detectedUserLanguageRef.current ?? 'Detected language'
+                : selectedLanguage;
+            setTurns((current) => [
+              ...current.slice(-19),
+              {
+                id,
+                original,
+                originalLanguage,
+                translation: translationBufferRef.current.trim(),
+                translationLanguage,
+              },
+            ]);
+          } else if (realtimeEvent.type === 'response.created') {
+            translationBufferRef.current = '';
             setStatus('translating');
           } else if (
             realtimeEvent.type === 'output_audio_buffer.started' ||
             realtimeEvent.type === 'response.output_audio.delta'
           ) {
-            if (mode === 'browser-two-way') {
-              const microphoneTrack = localStreamRef.current?.getAudioTracks()[0];
-              if (microphoneTrack) microphoneTrack.enabled = false;
-            }
-            setDiagnosticMessage('Audio output started');
+            outputAudioActiveRef.current = true;
+            setMicrophoneEnabled(false);
             setStatus('speaking');
-          } else if (
-            realtimeEvent.type === 'response.output_audio_transcript.delta'
-          ) {
-            transcriptBufferRef.current = (
-              transcriptBufferRef.current + (realtimeEvent.delta ?? '')
-            ).slice(-500);
-            showTranscriptTemporarily(transcriptBufferRef.current);
-          } else if (
-            realtimeEvent.type === 'response.output_audio_transcript.done'
-          ) {
-            const completedTranscript =
-              realtimeEvent.transcript ?? transcriptBufferRef.current;
-            transcriptBufferRef.current = completedTranscript;
-            showTranscriptTemporarily(completedTranscript);
+          } else if (realtimeEvent.type === 'response.output_audio_transcript.delta') {
+            translationBufferRef.current = (
+              translationBufferRef.current + (realtimeEvent.delta ?? '')
+            ).slice(-1200);
+            updateTranslation(translationBufferRef.current);
+          } else if (realtimeEvent.type === 'response.output_audio_transcript.done') {
+            translationBufferRef.current =
+              realtimeEvent.transcript ?? translationBufferRef.current;
+            updateTranslation(translationBufferRef.current);
           } else if (
             realtimeEvent.type === 'output_audio_buffer.stopped' ||
             realtimeEvent.type === 'output_audio_buffer.cleared'
           ) {
-            if (mode === 'browser-two-way') {
-              if (echoResumeTimerRef.current) {
-                clearTimeout(echoResumeTimerRef.current);
-              }
-              echoResumeTimerRef.current = setTimeout(() => {
-                const microphoneTrack = localStreamRef.current?.getAudioTracks()[0];
-                if (microphoneTrack) microphoneTrack.enabled = true;
-                echoResumeTimerRef.current = null;
-                setStatus('listening');
-              }, 550);
-            } else {
+            outputAudioActiveRef.current = false;
+            replayingRef.current = false;
+            if (echoResumeTimerRef.current) clearTimeout(echoResumeTimerRef.current);
+            echoResumeTimerRef.current = setTimeout(() => {
+              setMicrophoneEnabled(!userMutedRef.current);
+              echoResumeTimerRef.current = null;
               setStatus('listening');
-            }
+            }, 550);
           } else if (realtimeEvent.type === 'response.done') {
-            const responseStatus = realtimeEvent.response?.status ?? 'unknown';
-            console.log('[Interpreter.ai] response.done', {
-              errorDetails: realtimeEvent.response?.status_details ?? null,
-              status: responseStatus,
-            });
-
             if (
-              responseStatus === 'failed' ||
-              responseStatus === 'incomplete'
+              realtimeEvent.response?.status === 'failed' ||
+              realtimeEvent.response?.status === 'incomplete'
             ) {
               setErrorMessage(formatRealtimeResponseError(realtimeEvent));
               setStatus('error');
             }
           } else if (realtimeEvent.type === 'error') {
-            console.error(
-              '[Interpreter.ai] OpenAI Realtime error',
-              realtimeEvent.error,
-            );
-            setErrorMessage(
-              realtimeEvent.error?.message ?? 'OpenAI Realtime returned an error.',
-            );
+            setErrorMessage(realtimeEvent.error?.message ?? 'OpenAI returned an error.');
             setStatus('error');
           }
         } catch (error) {
-          const message =
-            error instanceof Error
-              ? `Unable to read OpenAI Realtime event: ${error.message}`
-              : 'Unable to read an OpenAI Realtime event.';
-          console.error('[Interpreter.ai] Realtime event parsing error', error);
-          setErrorMessage(message);
+          debugError('Realtime event parsing error', error);
+          setErrorMessage('Unable to read a Realtime event. Tap Reconnect.');
           setStatus('error');
         }
       };
 
-      setDiagnosticMessage('Creating WebRTC offer');
       const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(offer);
-
       const offerSdp = peerConnection.localDescription?.sdp ?? offer.sdp;
-      if (!offerSdp) {
-        throw new Error('Unable to create the Realtime audio offer.');
-      }
-
+      if (!offerSdp) throw new Error('Unable to create the Realtime audio offer.');
       const sdpResponse = await fetch(REALTIME_CALLS_URL, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${clientSecret}`,
-          'Content-Type': 'application/sdp',
-        },
+        headers: { Authorization: `Bearer ${clientSecret}`, 'Content-Type': 'application/sdp' },
         body: offerSdp,
       });
       const answerSdp = await sdpResponse.text();
-
       if (!sdpResponse.ok) {
-        throw new Error(
-          answerSdp || `Realtime connection failed (${sdpResponse.status}).`,
-        );
+        throw new Error(answerSdp || `Realtime connection failed (${sdpResponse.status}).`);
       }
-      setDiagnosticMessage('SDP answer received');
-
       await peerConnection.setRemoteDescription(
         new RTCSessionDescription({ sdp: answerSdp, type: 'answer' }),
       );
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unable to start interpreting.';
-      console.error('[Interpreter.ai] Connection or playback error', error);
+      const message = error instanceof Error ? error.message : 'Unable to start interpreting.';
+      debugError('Connection error', error);
       dataChannelRef.current?.close();
       dataChannelRef.current = null;
       localStreamRef.current?.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
       remoteAudioTrackRef.current?.stop();
       remoteAudioTrackRef.current = null;
-      remoteStreamRef.current = null;
       peerConnectionRef.current?.close();
       peerConnectionRef.current = null;
       InCallManager.setForceSpeakerphoneOn(null);
@@ -494,23 +460,25 @@ export function useRealtimeInterpreter(
       startingRef.current = false;
     }
   }, [
-    languageOne,
-    languageTwo,
-    mode,
+    selectedLanguage,
     routeAudioToSpeaker,
-    showTranscriptTemporarily,
+    setMicrophoneEnabled,
     stop,
+    updateTranslation,
   ]);
 
   useEffect(() => stop, [stop]);
 
   return {
-    diagnosticMessage,
+    detectedUserLanguage,
     errorMessage,
     isActive: status !== 'idle' && status !== 'error',
+    isMuted,
+    replayLastTranslation,
     start,
     status,
     stop,
-    transcript,
+    toggleMute,
+    turns,
   };
 }

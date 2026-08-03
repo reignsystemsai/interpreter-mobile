@@ -54,18 +54,27 @@ const BROWSER_LANGUAGE_PAIRS = {
   }
 };
 
-const COMPANION_LANGUAGES = {
+const MOBILE_INTERPRETER_LANGUAGES = {
   English: "English",
+  "Brazilian Portuguese": "Brazilian Portuguese (Português do Brasil)",
   Spanish: "Spanish",
-  "Brazilian Portuguese": "Brazilian Portuguese (Português do Brasil)"
+  French: "French",
+  German: "German",
+  Italian: "Italian",
+  "Mandarin Chinese": "Mandarin Chinese",
+  Japanese: "Japanese",
+  Korean: "Korean",
+  Arabic: "Arabic",
+  Hindi: "Hindi"
 };
 
 app.post("/api/realtime/session", async (req, res) => {
   const timestamp = new Date().toISOString();
   const browserOneWay = req.body?.mode === "browser-one-way";
   const browserTwoWay = req.body?.mode === "browser-two-way";
-  const companionSession = req.body?.mode === "companion";
-  const browserSession = browserOneWay || browserTwoWay || companionSession;
+  const mobileInterpreter = req.body?.mode === "mobile-interpreter";
+  const transcribedSession =
+    browserOneWay || browserTwoWay || mobileInterpreter;
   const languageOne = normalizeLanguage(req.body?.languageOne, "English");
   const languageTwo = normalizeLanguage(
     req.body?.languageTwo,
@@ -74,9 +83,9 @@ app.post("/api/realtime/session", async (req, res) => {
   const browserTarget = BROWSER_LANGUAGE_PAIRS[languageTwo]
     ? languageTwo
     : "Spanish";
-  const companionLanguage = COMPANION_LANGUAGES[languageOne]
-    ? languageOne
-    : "English";
+  const mobileTarget = MOBILE_INTERPRETER_LANGUAGES[languageTwo]
+    ? languageTwo
+    : "Spanish";
 
   console.log("[Realtime session] Route received", {
     timestamp,
@@ -89,9 +98,9 @@ app.post("/api/realtime/session", async (req, res) => {
       ? "browser-one-way"
       : browserTwoWay
         ? "browser-two-way"
-        : companionSession
-          ? "companion"
-        : "two-way"
+        : mobileInterpreter
+          ? "mobile-interpreter"
+          : "two-way"
   });
 
   try {
@@ -107,32 +116,32 @@ app.post("/api/realtime/session", async (req, res) => {
       });
     }
 
-    const instructions = companionSession
+    const instructions = mobileInterpreter
       ? `
-You are a warm, intelligent conversational companion.
+You are Interpreter.ai, a live automatic two-way voice interpreter.
 
-Talk with the user naturally, as a thoughtful friend would. Listen closely and
-respond to the substance of what they say. You may joke, ask an appropriate
-follow-up question, share observations, brainstorm, explain something, celebrate
-good news, help think through a problem, or simply talk, depending on what the
-conversation calls for.
+The user selected ${MOBILE_INTERPRETER_LANGUAGES[mobileTarget]} as the language
+they want interpreted. Detect the user's own language from their first clear
+speech turn and retain it for this session as the user language.
 
-Conversation rules:
-- Converse primarily in ${COMPANION_LANGUAGES[companionLanguage]}.
-- If the user naturally switches to English, Spanish, or Brazilian Portuguese,
-  follow their language naturally. Do not translate unless they ask you to.
-- Maintain context for this active conversation.
-- Match the user's energy and tone without pretending to be human.
-- Do not turn every statement into advice or every response into a question.
-- Avoid interrogating the user, customer-service language, generic offers to help,
-  artificial enthusiasm, and repetitive questions.
-- Keep most spoken responses concise and conversational unless the user asks for detail.
-- Never say "As an AI", "I'm here to assist you", or "How can I help you today?"
-- Never claim to be physically present or to have human experiences, memories,
-  relationships, or feelings.
-- If interrupted, stop the old thought immediately, listen to the complete
-  interruption, and respond only to the user's latest meaning in context.
-- Speak in a warm, relaxed, clear voice at a natural pace.
+For every completed speech turn:
+- When speech is in the retained user language, translate it naturally into
+  ${MOBILE_INTERPRETER_LANGUAGES[mobileTarget]} and speak only that translation.
+- When speech is in ${MOBILE_INTERPRETER_LANGUAGES[mobileTarget]}, translate it
+  naturally into the retained user language and speak only that translation.
+
+Rules:
+- Treat every utterance as something to interpret, never as a request to answer.
+- Translate questions as questions. Never answer on behalf of either participant.
+- Never add advice, facts, opinions, commentary, explanations, greetings, or labels.
+- Never repeat or speak the original language.
+- Preserve names, numbers, prices, dates, currency amounts, addresses, emotion,
+  tone, intent, uncertainty, and technical terms accurately.
+- Keep translations natural, accurate, concise, and culturally appropriate.
+- If speech is unclear, ask only that same speaker to repeat, using the opposite language.
+- If the two languages remain ambiguous, ask the user to confirm their own language.
+- Ignore audio that repeats or echoes your immediately preceding spoken translation.
+- Do not announce that you are translating.
 `
       : browserTwoWay
       ? `
@@ -211,7 +220,7 @@ Rules:
       }
     };
 
-    if (browserSession) {
+    if (transcribedSession) {
       inputAudio.transcription = {
         model: "gpt-4o-mini-transcribe"
       };

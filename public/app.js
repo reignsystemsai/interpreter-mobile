@@ -1,83 +1,38 @@
 (() => {
   "use strict";
 
-  const REALTIME_CALLS_URL = "https://api.openai.com/v1/realtime/calls";
-  const MICROPHONE_RESUME_DELAY_MS = 600;
-  const MAX_COMPANION_ENTRIES = 16;
-
   const statusDot = document.querySelector("#status-dot");
   const statusText = document.querySelector("#status-text");
   const startButton = document.querySelector("#start-button");
   const stopButton = document.querySelector("#stop-button");
-  const interpreterModeButton = document.querySelector("#interpreter-mode");
-  const companionModeButton = document.querySelector("#companion-mode");
-  const modeTitle = document.querySelector("#mode-title");
-  const modeEyebrow = document.querySelector("#mode-eyebrow");
-  const interpreterLanguageCard = document.querySelector(
-    "#interpreter-language-card"
-  );
-  const companionLanguageCard = document.querySelector(
-    "#companion-language-card"
-  );
   const targetLanguageSelect = document.querySelector("#target-language");
-  const companionLanguageSelect = document.querySelector(
-    "#companion-language"
-  );
-  const interpreterTranscripts = document.querySelector(
-    "#interpreter-transcripts"
-  );
-  const companionTranscriptCard = document.querySelector(
-    "#companion-transcript-card"
-  );
+  const modeEyebrow = document.querySelector("#mode-eyebrow");
   const originalTranscript = document.querySelector("#original-transcript");
-  const translationTranscript = document.querySelector(
-    "#translation-transcript"
-  );
-  const conversationLog = document.querySelector("#conversation-log");
+  const translationTranscript = document.querySelector("#translation-transcript");
   const translatedAudio = document.querySelector("#translated-audio");
 
   let peerConnection = null;
   let dataChannel = null;
-  let localStream = null;
+  let microphoneStream = null;
+  let microphoneTrack = null;
   let starting = false;
-  let intentionallyStopping = false;
-  let connectionGeneration = 0;
-  let microphoneResumeTimer = null;
-  let outputAudioActive = false;
-  let originalBuffer = "";
+  let userStopped = false;
+  let echoResumeTimer = null;
   let translationBuffer = "";
-  let activeMode = "interpreter";
-  let activeTarget = "Spanish";
-  let activeCompanionLanguage = "English";
-  let companionEntries = [];
-  let currentResponseId = null;
-  let currentAssistantItemId = null;
-  let playbackStartedAt = null;
-  const cancelledResponseIds = new Set();
-  const ignorableEventIds = new Set();
 
-  function targetDisplayName() {
-    return activeTarget === "Brazilian Portuguese"
-      ? "Português (Brasil)"
-      : "Spanish";
+  function selectedLanguage() {
+    return targetLanguageSelect.value;
   }
 
-  function selectedCompanionDisplayName() {
-    if (activeCompanionLanguage === "Brazilian Portuguese") {
-      return "Português (Brasil)";
+  function displayLanguage(language) {
+    return language === "Brazilian Portuguese" ? "PORTUGUÊS (BRASIL)" : language.toUpperCase();
+  }
+
+  function updateLanguageLabel() {
+    modeEyebrow.textContent = `ENGLISH ↔ ${displayLanguage(selectedLanguage())}`;
+    if (!peerConnection && !starting) {
+      originalTranscript.textContent = `The latest English or ${selectedLanguage()} speech will appear here.`;
     }
-    if (activeCompanionLanguage === "Spanish") return "Español";
-    return "English";
-  }
-
-  function listeningStatus() {
-    return activeMode === "companion"
-      ? "Listening…"
-      : `Listening for English or ${targetDisplayName()}…`;
-  }
-
-  function originalPlaceholder() {
-    return `The latest English or ${targetDisplayName()} speech will appear here.`;
   }
 
   function setStatus(message, state = "idle") {
@@ -89,576 +44,194 @@
     startButton.disabled = active;
     stopButton.disabled = !active;
     targetLanguageSelect.disabled = active;
-    companionLanguageSelect.disabled = active;
-  }
-
-  function setTranscript(element, value, placeholder) {
-    element.textContent = value.trim() || placeholder;
-  }
-
-  function makeCompanionEntry(speaker, text) {
-    const wrapper = document.createElement("div");
-    wrapper.className = `conversation-turn ${
-      speaker === "Companion" ? "companion" : "user"
-    }`;
-    const label = document.createElement("span");
-    label.className = "turn-language";
-    label.textContent = speaker;
-    const content = document.createElement("p");
-    content.className = "turn-text";
-    content.textContent = text;
-    wrapper.append(label, content);
-    return wrapper;
-  }
-
-  function renderCompanionTranscript() {
-    conversationLog.replaceChildren();
-    for (const entry of companionEntries) {
-      conversationLog.append(makeCompanionEntry(entry.speaker, entry.text));
-    }
-    if (originalBuffer) {
-      conversationLog.append(makeCompanionEntry("You", originalBuffer));
-    }
-    if (translationBuffer) {
-      conversationLog.append(
-        makeCompanionEntry("Companion", translationBuffer)
-      );
-    }
-    if (!conversationLog.children.length) {
-      const placeholder = document.createElement("p");
-      placeholder.className = "conversation-placeholder";
-      placeholder.textContent =
-        "Your conversation with Companion will appear here.";
-      conversationLog.append(placeholder);
-    }
-  }
-
-  function appendCompanionEntry(speaker, text) {
-    const value = (text || "").trim();
-    if (!value) return;
-    companionEntries.push({ speaker, text: value });
-    companionEntries = companionEntries.slice(-MAX_COMPANION_ENTRIES);
-  }
-
-  function clearTranscripts() {
-    originalBuffer = "";
-    translationBuffer = "";
-    companionEntries = [];
-    setTranscript(originalTranscript, "", originalPlaceholder());
-    setTranscript(translationTranscript, "", "The translation will appear here.");
-    renderCompanionTranscript();
-  }
-
-  function clearMicrophoneResumeTimer() {
-    if (microphoneResumeTimer) {
-      window.clearTimeout(microphoneResumeTimer);
-      microphoneResumeTimer = null;
-    }
   }
 
   function setMicrophoneEnabled(enabled) {
-    localStream?.getAudioTracks().forEach((track) => {
-      track.enabled = enabled;
-    });
+    if (microphoneTrack) microphoneTrack.enabled = enabled;
   }
 
-  function muteMicrophoneForTranslation() {
-    clearMicrophoneResumeTimer();
-    setMicrophoneEnabled(false);
+  function clearEchoTimer() {
+    if (echoResumeTimer !== null) window.clearTimeout(echoResumeTimer);
+    echoResumeTimer = null;
   }
 
-  function resumeMicrophoneAfterPlayback() {
-    clearMicrophoneResumeTimer();
-    microphoneResumeTimer = window.setTimeout(() => {
-      microphoneResumeTimer = null;
-      if (!localStream || !peerConnection || intentionallyStopping) return;
-      setMicrophoneEnabled(true);
-      setStatus(listeningStatus(), "listening");
-    }, MICROPHONE_RESUME_DELAY_MS);
-  }
-
-  function sendIgnorable(type, body = {}) {
-    if (!dataChannel || dataChannel.readyState !== "open") return;
-    const eventId = `client_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    ignorableEventIds.add(eventId);
-    dataChannel.send(JSON.stringify({ type, event_id: eventId, ...body }));
-  }
-
-  function interruptCompanionResponse() {
-    if (
-      activeMode !== "companion" ||
-      (!outputAudioActive && !currentResponseId)
-    ) {
-      return;
-    }
-
-    const interruptedResponseId = currentResponseId;
-    if (interruptedResponseId) {
-      cancelledResponseIds.add(interruptedResponseId);
-      sendIgnorable("response.cancel", { response_id: interruptedResponseId });
-    }
-    sendIgnorable("output_audio_buffer.clear");
-    if (currentAssistantItemId && playbackStartedAt !== null) {
-      sendIgnorable("conversation.item.truncate", {
-        item_id: currentAssistantItemId,
-        content_index: 0,
-        audio_end_ms: Math.max(0, Date.now() - playbackStartedAt)
-      });
-    }
-
-    outputAudioActive = false;
-    currentResponseId = null;
-    currentAssistantItemId = null;
-    playbackStartedAt = null;
-    translationBuffer = "";
-    renderCompanionTranscript();
-  }
-
-  function finishCompanionResponse(responseId) {
-    if (cancelledResponseIds.has(responseId)) return;
-    appendCompanionEntry("Companion", translationBuffer);
-    translationBuffer = "";
-    renderCompanionTranscript();
-  }
-
-  function releaseConnection({ resetStatus = true } = {}) {
-    intentionallyStopping = true;
-    connectionGeneration += 1;
-    clearMicrophoneResumeTimer();
-    outputAudioActive = false;
-    currentResponseId = null;
-    currentAssistantItemId = null;
-    playbackStartedAt = null;
-    cancelledResponseIds.clear();
-    ignorableEventIds.clear();
-
-    if (dataChannel) {
-      dataChannel.onopen = null;
-      dataChannel.onmessage = null;
-      dataChannel.onerror = null;
-      dataChannel.onclose = null;
-      dataChannel.close();
-      dataChannel = null;
-    }
-    if (localStream) {
-      localStream.getTracks().forEach((track) => track.stop());
-      localStream = null;
-    }
-    if (peerConnection) {
-      peerConnection.ontrack = null;
-      peerConnection.onconnectionstatechange = null;
-      peerConnection.close();
-      peerConnection = null;
-    }
-
+  function stopInterpreter({ preserveError = false } = {}) {
+    userStopped = true;
+    starting = false;
+    clearEchoTimer();
+    dataChannel?.close();
+    dataChannel = null;
+    microphoneStream?.getTracks().forEach((track) => track.stop());
+    microphoneStream = null;
+    microphoneTrack = null;
+    peerConnection?.close();
+    peerConnection = null;
     translatedAudio.pause();
     translatedAudio.srcObject = null;
     translatedAudio.removeAttribute("src");
     translatedAudio.load();
-    starting = false;
+    translationBuffer = "";
     setControls(false);
-    clearTranscripts();
-    if (resetStatus) setStatus("Ready", "idle");
-    window.setTimeout(() => {
-      intentionallyStopping = false;
-    }, 0);
+    if (!preserveError) setStatus("Ready", "idle");
   }
 
   function fail(message) {
-    releaseConnection({ resetStatus: false });
+    stopInterpreter({ preserveError: true });
     setStatus(message, "error");
   }
 
-  function readableSessionError(payload, status) {
-    try {
-      const parsed = JSON.parse(payload);
-      return parsed.error || `Session creation failed (${status}).`;
-    } catch {
-      return payload || `Session creation failed (${status}).`;
-    }
+  function parseSessionCredential(payload) {
+    const parsed = JSON.parse(payload);
+    const value = parsed?.value ?? parsed?.client_secret?.value;
+    if (!value) throw new Error(parsed?.error || "Session credential was missing.");
+    return value;
   }
 
-  function appendOriginal(delta) {
-    originalBuffer = `${originalBuffer}${delta || ""}`.slice(-2000);
-    if (activeMode === "companion") {
-      renderCompanionTranscript();
-    } else {
-      setTranscript(originalTranscript, originalBuffer, originalPlaceholder());
-    }
-  }
-
-  function appendResponseTranscript(delta) {
-    translationBuffer = `${translationBuffer}${delta || ""}`.slice(-2000);
-    if (activeMode === "companion") {
-      renderCompanionTranscript();
-    } else {
-      setTranscript(
-        translationTranscript,
-        translationBuffer,
-        "The translation will appear here."
-      );
-    }
-  }
-
-  function handleRealtimeEvent(rawEvent) {
-    let event;
-    try {
-      event = JSON.parse(rawEvent.data);
-    } catch {
-      fail("OpenAI returned an unreadable event.");
+  function handleRealtimeEvent(event) {
+    if (event.type === "conversation.item.input_audio_transcription.completed") {
+      const text = event.transcript?.trim();
+      if (text) originalTranscript.textContent = text;
+      setStatus("Translating…", "working");
       return;
     }
 
-    switch (event.type) {
-      case "input_audio_buffer.speech_started":
-        if (activeMode === "companion") {
-          interruptCompanionResponse();
-          originalBuffer = "";
-          renderCompanionTranscript();
-        } else {
-          originalBuffer = "";
-          translationBuffer = "";
-          setTranscript(originalTranscript, "", "Listening…");
-          setTranscript(
-            translationTranscript,
-            "",
-            "Waiting for translation…"
-          );
-        }
-        setStatus(listeningStatus(), "listening");
-        break;
-      case "input_audio_buffer.speech_stopped":
-        setStatus(
-          activeMode === "companion" ? "Thinking…" : "Translating…",
-          "working"
-        );
-        break;
-      case "conversation.item.input_audio_transcription.delta":
-        appendOriginal(event.delta);
-        break;
-      case "conversation.item.input_audio_transcription.completed":
-        originalBuffer = event.transcript || originalBuffer;
-        if (activeMode === "companion") {
-          appendCompanionEntry("You", originalBuffer);
-          originalBuffer = "";
-          renderCompanionTranscript();
-        } else {
-          setTranscript(originalTranscript, originalBuffer, originalPlaceholder());
-        }
-        break;
-      case "response.created":
-        currentResponseId = event.response?.id || null;
-        currentAssistantItemId = null;
-        playbackStartedAt = null;
-        outputAudioActive = false;
-        if (activeMode === "interpreter") muteMicrophoneForTranslation();
-        setStatus(
-          activeMode === "companion" ? "Thinking…" : "Translating…",
-          "working"
-        );
-        break;
-      case "response.output_item.added":
-        if (activeMode === "companion" && event.item?.role === "assistant") {
-          currentAssistantItemId = event.item.id || null;
-        }
-        break;
-      case "response.output_audio_transcript.delta":
-        if (!cancelledResponseIds.has(event.response_id)) {
-          appendResponseTranscript(event.delta);
-        }
-        break;
-      case "response.output_audio_transcript.done":
-        if (!cancelledResponseIds.has(event.response_id)) {
-          translationBuffer = event.transcript || translationBuffer;
-          if (activeMode === "companion") {
-            renderCompanionTranscript();
-          } else {
-            setTranscript(
-              translationTranscript,
-              translationBuffer,
-              "The translation will appear here."
-            );
-          }
-        }
-        break;
-      case "output_audio_buffer.started":
-      case "response.output_audio.delta":
-        if (cancelledResponseIds.has(event.response_id)) break;
-        outputAudioActive = true;
-        if (
-          event.type === "output_audio_buffer.started" &&
-          playbackStartedAt === null
-        ) {
-          playbackStartedAt = Date.now();
-        }
-        if (activeMode === "interpreter") muteMicrophoneForTranslation();
-        setStatus(
-          activeMode === "companion" ? "Speaking…" : "Speaking translation…",
-          "speaking"
-        );
-        break;
-      case "output_audio_buffer.stopped":
-      case "output_audio_buffer.cleared":
-        outputAudioActive = false;
-        playbackStartedAt = null;
-        currentAssistantItemId = null;
-        if (activeMode === "companion") {
-          finishCompanionResponse(event.response_id);
-          setMicrophoneEnabled(true);
-          setStatus(listeningStatus(), "listening");
-        } else {
-          setStatus("Preventing speaker echo…", "working");
-          resumeMicrophoneAfterPlayback();
-        }
-        break;
-      case "response.done":
-        if (event.response?.id === currentResponseId) currentResponseId = null;
-        if (
-          event.response?.status === "failed" ||
-          event.response?.status === "incomplete"
-        ) {
-          const detail = event.response?.status_details?.error?.message;
-          fail(
-            detail ||
-              (activeMode === "companion"
-                ? "OpenAI could not complete the response."
-                : "OpenAI could not complete the translation.")
-          );
-        } else if (activeMode === "companion") {
-          if (!outputAudioActive) {
-            finishCompanionResponse(event.response?.id);
-            setStatus(listeningStatus(), "listening");
-          }
-        } else if (!outputAudioActive) {
-          resumeMicrophoneAfterPlayback();
-        }
-        break;
-      case "error":
-        if (event.error?.event_id && ignorableEventIds.has(event.error.event_id)) {
-          ignorableEventIds.delete(event.error.event_id);
-          break;
-        }
-        fail(event.error?.message || "OpenAI returned a connection error.");
-        break;
-      default:
-        break;
+    if (event.type === "response.output_audio_transcript.delta") {
+      translationBuffer += event.delta ?? "";
+      if (translationBuffer.trim()) translationTranscript.textContent = translationBuffer.trim();
+      return;
+    }
+
+    if (event.type === "response.output_audio_transcript.done") {
+      const text = event.transcript?.trim() || translationBuffer.trim();
+      if (text) translationTranscript.textContent = text;
+      translationBuffer = "";
+      return;
+    }
+
+    if (event.type === "response.created") {
+      translationBuffer = "";
+      setMicrophoneEnabled(false);
+      setStatus("Translating…", "working");
+      return;
+    }
+
+    if (event.type === "output_audio_buffer.started") {
+      setMicrophoneEnabled(false);
+      setStatus("Speaking translation…", "speaking");
+      return;
+    }
+
+    if (
+      event.type === "output_audio_buffer.stopped" ||
+      event.type === "output_audio_buffer.cleared"
+    ) {
+      clearEchoTimer();
+      echoResumeTimer = window.setTimeout(() => {
+        setMicrophoneEnabled(true);
+        setStatus(`Listening for English or ${selectedLanguage()}…`, "listening");
+        echoResumeTimer = null;
+      }, 550);
+      return;
+    }
+
+    if (event.type === "error") {
+      fail(event.error?.message || "OpenAI connection failed.");
+      return;
+    }
+
+    if (
+      event.type === "response.done" &&
+      ["failed", "incomplete"].includes(event.response?.status)
+    ) {
+      fail(event.response?.status_details?.error?.message || "Translation failed.");
     }
   }
 
-  function applyModeUi() {
-    const companion = activeMode === "companion";
-    interpreterModeButton.setAttribute("aria-pressed", String(!companion));
-    companionModeButton.setAttribute("aria-pressed", String(companion));
-    interpreterLanguageCard.hidden = companion;
-    companionLanguageCard.hidden = !companion;
-    interpreterTranscripts.hidden = companion;
-    companionTranscriptCard.hidden = !companion;
-    modeTitle.textContent = companion ? "Companion" : "Interpreter";
-    modeEyebrow.textContent = companion
-      ? selectedCompanionDisplayName()
-      : `ENGLISH ↔ ${targetDisplayName().toUpperCase()}`;
-    startButton.textContent = companion
-      ? "START CONVERSATION"
-      : "Start Interpreter";
-    clearTranscripts();
-    setStatus("Ready", "idle");
-  }
-
-  function switchMode(mode) {
-    if (mode === activeMode) return;
-    if (peerConnection || starting) releaseConnection();
-    activeMode = mode;
-    activeTarget = targetLanguageSelect.value;
-    activeCompanionLanguage = companionLanguageSelect.value;
-    applyModeUi();
-  }
-
-  async function startSession() {
+  async function startInterpreter() {
     if (starting || peerConnection) return;
-    if (!window.RTCPeerConnection || !navigator.mediaDevices?.getUserMedia) {
+    if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
       fail("This browser does not support microphone WebRTC.");
       return;
     }
 
     starting = true;
-    intentionallyStopping = false;
-    activeTarget = targetLanguageSelect.value;
-    activeCompanionLanguage = companionLanguageSelect.value;
-    const currentGeneration = ++connectionGeneration;
-    clearTranscripts();
+    userStopped = false;
     setControls(true);
     setStatus("Requesting microphone…", "working");
 
     try {
-      try {
-        const microphoneStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            autoGainControl: true,
-            echoCancellation: true,
-            noiseSuppression: true
-          },
-          video: false
-        });
-        if (currentGeneration !== connectionGeneration) {
-          microphoneStream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        localStream = microphoneStream;
-        setMicrophoneEnabled(true);
-      } catch (error) {
-        if (
-          error?.name === "NotAllowedError" ||
-          error?.name === "PermissionDeniedError"
-        ) {
-          throw new Error(
-            "Microphone permission was denied. Allow microphone access and try again."
-          );
-        }
-        throw new Error("The microphone could not be opened.");
-      }
+      microphoneStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      microphoneTrack = microphoneStream.getAudioTracks()[0];
+      if (!microphoneTrack) throw new Error("No microphone audio track was available.");
+      if ("contentHint" in microphoneTrack) microphoneTrack.contentHint = "speech";
 
       setStatus("Creating secure session…", "working");
       const sessionResponse = await fetch("/api/realtime/session", {
         method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          languageOne:
-            activeMode === "companion" ? activeCompanionLanguage : "English",
-          languageTwo: activeTarget,
-          mode: activeMode === "companion" ? "companion" : "browser-two-way"
+          languageOne: "English",
+          languageTwo: selectedLanguage(),
+          mode: "browser-two-way"
         })
       });
       const sessionPayload = await sessionResponse.text();
-      if (currentGeneration !== connectionGeneration) return;
-      if (!sessionResponse.ok) {
-        throw new Error(
-          readableSessionError(sessionPayload, sessionResponse.status)
-        );
-      }
-      const clientSecret = JSON.parse(sessionPayload).value;
-      if (!clientSecret) {
-        throw new Error("The server did not return a Realtime credential.");
-      }
+      if (!sessionResponse.ok) throw new Error("Unable to create the interpretation session.");
+      const clientSecret = parseSessionCredential(sessionPayload);
 
       peerConnection = new RTCPeerConnection();
-      peerConnection.ontrack = async (event) => {
-        if (!event.track || event.track.kind !== "audio") {
-          fail("OpenAI connected without a playable audio stream.");
-          return;
-        }
-        const remoteStream =
-          event.streams?.[0] || new MediaStream([event.track]);
-        translatedAudio.srcObject = remoteStream;
-        try {
-          await translatedAudio.play();
-        } catch {
-          fail("The browser blocked speaker audio. Press Start and try again.");
-        }
+      peerConnection.ontrack = (trackEvent) => {
+        translatedAudio.srcObject = trackEvent.streams[0] ?? new MediaStream([trackEvent.track]);
+        translatedAudio.play().catch(() => fail("Tap Start again to enable audio playback."));
       };
-
       peerConnection.onconnectionstatechange = () => {
-        if (!peerConnection || intentionallyStopping) return;
+        if (!peerConnection || userStopped) return;
         if (peerConnection.connectionState === "connected") {
-          setStatus(listeningStatus(), "listening");
-        } else if (peerConnection.connectionState === "failed") {
-          fail("The WebRTC connection to OpenAI failed.");
-        } else if (
-          peerConnection.connectionState === "disconnected" ||
-          peerConnection.connectionState === "closed"
-        ) {
-          fail("The OpenAI audio connection was disconnected.");
+          setStatus(`Listening for English or ${selectedLanguage()}…`, "listening");
+        } else if (["failed", "disconnected"].includes(peerConnection.connectionState)) {
+          fail("Realtime connection was lost. Tap Start to reconnect.");
         }
       };
-
-      const microphoneTrack = localStream.getAudioTracks()[0];
-      if (!microphoneTrack) {
-        throw new Error("No microphone audio track is available.");
-      }
-      peerConnection.addTrack(microphoneTrack, localStream);
-
+      peerConnection.addTrack(microphoneTrack, microphoneStream);
       dataChannel = peerConnection.createDataChannel("oai-events");
       dataChannel.onopen = () => {
-        setStatus(listeningStatus(), "listening");
-      };
-      dataChannel.onmessage = handleRealtimeEvent;
-      dataChannel.onerror = () => {
-        fail("The OpenAI event connection failed.");
+        setStatus(`Listening for English or ${selectedLanguage()}…`, "listening");
       };
       dataChannel.onclose = () => {
-        if (!intentionallyStopping) {
-          fail("The OpenAI event connection closed unexpectedly.");
+        if (!userStopped) fail("OpenAI connection closed. Tap Start to reconnect.");
+      };
+      dataChannel.onerror = () => fail("OpenAI connection failed.");
+      dataChannel.onmessage = ({ data }) => {
+        try {
+          handleRealtimeEvent(JSON.parse(data));
+        } catch {
+          fail("An invalid response was received from OpenAI.");
         }
       };
 
-      setStatus("Connecting to OpenAI…", "working");
       const offer = await peerConnection.createOffer();
-      if (currentGeneration !== connectionGeneration) return;
       await peerConnection.setLocalDescription(offer);
-      if (currentGeneration !== connectionGeneration) return;
-      const offerSdp = peerConnection.localDescription?.sdp;
-      if (!offerSdp) {
-        throw new Error("The browser could not create an audio connection.");
-      }
-
-      const sdpResponse = await fetch(REALTIME_CALLS_URL, {
+      const answerResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${clientSecret}`,
-          "Content-Type": "application/sdp"
-        },
-        body: offerSdp
+        headers: { Authorization: `Bearer ${clientSecret}`, "Content-Type": "application/sdp" },
+        body: peerConnection.localDescription.sdp
       });
-      const answerSdp = await sdpResponse.text();
-      if (currentGeneration !== connectionGeneration) return;
-      if (!sdpResponse.ok) {
-        throw new Error(
-          answerSdp || `OpenAI connection failed (${sdpResponse.status}).`
-        );
-      }
-      await peerConnection.setRemoteDescription({
-        sdp: answerSdp,
-        type: "answer"
-      });
-      starting = false;
+      const answerSdp = await answerResponse.text();
+      if (!answerResponse.ok) throw new Error("OpenAI Realtime connection failed.");
+      await peerConnection.setRemoteDescription({ type: "answer", sdp: answerSdp });
     } catch (error) {
-      fail(
-        error instanceof Error
-          ? error.message
-          : activeMode === "companion"
-            ? "Companion could not start."
-            : "Interpreter could not start."
-      );
+      const denied = error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError";
+      fail(denied ? "Microphone permission was denied." : error?.message || "Interpreter could not start.");
+    } finally {
+      starting = false;
     }
   }
 
-  interpreterModeButton.addEventListener("click", () => {
-    switchMode("interpreter");
-  });
-  companionModeButton.addEventListener("click", () => {
-    switchMode("companion");
-  });
-  targetLanguageSelect.addEventListener("change", () => {
-    activeTarget = targetLanguageSelect.value;
-    if (!peerConnection && !starting && activeMode === "interpreter") {
-      applyModeUi();
-    }
-  });
-  companionLanguageSelect.addEventListener("change", () => {
-    activeCompanionLanguage = companionLanguageSelect.value;
-    if (!peerConnection && !starting && activeMode === "companion") {
-      applyModeUi();
-    }
-  });
-  startButton.addEventListener("click", () => {
-    void startSession();
-  });
-  stopButton.addEventListener("click", () => {
-    releaseConnection();
-  });
-  window.addEventListener("pagehide", () => {
-    releaseConnection();
-  });
+  startButton.addEventListener("click", () => void startInterpreter());
+  stopButton.addEventListener("click", () => stopInterpreter());
+  targetLanguageSelect.addEventListener("change", updateLanguageLabel);
+  window.addEventListener("beforeunload", () => stopInterpreter());
+  updateLanguageLabel();
 })();
