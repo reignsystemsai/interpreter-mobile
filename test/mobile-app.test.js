@@ -6,6 +6,9 @@ const test = require("node:test");
 const root = path.join(__dirname, "..");
 const appSource = fs.readFileSync(path.join(root, "mobile", "app", "index.tsx"), "utf8");
 const serverSource = fs.readFileSync(path.join(root, "server.js"), "utf8");
+const appConfig = JSON.parse(
+  fs.readFileSync(path.join(root, "mobile", "app.json"), "utf8")
+);
 
 const supportedLanguages = [
   "English",
@@ -38,10 +41,14 @@ test("mobile and backend expose the same 20 target languages", () => {
   }
 });
 
-test("final MVP remains one-screen and hides transcripts by default", () => {
-  assert.match(appSource, /Language to interpret to/);
+test("final MVP uses explicit mirrored directions without transcripts", () => {
+  assert.match(appSource, /Speaker \(1\) language/);
+  assert.match(appSource, /Speaker \(2\) language/);
+  assert.match(appSource, /useRealtimeInterpreter\(languageOne, languageTwo\)/);
   assert.match(appSource, /Start Conversation/);
   assert.match(appSource, /End Conversation/);
-  assert.match(appSource, /const \[showTranscript, setShowTranscript\] = useState\(false\)/);
-  assert.doesNotMatch(appSource, /conversationOpen|Companion|diagnosticMessage/);
+  assert.match(serverSource, /mobile-pair/);
+  assert.doesNotMatch(appSource, /showTranscript|conversationOpen|diagnosticMessage/);
+  assert.equal(appConfig.expo.name, "interpreter");
+  assert.equal(appConfig.expo.android.versionCode, 8);
 });

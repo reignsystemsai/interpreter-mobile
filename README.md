@@ -33,10 +33,11 @@ the microphone and WebRTC session.
 
 ## Android
 
-The Android app is a one-screen, automatic two-way interpreter between the
-user's detected language and one selected target language. It supports English,
+The Android app is a one-screen, explicit two-way interpreter. The user selects
+the language for each speaker, and the mirrored rows make both translation
+directions unambiguous. It supports English,
 Spanish, Brazilian Portuguese, French, German, Italian, Dutch, Russian, Polish,
 Romanian, Turkish, Arabic, Hebrew, Hindi, Japanese, Korean, Mandarin Chinese,
-Cantonese, Vietnamese, and Thai. Transcripts are hidden by default.
+Cantonese, Vietnamese, and Thai. Transcripts are not shown on the home screen.
 
 See [mobile/README.md](mobile/README.md) for build and test steps.

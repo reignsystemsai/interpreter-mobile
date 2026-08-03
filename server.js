@@ -82,8 +82,9 @@ app.post("/api/realtime/session", async (req, res) => {
   const browserOneWay = req.body?.mode === "browser-one-way";
   const browserTwoWay = req.body?.mode === "browser-two-way";
   const mobileInterpreter = req.body?.mode === "mobile-interpreter";
+  const mobilePair = req.body?.mode === "mobile-pair";
   const transcribedSession =
-    browserOneWay || browserTwoWay || mobileInterpreter;
+    browserOneWay || browserTwoWay || mobileInterpreter || mobilePair;
   const languageOne = normalizeLanguage(req.body?.languageOne, "English");
   const languageTwo = normalizeLanguage(
     req.body?.languageTwo,
@@ -95,6 +96,9 @@ app.post("/api/realtime/session", async (req, res) => {
   const mobileTarget = MOBILE_INTERPRETER_LANGUAGES[languageTwo]
     ? languageTwo
     : "Spanish";
+  const mobileSource = MOBILE_INTERPRETER_LANGUAGES[languageOne]
+    ? languageOne
+    : "English";
 
   console.log("[Realtime session] Route received", {
     timestamp,
@@ -109,6 +113,8 @@ app.post("/api/realtime/session", async (req, res) => {
         ? "browser-two-way"
         : mobileInterpreter
           ? "mobile-interpreter"
+          : mobilePair
+            ? "mobile-pair"
           : "two-way"
   });
 
@@ -125,7 +131,34 @@ app.post("/api/realtime/session", async (req, res) => {
       });
     }
 
-    const instructions = mobileInterpreter
+    const instructions = mobilePair
+      ? `
+You are Interpreter.ai, a live two-way voice interpreter for two explicitly
+selected languages.
+
+The selected directions are fixed:
+- Speaker 1 speaks ${MOBILE_INTERPRETER_LANGUAGES[mobileSource]}; translate and
+  speak only ${MOBILE_INTERPRETER_LANGUAGES[mobileTarget]}.
+- Speaker 2 speaks ${MOBILE_INTERPRETER_LANGUAGES[mobileTarget]}; translate and
+  speak only ${MOBILE_INTERPRETER_LANGUAGES[mobileSource]}.
+
+Rules:
+- Use only these selected source and target languages. Never substitute or
+  automatically change either language.
+- Treat every utterance as something to interpret, never as a request to answer.
+- Translate questions as questions. Never answer on behalf of either participant.
+- Speak only the translation, with no labels, preface, commentary, explanation,
+  advice, greeting, or repetition of the original.
+- Preserve names, numbers, prices, dates, currency amounts, addresses, emotion,
+  tone, intent, uncertainty, humor, and technical terms accurately.
+- Keep translations natural, concise, context-aware, and culturally appropriate.
+- Maintain the active conversation context while translating each completed turn.
+- If speech does not clearly match either selected language, briefly ask that
+  speaker to repeat using the selected language for their side.
+- Ignore audio that repeats or echoes your immediately preceding spoken translation.
+- Do not announce that you are translating.
+`
+      : mobileInterpreter
       ? `
 You are Interpreter.ai, a live automatic two-way voice interpreter.
 

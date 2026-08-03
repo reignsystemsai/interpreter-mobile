@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Interpreter.ai",
+    "name": "interpreter",
     "slug": "interpreter-ai",
     "owner": "www.interpreter.ai",
     "version": "1.1.0",
@@ -19,7 +19,7 @@
     "android": {
       "package": "ai.interpreter.mobile",
       "edgeToEdgeEnabled": true,
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/interpreter-mark.png",
         "backgroundColor": "#F8FBFF"

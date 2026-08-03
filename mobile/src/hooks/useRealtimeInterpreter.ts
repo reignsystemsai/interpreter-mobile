@@ -159,7 +159,7 @@ function detectSpokenLanguage(
   return retainedLanguage ?? (selectedLanguage === 'English' ? 'Detected language' : 'English');
 }
 
-export function useRealtimeInterpreter(selectedLanguage: string) {
+export function useRealtimeInterpreter(languageOne: string, languageTwo: string) {
   const [status, setStatus] = useState<InterpreterStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [turns, setTurns] = useState<TranscriptTurn[]>([]);
@@ -311,9 +311,9 @@ export function useRealtimeInterpreter(selectedLanguage: string) {
         method: 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          languageOne: 'Auto-detect',
-          languageTwo: selectedLanguage,
-          mode: 'mobile-interpreter',
+          languageOne,
+          languageTwo,
+          mode: 'mobile-pair',
         }),
       });
       const sessionPayload = await sessionResponse.text();
@@ -385,12 +385,12 @@ export function useRealtimeInterpreter(selectedLanguage: string) {
             if (!original) return;
             const originalLanguage = detectSpokenLanguage(
               original,
-              selectedLanguage,
+              languageTwo,
               detectedUserLanguageRef.current,
             );
             if (
               !detectedUserLanguageRef.current &&
-              originalLanguage !== selectedLanguage &&
+              originalLanguage !== languageTwo &&
               originalLanguage !== 'Detected language'
             ) {
               detectedUserLanguageRef.current = originalLanguage;
@@ -399,9 +399,9 @@ export function useRealtimeInterpreter(selectedLanguage: string) {
             const id = realtimeEvent.item_id ?? `turn-${Date.now()}`;
             currentTurnIdRef.current = id;
             const translationLanguage =
-              originalLanguage === selectedLanguage
+              originalLanguage === languageTwo
                 ? detectedUserLanguageRef.current ?? 'Detected language'
-                : selectedLanguage;
+                : languageTwo;
             setTurns((current) => [
               ...current.slice(-19),
               {
@@ -497,7 +497,8 @@ export function useRealtimeInterpreter(selectedLanguage: string) {
       startingRef.current = false;
     }
   }, [
-    selectedLanguage,
+    languageOne,
+    languageTwo,
     routeAudioToSpeaker,
     scheduleReconnect,
     setMicrophoneEnabled,

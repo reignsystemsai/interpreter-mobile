@@ -39,15 +39,15 @@ when Android asks, and install **Interpreter.ai**.
 ## Test the app
 
 1. Open **Interpreter.ai**.
-2. Tap **Language to interpret** and select a target language.
+2. Set the language for Speaker 1 and Speaker 2. The two rows mirror the
+   opposite translation directions automatically.
 3. Tap **Start Conversation** and allow microphone access.
 4. Speak naturally in your language. Confirm only the selected-language
    translation is spoken and the orb reflects the current state.
 5. Have the second speaker reply in the selected language. Confirm only the
    translation into your detected language is spoken.
 6. Alternate speakers for several turns and confirm no playback feedback loop.
-7. Open Settings and confirm transcripts are off by default. Turn them on only
-   when testing the optional latest-turn display.
+7. Confirm no transcript or developer information appears on the home screen.
 8. Tap **End Conversation**, then start another conversation and confirm
    microphone/audio reconnect correctly.
 
