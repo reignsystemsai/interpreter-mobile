@@ -6,6 +6,12 @@ const router = express.Router();
 const CONTACT_SELECT = "id,device_contact_id,display_name,given_name,family_name,company,phone_numbers,email_addresses,preferred_language,is_favorite,last_called_at,interpreter_user_id,created_at,updated_at";
 
 router.use(requireUser);
+router.use((req, res, next) => {
+  if (req.interpreterUser.is_anonymous) {
+    return res.status(403).json({ error: "A permanent account is required for contact synchronization" });
+  }
+  return next();
+});
 
 function serializeContact(row) {
   return {

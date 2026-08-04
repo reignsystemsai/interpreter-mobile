@@ -70,7 +70,7 @@ test("final MVP uses explicit mirrored directions without transcripts", () => {
   assert.match(serverSource, /mobile-pair/);
   assert.doesNotMatch(appSource, /showTranscript|conversationOpen|diagnosticMessage/);
   assert.equal(appConfig.expo.name, "interpreter");
-  assert.equal(appConfig.expo.android.versionCode, 10);
+  assert.equal(appConfig.expo.android.versionCode, 11);
 });
 
 test("Phase 3 preserves the existing calling overlay and approved destinations", () => {
@@ -212,4 +212,40 @@ test("Phase 6 keeps the home visible, creates a guest session, and enforces roll
   for (const copy of ["Production integration", "Public project keys", "Server configuration", "Account services are not active yet"]) {
     assert.doesNotMatch(destinationSource, new RegExp(copy));
   }
+});
+
+test("Phase 8 requests read-only contacts access and keeps cloud sync account-only", () => {
+  assert.ok(appConfig.expo.android.permissions.includes("android.permission.READ_CONTACTS"));
+  assert.ok(appConfig.expo.android.blockedPermissions.includes("android.permission.WRITE_CONTACTS"));
+  assert.match(contactsProviderSource, /Contacts\.getPermissionsAsync\(\)[\s\S]*Contacts\.requestPermissionsAsync\(\)/);
+  assert.match(contactsProviderSource, /result\.canAskAgain \? 'denied' : 'blocked'/);
+  assert.match(contactsProviderSource, /isGuest[\s\S]*Sign in to sync contacts across your devices\./);
+  assert.match(contactsProviderSource, /Contacts could not be imported right now\. Please try again\./);
+  assert.match(contactsProviderSource, /Contacts could not be deleted right now\. Please try again\./);
+  assert.doesNotMatch(contactsProviderSource, /Contacts\.(removeContactAsync|removeContactsAsync|deleteContact)/);
+  assert.match(contactsSource, /This removes only Interpreter’s cloud copies\. Contacts on your phone will not be changed\./);
+  assert.match(contactsRouteSource, /router\.post\("\/import"/);
+  assert.match(contactsRouteSource, /router\.delete\("\/"/);
+  assert.match(contactsRouteSource, /req\.interpreterUser\.is_anonymous/);
+  assert.match(serverSource, /app\.use\("\/api\/v1\/contacts", contactRoutes\)/);
+});
+
+test("Phase 8 never labels a first connection as reconnecting and bounds recovery", () => {
+  for (const status of ['requesting_permission', 'creating_session', 'connecting', 'connected', 'listening', 'reconnecting', 'failed', 'stopping']) {
+    assert.match(realtimeHookSource, new RegExp(`'${status}'`));
+  }
+  assert.match(realtimeHookSource, /hasConnectedOnceRef\.current = true/);
+  assert.match(realtimeHookSource, /if \(!hasConnectedOnceRef\.current\)[\s\S]*setStatus\('failed'\)/);
+  assert.match(realtimeHookSource, /MAX_RECONNECT_ATTEMPTS = 3/);
+  assert.match(realtimeHookSource, /if \(startingRef\.current\) return/);
+  assert.match(realtimeHookSource, /SESSION_REQUEST_TIMEOUT_MS/);
+  assert.match(realtimeHookSource, /WEBRTC_NEGOTIATION_TIMEOUT_MS/);
+  assert.match(realtimeHookSource, /DATA_CHANNEL_TIMEOUT_MS/);
+  assert.match(realtimeHookSource, /REMOTE_AUDIO_TRACK_TIMEOUT_MS/);
+  assert.match(realtimeHookSource, /dataChannel\.onopen = \(\) => resolve\(\)/);
+  assert.match(realtimeHookSource, /cleanupTransport\(\)[\s\S]*setStatus\('failed'\)/);
+  assert.doesNotMatch(appSource, /status === 'error'[^\n]*Reconnecting/);
+  assert.match(appSource, /status === 'reconnecting'[^\n]*Reconnecting/);
+  assert.match(appSource, /status === 'failed'[^\n]*Couldn’t Connect/);
+  assert.match(appSource, /Try Again/);
 });

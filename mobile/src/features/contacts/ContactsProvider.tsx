@@ -2,7 +2,7 @@ import { createContext, type PropsWithChildren, useCallback, useContext, useEffe
 import * as Contacts from 'expo-contacts';
 import * as SecureStore from 'expo-secure-store';
 
-import { authenticatedRequest } from '../../services/api';
+import { ApiError, authenticatedRequest } from '../../services/api';
 import { useAuth } from '../account/AuthProvider';
 
 export type ContactValue = { label: string; value: string };
@@ -29,12 +29,13 @@ type ContactsContextValue = {
   contacts: InterpreterContact[];
   error: string;
   loading: boolean;
-  permission: 'checking' | 'undetermined' | 'granted' | 'denied';
+  permission: 'checking' | 'undetermined' | 'granted' | 'denied' | 'blocked';
   syncEnabled: boolean;
   syncing: boolean;
   deleteAllContacts: () => Promise<void>;
   deleteContact: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
+  requestPermission: () => Promise<'granted' | 'denied' | 'blocked'>;
   requestAndImport: () => Promise<void>;
   stopSyncing: () => Promise<void>;
   updateContact: (id: string, update: ContactUpdate) => Promise<InterpreterContact>;
@@ -43,8 +44,28 @@ type ContactsContextValue = {
 const SYNC_KEY = 'interpreter.contacts.sync-enabled';
 const ContactsContext = createContext<ContactsContextValue | null>(null);
 
+type ContactOperation = 'delete' | 'import' | 'load' | 'update';
+
+function contactErrorMessage(operation: ContactOperation, error: unknown) {
+  if (error instanceof ApiError && [401, 403].includes(error.status)) {
+    return 'Sign in to sync contacts across your devices.';
+  }
+  if (error instanceof TypeError) {
+    return 'We could not reach Interpreter. Check your connection and try again.';
+  }
+  if (operation === 'delete') return 'Contacts could not be deleted right now. Please try again.';
+  if (operation === 'load') return 'Contacts could not be loaded right now. Please try again.';
+  if (operation === 'update') return 'This contact could not be updated right now. Please try again.';
+  return 'Contacts could not be imported right now. Please try again.';
+}
+
+function logContactFailure(operation: ContactOperation, error: unknown) {
+  if (!__DEV__) return;
+  console.warn('[Contacts]', { operation, status: error instanceof ApiError ? error.status : 'client' });
+}
+
 export function ContactsProvider({ children }: PropsWithChildren) {
-  const { user } = useAuth();
+  const { isGuest, user } = useAuth();
   const [contacts, setContacts] = useState<InterpreterContact[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -53,7 +74,7 @@ export function ContactsProvider({ children }: PropsWithChildren) {
   const [syncing, setSyncing] = useState(false);
 
   const refresh = useCallback(async () => {
-    if (!user) { setContacts([]); return; }
+    if (!user || isGuest) { setContacts([]); return; }
     setLoading(true); setError('');
     try {
       const synchronized: InterpreterContact[] = [];
@@ -67,12 +88,12 @@ export function ContactsProvider({ children }: PropsWithChildren) {
         if (!result.contacts.length) break;
       }
       setContacts(synchronized);
-    } catch (nextError) { setError(nextError instanceof Error ? nextError.message : 'Unable to load contacts.'); }
+    } catch (nextError) { logContactFailure('load', nextError); setError(contactErrorMessage('load', nextError)); }
     finally { setLoading(false); }
-  }, [user]);
+  }, [isGuest, user]);
 
   const importDeviceContacts = useCallback(async () => {
-    if (!user) throw new Error('Sign in before importing contacts.');
+    if (!user || isGuest) throw new Error('Sign in to sync contacts across your devices.');
     setSyncing(true); setError('');
     try {
       const result = await Contacts.getContactsAsync({
@@ -97,58 +118,85 @@ export function ContactsProvider({ children }: PropsWithChildren) {
       }
       await refresh();
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : 'Unable to import contacts.';
+      logContactFailure('import', nextError);
+      const message = contactErrorMessage('import', nextError);
       setError(message);
-      throw nextError;
+      throw new Error(message);
     } finally { setSyncing(false); }
-  }, [refresh, user]);
+  }, [isGuest, refresh, user]);
+
+  const requestPermission = useCallback(async () => {
+    const current = await Contacts.getPermissionsAsync();
+    const result = current.status === 'granted' ? current : await Contacts.requestPermissionsAsync();
+    const nextPermission = result.status === 'granted' ? 'granted' : result.canAskAgain ? 'denied' : 'blocked';
+    setPermission(nextPermission);
+    return nextPermission;
+  }, []);
 
   useEffect(() => {
     let active = true;
-    if (!user) {
+    if (!user || isGuest) {
       setContacts([]); setPermission('undetermined'); setSyncEnabled(false);
+      void Contacts.getPermissionsAsync().then((result) => {
+        if (!active) return;
+        setPermission(result.status === 'granted' ? 'granted' : result.canAskAgain ? 'undetermined' : 'blocked');
+      }).catch(() => active && setPermission('undetermined'));
       return () => { active = false; };
     }
     void Promise.all([Contacts.getPermissionsAsync(), SecureStore.getItemAsync(SYNC_KEY)])
       .then(async ([permissionResult, stored]) => {
         if (!active) return;
         const granted = permissionResult.status === 'granted';
-        setPermission(granted ? 'granted' : permissionResult.status === 'denied' ? 'denied' : 'undetermined');
+        setPermission(granted ? 'granted' : permissionResult.canAskAgain ? 'undetermined' : 'blocked');
         setSyncEnabled(stored === 'true');
         await refresh();
         if (granted && stored === 'true' && active) await importDeviceContacts();
       })
       .catch(() => active && setPermission('undetermined'));
     return () => { active = false; };
-  }, [importDeviceContacts, refresh, user]);
+  }, [importDeviceContacts, isGuest, refresh, user]);
 
   useEffect(() => {
-    if (!user || permission !== 'granted' || !syncEnabled) return;
+    if (!user || isGuest || permission !== 'granted' || !syncEnabled) return;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const subscription = Contacts.addContactsChangeListener(() => {
       if (timeout) clearTimeout(timeout);
       timeout = setTimeout(() => void importDeviceContacts().catch(() => undefined), 800);
     });
     return () => { if (timeout) clearTimeout(timeout); subscription.remove(); };
-  }, [importDeviceContacts, permission, syncEnabled, user]);
+  }, [importDeviceContacts, isGuest, permission, syncEnabled, user]);
 
   const value = useMemo<ContactsContextValue>(() => ({
     contacts, error, loading, permission, syncEnabled, syncing,
     async deleteAllContacts() {
-      await authenticatedRequest('/api/v1/contacts', { method: 'DELETE' });
-      setContacts([]);
+      if (isGuest) throw new Error('Sign in to sync contacts across your devices.');
+      try {
+        await authenticatedRequest('/api/v1/contacts', { method: 'DELETE' });
+        await SecureStore.setItemAsync(SYNC_KEY, 'false');
+        setSyncEnabled(false);
+        setContacts([]);
+        setError('');
+      } catch (nextError) {
+        logContactFailure('delete', nextError);
+        throw new Error(contactErrorMessage('delete', nextError));
+      }
     },
     async deleteContact(id) {
-      await authenticatedRequest(`/api/v1/contacts/${id}`, { method: 'DELETE' });
-      setContacts((current) => current.filter((contact) => contact.id !== id));
+      try {
+        await authenticatedRequest(`/api/v1/contacts/${id}`, { method: 'DELETE' });
+        setContacts((current) => current.filter((contact) => contact.id !== id));
+      } catch (nextError) {
+        logContactFailure('delete', nextError);
+        throw new Error(contactErrorMessage('delete', nextError));
+      }
     },
     refresh,
+    requestPermission,
     async requestAndImport() {
-      if (!user) throw new Error('Sign in before importing contacts.');
-      const result = await Contacts.requestPermissionsAsync();
-      const granted = result.status === 'granted';
-      setPermission(granted ? 'granted' : 'denied');
-      if (!granted) throw new Error('Contacts permission was not granted.');
+      const result = await requestPermission();
+      if (result === 'blocked') throw new Error('Open Android Settings to allow contact access, then try again.');
+      if (result !== 'granted') throw new Error('Contact access was not allowed. You can try again anytime.');
+      if (!user || isGuest) throw new Error('Sign in to sync contacts across your devices.');
       await SecureStore.setItemAsync(SYNC_KEY, 'true');
       setSyncEnabled(true);
       await importDeviceContacts();
@@ -158,13 +206,18 @@ export function ContactsProvider({ children }: PropsWithChildren) {
       setSyncEnabled(false);
     },
     async updateContact(id, update) {
-      const result = await authenticatedRequest<{ contact: InterpreterContact }>(`/api/v1/contacts/${id}`, {
-        method: 'PATCH', body: JSON.stringify(update),
-      });
-      setContacts((current) => current.map((contact) => contact.id === id ? result.contact : contact));
-      return result.contact;
+      try {
+        const result = await authenticatedRequest<{ contact: InterpreterContact }>(`/api/v1/contacts/${id}`, {
+          method: 'PATCH', body: JSON.stringify(update),
+        });
+        setContacts((current) => current.map((contact) => contact.id === id ? result.contact : contact));
+        return result.contact;
+      } catch (nextError) {
+        logContactFailure('update', nextError);
+        throw new Error(contactErrorMessage('update', nextError));
+      }
     },
-  }), [contacts, error, importDeviceContacts, loading, permission, refresh, syncEnabled, syncing, user]);
+  }), [contacts, error, importDeviceContacts, isGuest, loading, permission, refresh, requestPermission, syncEnabled, syncing, user]);
 
   return <ContactsContext.Provider value={value}>{children}</ContactsContext.Provider>;
 }

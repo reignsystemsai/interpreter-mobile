@@ -11,6 +11,11 @@ import {
 
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
 const PRODUCTION_API_BASE_URL = 'https://interpreter-api-fycw.onrender.com';
+const SESSION_REQUEST_TIMEOUT_MS = 60_000;
+const WEBRTC_NEGOTIATION_TIMEOUT_MS = 20_000;
+const DATA_CHANNEL_TIMEOUT_MS = 20_000;
+const REMOTE_AUDIO_TRACK_TIMEOUT_MS = 12_000;
+const MAX_RECONNECT_ATTEMPTS = 3;
 
 export type TranscriptTurn = {
   id: string;
@@ -22,12 +27,62 @@ export type TranscriptTurn = {
 
 type InterpreterStatus =
   | 'idle'
+  | 'requesting_permission'
+  | 'creating_session'
   | 'connecting'
+  | 'connected'
   | 'detecting'
   | 'listening'
   | 'translating'
   | 'speaking'
-  | 'error';
+  | 'reconnecting'
+  | 'disconnected'
+  | 'failed'
+  | 'stopping';
+
+type ConnectionDiagnosticCode =
+  | 'microphone_denied'
+  | 'microphone_unavailable'
+  | 'backend_unavailable'
+  | 'session_timeout'
+  | 'session_invalid'
+  | 'webrtc_offer_failed'
+  | 'webrtc_negotiation_timeout'
+  | 'webrtc_negotiation_failed'
+  | 'data_channel_timeout'
+  | 'data_channel_closed'
+  | 'audio_track_timeout'
+  | 'realtime_error'
+  | 'network_offline'
+  | 'unknown';
+
+class InterpreterConnectionError extends Error {
+  constructor(readonly code: ConnectionDiagnosticCode, message?: string) {
+    super(message ?? code);
+    this.name = 'InterpreterConnectionError';
+  }
+}
+
+function diagnosticCode(error: unknown): ConnectionDiagnosticCode {
+  if (error instanceof InterpreterConnectionError) return error.code;
+  if (error instanceof TypeError) return 'network_offline';
+  return 'unknown';
+}
+
+function friendlyConnectionMessage(code: ConnectionDiagnosticCode) {
+  if (code === 'microphone_denied') return 'Interpreter needs microphone access to start a conversation.';
+  if (code === 'network_offline') return 'You appear to be offline.';
+  if (code === 'session_timeout' || code === 'webrtc_negotiation_timeout' || code === 'data_channel_timeout' || code === 'audio_track_timeout') return 'The connection took too long. Please try again.';
+  if (code === 'backend_unavailable' || code === 'session_invalid') return 'Interpreter is temporarily unavailable.';
+  return 'Interpreter could not connect. Please try again.';
+}
+
+function waitFor<T>(promise: Promise<T>, timeoutMs: number, code: ConnectionDiagnosticCode) {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new InterpreterConnectionError(code)), timeoutMs);
+    promise.then((value) => { clearTimeout(timeout); resolve(value); }, (error) => { clearTimeout(timeout); reject(error); });
+  });
+}
 
 type ClientSecretResponse = {
   value?: string;
@@ -178,9 +233,13 @@ export function useRealtimeInterpreter(languageOne: string, languageTwo: string)
   const replayingRef = useRef(false);
   const startingRef = useRef(false);
   const manualStopRef = useRef(true);
+  const hasConnectedOnceRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const startRef = useRef<(() => Promise<void>) | null>(null);
+  const requestAbortRef = useRef<AbortController | null>(null);
+  const attemptIdRef = useRef(0);
+  const connectRef = useRef<((reconnecting: boolean) => Promise<void>) | null>(null);
+  const [diagnostic, setDiagnostic] = useState<ConnectionDiagnosticCode | null>(null);
 
   const routeAudioToSpeaker = useCallback(() => {
     InCallManager.start({ auto: true, media: 'audio' });
@@ -193,21 +252,31 @@ export function useRealtimeInterpreter(languageOne: string, languageTwo: string)
     if (microphoneTrack) microphoneTrack.enabled = enabled;
   }, []);
 
-  const stop = useCallback(() => {
-    manualStopRef.current = true;
-    reconnectAttemptsRef.current = 0;
-    startingRef.current = false;
+  const cleanupTransport = useCallback(() => {
+    attemptIdRef.current += 1;
+    requestAbortRef.current?.abort();
+    requestAbortRef.current = null;
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     reconnectTimerRef.current = null;
     if (echoResumeTimerRef.current) clearTimeout(echoResumeTimerRef.current);
     echoResumeTimerRef.current = null;
-    dataChannelRef.current?.close();
+    if (dataChannelRef.current) {
+      dataChannelRef.current.onopen = null;
+      dataChannelRef.current.onclose = null;
+      dataChannelRef.current.onerror = null;
+      dataChannelRef.current.onmessage = null;
+      dataChannelRef.current.close();
+    }
     dataChannelRef.current = null;
     localStreamRef.current?.getTracks().forEach((track) => track.stop());
     localStreamRef.current = null;
     remoteAudioTrackRef.current?.stop();
     remoteAudioTrackRef.current = null;
-    peerConnectionRef.current?.close();
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.ontrack = null;
+      peerConnectionRef.current.onconnectionstatechange = null;
+      peerConnectionRef.current.close();
+    }
     peerConnectionRef.current = null;
     currentTurnIdRef.current = null;
     translationBufferRef.current = '';
@@ -215,30 +284,49 @@ export function useRealtimeInterpreter(languageOne: string, languageTwo: string)
     replayingRef.current = false;
     InCallManager.setForceSpeakerphoneOn(null);
     InCallManager.stop();
-    setStatus('idle');
     setIsMuted(false);
     userMutedRef.current = false;
   }, []);
 
-  const scheduleReconnect = useCallback((message: string) => {
+  const stop = useCallback(() => {
+    manualStopRef.current = true;
+    startingRef.current = false;
+    hasConnectedOnceRef.current = false;
+    reconnectAttemptsRef.current = 0;
+    setStatus('stopping');
+    cleanupTransport();
+    setErrorMessage(null);
+    setDiagnostic(null);
+    setStatus('idle');
+  }, [cleanupTransport]);
+
+  const scheduleReconnect = useCallback((code: ConnectionDiagnosticCode) => {
     if (manualStopRef.current || reconnectTimerRef.current) return;
-    if (reconnectAttemptsRef.current >= 3) {
-      setErrorMessage('Unable to reconnect. End the conversation and start again.');
-      setStatus('error');
+    if (!hasConnectedOnceRef.current) {
+      cleanupTransport();
+      setDiagnostic(code);
+      setErrorMessage(friendlyConnectionMessage(code));
+      setStatus('failed');
+      return;
+    }
+    if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+      cleanupTransport();
+      hasConnectedOnceRef.current = false;
+      setDiagnostic(code);
+      setErrorMessage('Interpreter could not reconnect. Please try again.');
+      setStatus('failed');
       return;
     }
     const nextAttempt = reconnectAttemptsRef.current + 1;
     reconnectAttemptsRef.current = nextAttempt;
-    setErrorMessage(message);
-    setStatus('error');
+    setErrorMessage(null);
+    setStatus('reconnecting');
+    cleanupTransport();
     reconnectTimerRef.current = setTimeout(() => {
       reconnectTimerRef.current = null;
-      stop();
-      reconnectAttemptsRef.current = nextAttempt;
-      manualStopRef.current = false;
-      void startRef.current?.();
+      if (!manualStopRef.current) void connectRef.current?.(true);
     }, 1500);
-  }, [stop]);
+  }, [cleanupTransport]);
 
   const toggleMute = useCallback(() => {
     const nextMuted = !userMutedRef.current;
@@ -273,102 +361,111 @@ export function useRealtimeInterpreter(languageOne: string, languageTwo: string)
     );
   }, []);
 
-  const start = useCallback(async () => {
+  const connect = useCallback(async (reconnecting: boolean) => {
     if (startingRef.current) return;
-    if (peerConnectionRef.current) stop();
+    if (!reconnecting) {
+      cleanupTransport();
+      hasConnectedOnceRef.current = false;
+      reconnectAttemptsRef.current = 0;
+      setTurns([]);
+      setDetectedUserLanguage(null);
+      detectedUserLanguageRef.current = null;
+      currentTurnIdRef.current = null;
+      translationBufferRef.current = '';
+    }
     manualStopRef.current = false;
     startingRef.current = true;
     setErrorMessage(null);
-    setTurns([]);
-    setDetectedUserLanguage(null);
-    detectedUserLanguageRef.current = null;
-    currentTurnIdRef.current = null;
-    translationBufferRef.current = '';
-    setStatus('connecting');
+    setDiagnostic(null);
+    const attemptId = ++attemptIdRef.current;
+    setStatus(reconnecting ? 'reconnecting' : 'requesting_permission');
 
     try {
       if (Platform.OS === 'android') {
-        const permission = await PermissionsAndroid.request(
+        const alreadyGranted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
+        const permission = alreadyGranted ? PermissionsAndroid.RESULTS.GRANTED : await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-          {
-            title: 'Microphone access',
-            message: 'Interpreter.ai needs the microphone to interpret live speech.',
-            buttonPositive: 'Continue',
-            buttonNegative: 'Cancel',
-          },
+          { title: 'Microphone access', message: 'Interpreter.ai needs the microphone to interpret live speech.', buttonPositive: 'Continue', buttonNegative: 'Cancel' },
         );
         if (permission !== PermissionsAndroid.RESULTS.GRANTED) {
-          throw new Error('Microphone permission was not granted.');
+          throw new InterpreterConnectionError('microphone_denied');
         }
       }
 
-      const localStream = await mediaDevices.getUserMedia({ audio: true, video: false });
+      const localStream = await waitFor<MediaStream>(
+        mediaDevices.getUserMedia({ audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true }, video: false }) as Promise<MediaStream>,
+        WEBRTC_NEGOTIATION_TIMEOUT_MS,
+        'microphone_unavailable',
+      );
+      if (attemptId !== attemptIdRef.current || manualStopRef.current) { localStream.getTracks().forEach((track) => track.stop()); return; }
       localStreamRef.current = localStream;
-      debugLog('Microphone ready');
+      debugLog('Connection stage', { code: 'microphone_ready' });
       routeAudioToSpeaker();
 
-      const sessionResponse = await fetch(`${getApiBaseUrl()}/api/realtime/session`, {
+      setStatus(reconnecting ? 'reconnecting' : 'creating_session');
+      const requestController = new AbortController();
+      requestAbortRef.current = requestController;
+      const sessionResponse = await waitFor(fetch(`${getApiBaseUrl()}/api/realtime/session`, {
         method: 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        signal: requestController.signal,
         body: JSON.stringify({
           languageOne,
           languageTwo,
           mode: 'mobile-pair',
         }),
-      });
+      }), SESSION_REQUEST_TIMEOUT_MS, 'session_timeout');
+      requestAbortRef.current = null;
       const sessionPayload = await sessionResponse.text();
       if (!sessionResponse.ok) {
-        throw new Error(
-          formatRequestError(sessionPayload) || `Session request failed (${sessionResponse.status}).`,
-        );
+        debugError('Connection stage failed', { code: 'backend_unavailable', status: sessionResponse.status });
+        throw new InterpreterConnectionError('backend_unavailable', formatRequestError(sessionPayload));
       }
-      const clientSecret = (JSON.parse(sessionPayload) as ClientSecretResponse).value;
-      if (!clientSecret) throw new Error('The server did not return a Realtime credential.');
+      let clientSecret: string | undefined;
+      try { clientSecret = (JSON.parse(sessionPayload) as ClientSecretResponse).value; } catch { throw new InterpreterConnectionError('session_invalid'); }
+      if (!clientSecret) throw new InterpreterConnectionError('session_invalid');
+      debugLog('Connection stage', { code: 'session_ready' });
+      setStatus(reconnecting ? 'reconnecting' : 'connecting');
 
       const peerConnection = new RTCPeerConnection();
       peerConnectionRef.current = peerConnection;
+      let resolveRemoteAudio: (() => void) | null = null;
+      const remoteAudioReady = new Promise<void>((resolve) => { resolveRemoteAudio = resolve; });
       peerConnection.ontrack = (event: unknown) => {
         const remoteTrack = (event as RemoteTrackEvent).track;
-        if (!remoteTrack || remoteTrack.kind !== 'audio') {
-          setErrorMessage('OpenAI connected without a playable audio track.');
-          setStatus('error');
-          return;
-        }
+        if (!remoteTrack || remoteTrack.kind !== 'audio') return;
         remoteAudioTrackRef.current = remoteTrack;
         remoteTrack.enabled = true;
         remoteTrack._setVolume(1);
         routeAudioToSpeaker();
+        resolveRemoteAudio?.();
       };
 
       const microphoneTrack = localStream.getAudioTracks()[0];
-      if (!microphoneTrack) throw new Error('No microphone audio track is available.');
+      if (!microphoneTrack) throw new InterpreterConnectionError('microphone_unavailable');
       peerConnection.addTrack(microphoneTrack, localStream);
+      let rejectChannelOpen: ((error: Error) => void) | null = null;
       peerConnection.onconnectionstatechange = () => {
-        debugLog('Peer state', peerConnection.connectionState);
-        if (peerConnection.connectionState === 'connected') {
-          if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-          reconnectTimerRef.current = null;
-          reconnectAttemptsRef.current = 0;
-          setErrorMessage(null);
-          setStatus('listening');
-        }
+        if (attemptId !== attemptIdRef.current) return;
+        debugLog('Connection stage', { code: `peer_${peerConnection.connectionState}` });
         if (
           peerConnection.connectionState === 'failed' ||
           peerConnection.connectionState === 'disconnected'
         ) {
-          scheduleReconnect('The Realtime audio connection was interrupted. Reconnecting automatically.');
+          const connectionError = new InterpreterConnectionError('webrtc_negotiation_failed');
+          if (!hasConnectedOnceRef.current) rejectChannelOpen?.(connectionError);
+          else scheduleReconnect('webrtc_negotiation_failed');
         }
       };
 
       const dataChannel = peerConnection.createDataChannel('oai-events');
       dataChannelRef.current = dataChannel;
-      dataChannel.onopen = () => setStatus('listening');
-      dataChannel.onclose = () => {
-        scheduleReconnect('The OpenAI connection closed. Reconnecting automatically.');
-      };
-      dataChannel.onerror = () => {
-        scheduleReconnect('The OpenAI connection was interrupted. Reconnecting automatically.');
-      };
+      const channelOpened = new Promise<void>((resolve, reject) => {
+        rejectChannelOpen = reject;
+        dataChannel.onopen = () => resolve();
+        dataChannel.onclose = () => reject(new InterpreterConnectionError('data_channel_closed'));
+        dataChannel.onerror = () => reject(new InterpreterConnectionError('realtime_error'));
+      });
       dataChannel.onmessage = (event: { data?: unknown }) => {
         try {
           const realtimeEvent = JSON.parse(String(event.data)) as RealtimeEvent;
@@ -448,74 +545,97 @@ export function useRealtimeInterpreter(languageOne: string, languageTwo: string)
               realtimeEvent.response?.status === 'failed' ||
               realtimeEvent.response?.status === 'incomplete'
             ) {
-              setErrorMessage(formatRealtimeResponseError(realtimeEvent));
-              setStatus('error');
+              debugError('Realtime response failed', { code: 'realtime_error', detail: formatRealtimeResponseError(realtimeEvent) ? 'available' : 'missing' });
+              scheduleReconnect('realtime_error');
             }
           } else if (realtimeEvent.type === 'error') {
-            setErrorMessage(realtimeEvent.error?.message ?? 'OpenAI returned an error.');
-            setStatus('error');
+            debugError('Realtime event failed', { code: 'realtime_error', detail: realtimeEvent.error?.message ? 'available' : 'missing' });
+            scheduleReconnect('realtime_error');
           }
         } catch (error) {
-          debugError('Realtime event parsing error', error);
-          setErrorMessage('Unable to read a Realtime event. Tap Reconnect.');
-          setStatus('error');
+          debugError('Realtime event parsing error', { code: 'realtime_error' });
+          scheduleReconnect('realtime_error');
         }
       };
 
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
+      const offer: any = await waitFor(peerConnection.createOffer() as Promise<any>, WEBRTC_NEGOTIATION_TIMEOUT_MS, 'webrtc_offer_failed');
+      await waitFor(peerConnection.setLocalDescription(offer), WEBRTC_NEGOTIATION_TIMEOUT_MS, 'webrtc_offer_failed');
       const offerSdp = peerConnection.localDescription?.sdp ?? offer.sdp;
-      if (!offerSdp) throw new Error('Unable to create the Realtime audio offer.');
-      const sdpResponse = await fetch(REALTIME_CALLS_URL, {
+      if (!offerSdp) throw new InterpreterConnectionError('webrtc_offer_failed');
+      const sdpController = new AbortController();
+      requestAbortRef.current = sdpController;
+      const sdpResponse = await waitFor(fetch(REALTIME_CALLS_URL, {
         method: 'POST',
         headers: { Authorization: `Bearer ${clientSecret}`, 'Content-Type': 'application/sdp' },
+        signal: sdpController.signal,
         body: offerSdp,
-      });
+      }), WEBRTC_NEGOTIATION_TIMEOUT_MS, 'webrtc_negotiation_timeout');
+      requestAbortRef.current = null;
       const answerSdp = await sdpResponse.text();
       if (!sdpResponse.ok) {
-        throw new Error(answerSdp || `Realtime connection failed (${sdpResponse.status}).`);
+        debugError('Connection stage failed', { code: 'webrtc_negotiation_failed', status: sdpResponse.status });
+        throw new InterpreterConnectionError('webrtc_negotiation_failed');
       }
-      await peerConnection.setRemoteDescription(
-        new RTCSessionDescription({ sdp: answerSdp, type: 'answer' }),
+      await waitFor(
+        peerConnection.setRemoteDescription(new RTCSessionDescription({ sdp: answerSdp, type: 'answer' })),
+        WEBRTC_NEGOTIATION_TIMEOUT_MS,
+        'webrtc_negotiation_timeout',
       );
+      await Promise.all([
+        waitFor(channelOpened, DATA_CHANNEL_TIMEOUT_MS, 'data_channel_timeout'),
+        waitFor(remoteAudioReady, REMOTE_AUDIO_TRACK_TIMEOUT_MS, 'audio_track_timeout'),
+      ]);
+      if (attemptId !== attemptIdRef.current || manualStopRef.current) return;
+      hasConnectedOnceRef.current = true;
+      reconnectAttemptsRef.current = 0;
+      setErrorMessage(null);
+      setDiagnostic(null);
+      setStatus('connected');
+      dataChannel.onclose = () => scheduleReconnect('data_channel_closed');
+      dataChannel.onerror = () => scheduleReconnect('realtime_error');
+      setStatus('listening');
+      debugLog('Connection stage', { code: 'data_channel_open' });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to start interpreting.';
-      debugError('Connection error', error);
-      dataChannelRef.current?.close();
-      dataChannelRef.current = null;
-      localStreamRef.current?.getTracks().forEach((track) => track.stop());
-      localStreamRef.current = null;
-      remoteAudioTrackRef.current?.stop();
-      remoteAudioTrackRef.current = null;
-      peerConnectionRef.current?.close();
-      peerConnectionRef.current = null;
-      InCallManager.setForceSpeakerphoneOn(null);
-      InCallManager.stop();
-      setErrorMessage(message);
-      setStatus('error');
+      if (attemptId !== attemptIdRef.current || manualStopRef.current) return;
+      const code = diagnosticCode(error);
+      debugError('Connection attempt failed', { code, phase: reconnecting ? 'reconnect' : 'initial' });
+      cleanupTransport();
+      setDiagnostic(code);
+      if (reconnecting) scheduleReconnect(code);
+      else {
+        hasConnectedOnceRef.current = false;
+        setErrorMessage(friendlyConnectionMessage(code));
+        setStatus('failed');
+      }
     } finally {
       startingRef.current = false;
     }
   }, [
+    cleanupTransport,
     languageOne,
     languageTwo,
     routeAudioToSpeaker,
     scheduleReconnect,
     setMicrophoneEnabled,
-    stop,
     updateTranslation,
   ]);
 
+  const start = useCallback(async () => {
+    if (startingRef.current) return;
+    await connect(false);
+  }, [connect]);
+
   useEffect(() => {
-    startRef.current = start;
-  }, [start]);
+    connectRef.current = connect;
+  }, [connect]);
 
   useEffect(() => stop, [stop]);
 
   return {
     detectedUserLanguage,
+    diagnosticCode: diagnostic,
     errorMessage,
-    isActive: status !== 'idle' && status !== 'error',
+    isActive: !['idle', 'failed', 'stopping'].includes(status),
     isMuted,
     replayLastTranslation,
     start,

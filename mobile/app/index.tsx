@@ -128,7 +128,7 @@ export default function InterpreterScreen() {
   const [languageSide, setLanguageSide] = useState<LanguageSide>('one');
   const [overlay, setOverlay] = useState<Overlay>(null);
   const { recoveryMode } = useAuth();
-  const { isActive, start, status, stop } = useRealtimeInterpreter(languageOne, languageTwo);
+  const { errorMessage, isActive, start, status, stop } = useRealtimeInterpreter(languageOne, languageTwo);
 
   useEffect(() => {
     recordAppReady();
@@ -139,16 +139,16 @@ export default function InterpreterScreen() {
   }, [recoveryMode]);
 
   const statusText = useMemo(() => {
-    if (status === 'connecting') return 'Connecting...';
-    if (status === 'detecting') return 'Listening...';
-    if (status === 'translating') return 'Translating...';
-    if (status === 'speaking') return 'Speaking...';
-    if (status === 'error') return 'Reconnecting...';
+    if (['requesting_permission', 'creating_session', 'connecting', 'connected'].includes(status)) return 'Connecting...';
+    if (status === 'reconnecting') return 'Reconnecting...';
+    if (status === 'failed' || status === 'disconnected') return 'Couldn’t Connect';
+    if (status === 'detecting' || status === 'listening') return 'Listening...';
+    if (status === 'translating' || status === 'speaking') return 'Translating...';
     if (isActive) return 'Ready';
     return 'Ready';
   }, [isActive, status]);
 
-  const conversationRunning = isActive || status === 'connecting' || status === 'error';
+  const conversationRunning = isActive || ['requesting_permission', 'creating_session', 'connecting', 'connected', 'reconnecting'].includes(status);
   const openLanguage = (side: LanguageSide) => {
     if (conversationRunning) return;
     setLanguageSide(side);
@@ -214,7 +214,7 @@ export default function InterpreterScreen() {
           <Pressable accessibilityLabel={conversationRunning ? 'End conversation' : 'Start conversation'} accessibilityRole="button" onPress={toggleConversation} style={({ pressed }) => [styles.startButton, pressed && styles.pressed]}>
             <LinearGradient colors={conversationRunning ? ['#334155', '#1F2937'] : ['#0A73FF', '#0848F4']} end={{ x: 1, y: 0.5 }} start={{ x: 0, y: 0.5 }} style={styles.startGradient}>
               <MicrophoneIcon ending={conversationRunning} />
-              <Text style={styles.startText}>{conversationRunning ? 'End Conversation' : 'Start Conversation'}</Text>
+              <Text style={styles.startText}>{conversationRunning ? 'End Conversation' : status === 'failed' ? 'Try Again' : 'Start Conversation'}</Text>
             </LinearGradient>
           </Pressable>
         </ScrollView>
@@ -223,6 +223,16 @@ export default function InterpreterScreen() {
       <AppMenu onClose={() => setOverlay(null)} onNavigate={setOverlay} visible={overlay === 'menu'} />
       <LanguageSheet onClose={() => setOverlay(null)} onSelect={chooseLanguage} selectedLanguage={languageSide === 'one' ? languageOne : languageTwo} visible={overlay === 'language'} />
       <CallingOverlay onClose={() => setOverlay(null)} onRequireSignIn={() => setOverlay('account')} visible={overlay === 'calling'} />
+      <Modal animationType="fade" onRequestClose={stop} transparent visible={status === 'failed'}>
+        <BlurView experimentalBlurMethod="dimezisBlurView" intensity={52} style={styles.connectionErrorBackdrop} tint="light">
+          <View accessibilityViewIsModal style={styles.connectionErrorCard}>
+            <Text style={styles.connectionErrorTitle}>Couldn’t Connect</Text>
+            <Text style={styles.connectionErrorBody}>{errorMessage || 'Interpreter could not connect. Please try again.'}</Text>
+            <Pressable accessibilityRole="button" onPress={() => void start()} style={styles.connectionRetry}><Text style={styles.connectionRetryText}>Try Again</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={stop} style={styles.connectionCancel}><Text style={styles.connectionCancelText}>Cancel</Text></Pressable>
+          </View>
+        </BlurView>
+      </Modal>
       <DestinationSheet
         destination={overlay && overlay !== 'menu' && overlay !== 'language' && overlay !== 'calling' ? overlay : null}
         onClose={() => setOverlay(overlay === 'interpreter_calls' ? null : 'menu')}
@@ -327,6 +337,14 @@ const styles = StyleSheet.create({
   languageOptionSelected: { backgroundColor: '#EEF4FF' },
   languageOptionText: { color: '#101828', flex: 1, fontSize: 17 },
   checkmark: { color: BLUE, fontSize: 22, fontWeight: '800' },
+  connectionErrorBackdrop: { alignItems: 'center', backgroundColor: 'rgba(8,18,38,0.16)', flex: 1, justifyContent: 'center', padding: 24 },
+  connectionErrorCard: { alignItems: 'center', backgroundColor: 'rgba(248,251,255,0.94)', borderColor: 'rgba(255,255,255,0.96)', borderRadius: 28, borderWidth: 1, maxWidth: 420, padding: 24, shadowColor: '#164995', shadowOffset: { height: 10, width: 0 }, shadowOpacity: 0.18, shadowRadius: 28, width: '100%' },
+  connectionErrorTitle: { color: '#101828', fontSize: 22, fontWeight: '800' },
+  connectionErrorBody: { color: '#475467', fontSize: 15, lineHeight: 22, marginTop: 10, textAlign: 'center' },
+  connectionRetry: { alignItems: 'center', backgroundColor: BLUE, borderRadius: 18, marginTop: 22, paddingVertical: 13, width: '100%' },
+  connectionRetryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  connectionCancel: { alignItems: 'center', marginTop: 8, paddingVertical: 12, width: '100%' },
+  connectionCancelText: { color: '#475467', fontSize: 15, fontWeight: '600' },
   infoSheet: { alignItems: 'center', backgroundColor: '#FFFFFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 34, paddingHorizontal: 28, paddingTop: 24 },
   infoLogo: { height: 68, width: 68 },
   infoTitle: { color: '#101828', fontSize: 24, fontWeight: '800', marginTop: 9 },

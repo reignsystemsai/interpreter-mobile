@@ -25,7 +25,7 @@
     "android": {
       "package": "ai.interpreter.mobile",
       "edgeToEdgeEnabled": true,
-      "versionCode": 10,
+      "versionCode": 11,
       "adaptiveIcon": {
         "foregroundImage": "./assets/interpreter-mark.png",
         "backgroundColor": "#F8FBFF"
@@ -34,7 +34,8 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.CAMERA",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.READ_CONTACTS"
       ],
       "blockedPermissions": [
         "android.permission.WRITE_CONTACTS"

@@ -10,8 +10,8 @@ const LANGUAGES = ['English', 'Spanish', 'Brazilian Portuguese', 'French', 'Germ
 type Filter = 'all' | 'favorites' | 'recent';
 
 export function ContactsPermissionPanel({ onBack, onRequireSignIn }: { onBack: () => void; onRequireSignIn: () => void }) {
-  const { user } = useAuth();
-  const { contacts, deleteAllContacts, deleteContact, error, loading, permission, requestAndImport, stopSyncing, syncEnabled, syncing, updateContact } = useContacts();
+  const { isGuest, user } = useAuth();
+  const { contacts, deleteAllContacts, deleteContact, error, loading, permission, requestAndImport, requestPermission, stopSyncing, syncEnabled, syncing, updateContact } = useContacts();
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -30,12 +30,18 @@ export function ContactsPermissionPanel({ onBack, onRequireSignIn }: { onBack: (
       : a.displayName.localeCompare(b.displayName));
   }, [contacts, filter, query]);
 
-  if (!user) return (
+  if (!user || isGuest) return (
     <View>
       <Header onBack={onBack} />
       <Text style={styles.title}>My Contacts</Text>
-      <Text style={styles.body}>Sign in to securely import contacts and keep them synchronized across your devices.</Text>
-      <PrimaryButton label="Sign In" onPress={onRequireSignIn} />
+      <Text style={styles.body}>Contact access and cloud synchronization are separate. You may allow device access now, but signing in is required before Interpreter reads and securely synchronizes contact details.</Text>
+      <View style={styles.statusCard}><Text style={styles.statusLabel}>Device contact access</Text><Text style={styles.statusValue}>{permissionLabel(permission)}</Text></View>
+      {permission === 'blocked'
+        ? <PrimaryButton label="Open Android Settings" onPress={() => void Linking.openSettings()} />
+        : permission !== 'granted'
+          ? <PrimaryButton label="Allow Device Contacts" onPress={() => void requestPermission().catch(() => Alert.alert('Unable to request access', 'Open Android Settings and try again.'))} />
+          : null}
+      <SecondaryButton label="Sign In to Sync Across Devices" onPress={onRequireSignIn} />
     </View>
   );
 
@@ -46,9 +52,11 @@ export function ContactsPermissionPanel({ onBack, onRequireSignIn }: { onBack: (
       <Header onBack={onBack} />
       <Text style={styles.title}>My Contacts</Text>
       <Text style={styles.body}>Interpreter imports only names, phone numbers, email addresses, and company names after you approve access. Contacts are encrypted in transit and stored only in your authenticated account.</Text>
-      <View style={styles.statusCard}><Text style={styles.statusLabel}>Contacts permission</Text><Text style={styles.statusValue}>{permission === 'checking' ? 'Checking…' : permission === 'denied' ? 'Not allowed' : 'Not requested'}</Text></View>
+      <View style={styles.statusCard}><Text style={styles.statusLabel}>Contacts permission</Text><Text style={styles.statusValue}>{permissionLabel(permission)}</Text></View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <PrimaryButton disabled={syncing || permission === 'checking'} label={syncing ? 'Importing…' : 'Allow Contacts & Import'} onPress={() => void requestAndImport().catch((nextError) => Alert.alert('Unable to import', nextError instanceof Error ? nextError.message : 'Try again.'))} />
+      {permission === 'blocked'
+        ? <PrimaryButton label="Open Android Settings" onPress={() => void Linking.openSettings()} />
+        : <PrimaryButton disabled={syncing || permission === 'checking'} label={syncing ? 'Importing…' : 'Allow Contacts & Import'} onPress={() => void requestAndImport().catch((nextError) => Alert.alert('Unable to import', nextError instanceof Error ? nextError.message : 'Contacts could not be imported right now. Please try again.'))} />}
       <SecondaryButton label="Not Now" onPress={onBack} />
     </View>
   );
@@ -56,7 +64,7 @@ export function ContactsPermissionPanel({ onBack, onRequireSignIn }: { onBack: (
   return (
     <View style={styles.listScreen}>
       <Header onBack={onBack} />
-      <View style={styles.titleRow}><View><Text style={styles.title}>My Contacts</Text><Text style={styles.syncText}>{syncing ? 'Synchronizing…' : syncEnabled ? 'Device sync on' : 'Cloud contacts'}</Text></View><Pressable accessibilityLabel="Import device contacts" onPress={() => void requestAndImport().catch((nextError) => Alert.alert('Unable to sync', nextError instanceof Error ? nextError.message : 'Try again.'))} style={styles.syncButton}><Text style={styles.syncButtonText}>Sync</Text></Pressable></View>
+      <View style={styles.titleRow}><View><Text style={styles.title}>My Contacts</Text><Text style={styles.syncText}>{syncing ? 'Synchronizing…' : syncEnabled ? 'Device sync on' : 'Cloud contacts'}</Text></View><Pressable accessibilityLabel="Import device contacts" onPress={() => void requestAndImport().catch((nextError) => Alert.alert('Unable to sync', nextError instanceof Error ? nextError.message : 'Contacts could not be imported right now. Please try again.'))} style={styles.syncButton}><Text style={styles.syncButtonText}>Sync</Text></Pressable></View>
       <TextInput autoCapitalize="none" onChangeText={setQuery} placeholder="Search contacts" placeholderTextColor="#98A2B3" style={styles.search} value={query} />
       <View style={styles.filters}>{(['all', 'favorites', 'recent'] as Filter[]).map((item) => <Pressable key={item} onPress={() => setFilter(item)} style={[styles.filter, filter === item && styles.filterActive]}><Text style={[styles.filterText, filter === item && styles.filterTextActive]}>{item === 'all' ? 'All' : item === 'favorites' ? 'Favorites' : 'Recently Called'}</Text></Pressable>)}</View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -71,12 +79,20 @@ export function ContactsPermissionPanel({ onBack, onRequireSignIn }: { onBack: (
         ))}
         {!loading && !visibleContacts.length ? <Text style={styles.empty}>{filter === 'recent' ? 'No completed calls yet. Recently called contacts will appear when calling is enabled.' : 'No contacts found.'}</Text> : null}
         <View style={styles.manageCard}>
-          <SecondaryButton label={syncEnabled ? 'Stop Syncing' : 'Enable Device Sync'} onPress={() => void (syncEnabled ? stopSyncing() : requestAndImport()).catch((nextError) => Alert.alert('Unable to update sync', nextError instanceof Error ? nextError.message : 'Try again.'))} />
-          <Pressable onPress={() => Alert.alert('Delete imported contacts?', 'This removes your synchronized contacts from every signed-in device.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void deleteAllContacts().catch(() => Alert.alert('Unable to delete contacts')) }])} style={styles.danger}><Text style={styles.dangerText}>Delete Imported Contacts</Text></Pressable>
+          <SecondaryButton label={syncEnabled ? 'Stop Syncing' : 'Enable Device Sync'} onPress={() => void (syncEnabled ? stopSyncing() : requestAndImport()).catch((nextError) => Alert.alert('Unable to update sync', nextError instanceof Error ? nextError.message : 'Contacts could not be imported right now. Please try again.'))} />
+          <Pressable onPress={() => Alert.alert('Delete imported contacts?', 'This removes only Interpreter’s cloud copies. Contacts on your phone will not be changed.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void deleteAllContacts().catch((nextError) => Alert.alert('Unable to delete contacts', nextError instanceof Error ? nextError.message : 'Contacts could not be deleted right now. Please try again.')) }])} style={styles.danger}><Text style={styles.dangerText}>Delete Imported Contacts</Text></Pressable>
         </View>
       </ScrollView>
     </View>
   );
+}
+
+function permissionLabel(permission: ReturnType<typeof useContacts>['permission']) {
+  if (permission === 'checking') return 'Checking…';
+  if (permission === 'granted') return 'Allowed';
+  if (permission === 'blocked') return 'Blocked in Android Settings';
+  if (permission === 'denied') return 'Not allowed';
+  return 'Not requested';
 }
 
 function ContactDetails({ contact, onBack, onDelete, onRequireSignIn, onUpdate }: { contact: InterpreterContact; onBack: () => void; onDelete: () => Promise<void>; onRequireSignIn: () => void; onUpdate: (update: Parameters<ReturnType<typeof useContacts>['updateContact']>[1]) => Promise<InterpreterContact> }) {
