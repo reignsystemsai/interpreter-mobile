@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { type InterpreterContact, useContacts } from './ContactsProvider';
 import { useCalling } from '../calling/CallProvider';
 import type { CallType } from '../calling/types';
 
 const LANGUAGES = ['English', 'Spanish', 'Brazilian Portuguese', 'French', 'German', 'Italian', 'Dutch', 'Russian', 'Polish', 'Romanian', 'Turkish', 'Arabic', 'Hebrew', 'Hindi', 'Japanese', 'Korean', 'Mandarin Chinese', 'Cantonese', 'Vietnamese', 'Thai'];
+const APP_DOWNLOAD_URL = 'https://interpreter.ai/download';
 type Filter = 'all' | 'favorites' | 'recent';
 
 export function ContactsPermissionPanel({ onBack }: { onBack: () => void }) {
@@ -103,11 +104,9 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
     catch (nextError) { Alert.alert('Unable to call', nextError instanceof Error ? nextError.message : 'Try again.'); }
   };
   const invite = async () => {
-    const text = encodeURIComponent('Join me on Interpreter.ai for language-friendly voice and video conversations.');
-    const phoneValue = contact.phoneNumbers[0]?.value;
-    const emailValue = contact.emailAddresses[0]?.value;
-    const url = phoneValue ? `sms:${encodeURIComponent(phoneValue)}?body=${text}` : emailValue ? `mailto:${encodeURIComponent(emailValue)}?subject=Join%20Interpreter.ai&body=${text}` : 'https://interpreter.ai';
-    await Linking.openURL(url);
+    await Share.share({
+      message: `Download Interpreter so I can speak to you in your language.\n\n${APP_DOWNLOAD_URL}`,
+    });
   };
 
   return (
