@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 
-import { useAuth } from '../account/AuthProvider';
 import { ContactsPermissionPanel } from '../contacts/ContactsPermissionPanel';
 import { useCalling } from './CallProvider';
 import { CallHistoryPanel } from './CallHistoryPanel';
@@ -15,12 +14,10 @@ const ACTIONS = [
   { icon: '▦', label: 'Business Video Call', type: 'business_video' },
 ] as const;
 
-export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
+export function CallingOverlay({ onClose, visible }: {
   onClose: () => void;
-  onRequireSignIn: () => void;
   visible: boolean;
 }) {
-  const { initializing, isGuest, user } = useAuth();
   const { enableIncomingNotifications } = useCalling();
   const [view, setView] = useState<CallingView>('actions');
   const close = () => { setView('actions'); onClose(); };
@@ -30,11 +27,10 @@ export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
   });
 
   useEffect(() => {
-    if (visible && user) void enableIncomingNotifications().catch(() => undefined);
-  }, [enableIncomingNotifications, user, visible]);
+    if (visible) void enableIncomingNotifications().catch(() => undefined);
+  }, [enableIncomingNotifications, visible]);
 
   const openCall = (type: typeof ACTIONS[number]['type']) => {
-    if (type === 'business_video' && isGuest) { close(); onRequireSignIn(); return; }
     setView('contacts');
   };
 
@@ -45,14 +41,14 @@ export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
         <View accessibilityViewIsModal {...panResponder.panHandlers} style={styles.sheet}>
           <View style={styles.handle} />
           <Pressable accessibilityLabel="Close calling" accessibilityRole="button" onPress={close} style={styles.close}><Text style={styles.closeText}>×</Text></Pressable>
-          {view === 'contacts' ? <ContactsPermissionPanel onBack={() => setView('actions')} onRequireSignIn={() => { close(); onRequireSignIn(); }} /> : view === 'history' ? <CallHistoryPanel onBack={() => setView('actions')} onRequireSignIn={() => { close(); onRequireSignIn(); }} /> : (
+          {view === 'contacts' ? <ContactsPermissionPanel onBack={close} /> : view === 'history' ? <CallHistoryPanel onBack={close} onRequireSignIn={close} /> : (
             <View>
               <Text style={styles.eyebrow}>INTERPRETER CALLING</Text>
               <Text style={styles.title}>Connect in any language</Text>
               <Text style={styles.subtitle}>Choose a contact, then start a secure voice or video call.</Text>
               <View style={styles.actions}>
                 {ACTIONS.map((action) => (
-                  <Pressable disabled={initializing || !user} key={action.label} accessibilityRole="button" onPress={() => openCall(action.type)} style={({ pressed }) => [styles.action, (initializing || !user) && styles.disabled, pressed && styles.pressed]}>
+                  <Pressable key={action.label} accessibilityRole="button" onPress={() => openCall(action.type)} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
                     <View style={styles.iconCircle}><Text style={styles.icon}>{action.icon}</Text></View>
                     <Text style={styles.actionLabel}>{action.label}</Text>
                     <Text style={styles.chevron}>›</Text>
@@ -69,7 +65,7 @@ export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
                   <Text style={styles.chevron}>›</Text>
                 </Pressable>
               </View>
-              {initializing || !user ? <Text style={styles.signInNote}>Preparing secure calling...</Text> : isGuest ? <Text style={styles.signInNote}>3 free Interpreter Minutes every 30 days. No account required.</Text> : null}
+              <Text style={styles.signInNote}>3 free Interpreter Minutes every 30 days. No account required.</Text>
             </View>
           )}
         </View>
@@ -81,7 +77,7 @@ export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
 const BLUE = '#075BFF';
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end' },
-  sheet: { backgroundColor: 'rgba(244,248,255,0.9)', borderColor: 'rgba(255,255,255,0.85)', borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, height: '88%', paddingBottom: 24, paddingHorizontal: 22, paddingTop: 14, shadowColor: '#164995', shadowOffset: { height: -8, width: 0 }, shadowOpacity: 0.16, shadowRadius: 24 },
+  sheet: { backgroundColor: 'rgba(244,248,255,0.68)', borderColor: 'rgba(255,255,255,0.85)', borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, height: '88%', paddingBottom: 24, paddingHorizontal: 22, paddingTop: 14, shadowColor: '#164995', shadowOffset: { height: -8, width: 0 }, shadowOpacity: 0.16, shadowRadius: 24 },
   handle: { alignSelf: 'center', backgroundColor: '#B7C5DA', borderRadius: 3, height: 5, marginBottom: 20, width: 46 },
   close: { alignItems: 'center', height: 42, justifyContent: 'center', position: 'absolute', right: 16, top: 16, width: 42, zIndex: 2 },
   closeText: { color: BLUE, fontSize: 34, fontWeight: '300' },

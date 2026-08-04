@@ -312,7 +312,7 @@ function SettingRow({ label, onChange, value }: { label: string; onChange: (valu
 const BLUE = '#075BFF';
 const styles = StyleSheet.create({
   destinationBackdrop: { backgroundColor: 'rgba(9,28,64,0.14)', flex: 1, justifyContent: 'flex-end', paddingHorizontal: 10, paddingTop: 40 },
-  page: { backgroundColor: 'rgba(248,251,255,0.92)', borderColor: 'rgba(255,255,255,0.96)', borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, maxHeight: '91%', overflow: 'hidden', shadowColor: '#164995', shadowOffset: { height: -8, width: 0 }, shadowOpacity: 0.18, shadowRadius: 28 },
+  page: { backgroundColor: 'rgba(248,251,255,0.70)', borderColor: 'rgba(255,255,255,0.96)', borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, maxHeight: '91%', overflow: 'hidden', shadowColor: '#164995', shadowOffset: { height: -8, width: 0 }, shadowOpacity: 0.18, shadowRadius: 28 },
   header: { alignItems: 'center', borderBottomColor: 'rgba(180,197,225,0.35)', borderBottomWidth: 1, flexDirection: 'row', paddingHorizontal: 14, paddingTop: 6 },
   back: { alignItems: 'center', height: 58, justifyContent: 'center', width: 50 },
   backText: { color: BLUE, fontSize: 45, fontWeight: '300', lineHeight: 48 },
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   noticeTitle: { color: '#1849A9', fontSize: 15, fontWeight: '700' },
   noticeBody: { color: '#475467', fontSize: 13, lineHeight: 20, marginTop: 5 },
   infoBackdrop: { flex: 1, justifyContent: 'flex-end' },
-  infoSheet: { backgroundColor: 'rgba(248,251,255,0.94)', borderColor: 'rgba(255,255,255,0.9)', borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, paddingBottom: 34, paddingHorizontal: 26, paddingTop: 30, shadowColor: '#164995', shadowOffset: { height: -8, width: 0 }, shadowOpacity: 0.14, shadowRadius: 24 },
+  infoSheet: { backgroundColor: 'rgba(248,251,255,0.70)', borderColor: 'rgba(255,255,255,0.9)', borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, paddingBottom: 34, paddingHorizontal: 26, paddingTop: 30, shadowColor: '#164995', shadowOffset: { height: -8, width: 0 }, shadowOpacity: 0.14, shadowRadius: 24 },
   infoTitle: { color: '#101828', fontSize: 26, fontWeight: '800', marginBottom: 14 },
   infoBody: { color: '#475467', fontSize: 15, lineHeight: 23, marginTop: 9 },
   infoPoint: { color: '#344054', fontSize: 15, lineHeight: 23, paddingLeft: 8 },

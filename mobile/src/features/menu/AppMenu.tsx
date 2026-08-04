@@ -93,7 +93,7 @@ export function AppMenu({ onClose, onNavigate, visible }: {
 const BLUE = '#075BFF';
 const styles = StyleSheet.create({
   backdrop: { alignItems: 'flex-end', backgroundColor: 'rgba(9,28,64,0.14)', flex: 1, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 26 },
-  page: { backgroundColor: 'rgba(248,251,255,0.90)', borderColor: 'rgba(255,255,255,0.94)', borderRadius: 32, borderWidth: 1, maxHeight: '94%', shadowColor: '#164995', shadowOffset: { height: 10, width: 0 }, shadowOpacity: 0.20, shadowRadius: 30, width: '92%' },
+  page: { backgroundColor: 'rgba(248,251,255,0.68)', borderColor: 'rgba(255,255,255,0.94)', borderRadius: 32, borderWidth: 1, maxHeight: '94%', shadowColor: '#164995', shadowOffset: { height: 10, width: 0 }, shadowOpacity: 0.20, shadowRadius: 30, width: '92%' },
   close: { alignItems: 'center', height: 54, justifyContent: 'center', position: 'absolute', right: 12, top: 10, width: 54, zIndex: 2 },
   closeText: { color: BLUE, fontSize: 42, fontWeight: '300', lineHeight: 45 },
   content: { paddingBottom: 30, paddingHorizontal: 28, paddingTop: 76 },

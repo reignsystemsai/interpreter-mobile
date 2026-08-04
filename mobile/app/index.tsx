@@ -222,7 +222,7 @@ export default function InterpreterScreen() {
 
       <AppMenu onClose={() => setOverlay(null)} onNavigate={setOverlay} visible={overlay === 'menu'} />
       <LanguageSheet onClose={() => setOverlay(null)} onSelect={chooseLanguage} selectedLanguage={languageSide === 'one' ? languageOne : languageTwo} visible={overlay === 'language'} />
-      <CallingOverlay onClose={() => setOverlay(null)} onRequireSignIn={() => setOverlay('account')} visible={overlay === 'calling'} />
+      <CallingOverlay onClose={() => setOverlay(null)} visible={overlay === 'calling'} />
       <Modal animationType="fade" onRequestClose={stop} transparent visible={status === 'failed'}>
         <BlurView experimentalBlurMethod="dimezisBlurView" intensity={52} style={styles.connectionErrorBackdrop} tint="light">
           <View accessibilityViewIsModal style={styles.connectionErrorCard}>
@@ -235,7 +235,7 @@ export default function InterpreterScreen() {
       </Modal>
       <DestinationSheet
         destination={overlay && overlay !== 'menu' && overlay !== 'language' && overlay !== 'calling' ? overlay : null}
-        onClose={() => setOverlay(overlay === 'interpreter_calls' ? null : 'menu')}
+        onClose={() => setOverlay(null)}
       />
     </View>
   );
@@ -325,8 +325,8 @@ const styles = StyleSheet.create({
   startGradient: { alignItems: 'center', flexDirection: 'row', height: 62, justifyContent: 'center' },
   startText: { color: '#FFFFFF', fontSize: 19, fontWeight: '600', marginLeft: 14 },
   modalBackdrop: { backgroundColor: 'rgba(8, 18, 38, 0.16)', flex: 1, justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 28, paddingHorizontal: 22, paddingTop: 12 },
-  languageSheet: { backgroundColor: 'rgba(248,251,255,0.92)', borderColor: 'rgba(255,255,255,0.96)', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, maxHeight: '82%', paddingBottom: 24, paddingHorizontal: 22, paddingTop: 12, shadowColor: '#164995', shadowOffset: { height: -8, width: 0 }, shadowOpacity: 0.18, shadowRadius: 28 },
+  sheet: { backgroundColor: 'rgba(248,251,255,0.70)', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 28, paddingHorizontal: 22, paddingTop: 12 },
+  languageSheet: { backgroundColor: 'rgba(248,251,255,0.70)', borderColor: 'rgba(255,255,255,0.96)', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, maxHeight: '82%', paddingBottom: 24, paddingHorizontal: 22, paddingTop: 12, shadowColor: '#164995', shadowOffset: { height: -8, width: 0 }, shadowOpacity: 0.18, shadowRadius: 28 },
   sheetHandle: { alignSelf: 'center', backgroundColor: '#CBD5E1', borderRadius: 3, height: 5, marginBottom: 18, width: 44 },
   sheetTitle: { color: '#101828', fontSize: 24, fontWeight: '700', marginBottom: 12 },
   menuRow: { alignItems: 'center', borderBottomColor: '#EEF1F6', borderBottomWidth: 1, flexDirection: 'row', minHeight: 66, paddingHorizontal: 5 },
@@ -338,14 +338,14 @@ const styles = StyleSheet.create({
   languageOptionText: { color: '#101828', flex: 1, fontSize: 17 },
   checkmark: { color: BLUE, fontSize: 22, fontWeight: '800' },
   connectionErrorBackdrop: { alignItems: 'center', backgroundColor: 'rgba(8,18,38,0.16)', flex: 1, justifyContent: 'center', padding: 24 },
-  connectionErrorCard: { alignItems: 'center', backgroundColor: 'rgba(248,251,255,0.94)', borderColor: 'rgba(255,255,255,0.96)', borderRadius: 28, borderWidth: 1, maxWidth: 420, padding: 24, shadowColor: '#164995', shadowOffset: { height: 10, width: 0 }, shadowOpacity: 0.18, shadowRadius: 28, width: '100%' },
+  connectionErrorCard: { alignItems: 'center', backgroundColor: 'rgba(248,251,255,0.72)', borderColor: 'rgba(255,255,255,0.96)', borderRadius: 28, borderWidth: 1, maxWidth: 420, padding: 24, shadowColor: '#164995', shadowOffset: { height: 10, width: 0 }, shadowOpacity: 0.18, shadowRadius: 28, width: '100%' },
   connectionErrorTitle: { color: '#101828', fontSize: 22, fontWeight: '800' },
   connectionErrorBody: { color: '#475467', fontSize: 15, lineHeight: 22, marginTop: 10, textAlign: 'center' },
   connectionRetry: { alignItems: 'center', backgroundColor: BLUE, borderRadius: 18, marginTop: 22, paddingVertical: 13, width: '100%' },
   connectionRetryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   connectionCancel: { alignItems: 'center', marginTop: 8, paddingVertical: 12, width: '100%' },
   connectionCancelText: { color: '#475467', fontSize: 15, fontWeight: '600' },
-  infoSheet: { alignItems: 'center', backgroundColor: '#FFFFFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 34, paddingHorizontal: 28, paddingTop: 24 },
+  infoSheet: { alignItems: 'center', backgroundColor: 'rgba(248,251,255,0.70)', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 34, paddingHorizontal: 28, paddingTop: 24 },
   infoLogo: { height: 68, width: 68 },
   infoTitle: { color: '#101828', fontSize: 24, fontWeight: '800', marginTop: 9 },
   infoBody: { color: '#475467', fontSize: 15, lineHeight: 22, marginTop: 12, textAlign: 'center' },

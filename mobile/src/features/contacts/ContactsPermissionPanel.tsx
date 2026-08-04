@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { useAuth } from '../account/AuthProvider';
 import { type InterpreterContact, useContacts } from './ContactsProvider';
 import { useCalling } from '../calling/CallProvider';
 import type { CallType } from '../calling/types';
@@ -9,9 +8,8 @@ import type { CallType } from '../calling/types';
 const LANGUAGES = ['English', 'Spanish', 'Brazilian Portuguese', 'French', 'German', 'Italian', 'Dutch', 'Russian', 'Polish', 'Romanian', 'Turkish', 'Arabic', 'Hebrew', 'Hindi', 'Japanese', 'Korean', 'Mandarin Chinese', 'Cantonese', 'Vietnamese', 'Thai'];
 type Filter = 'all' | 'favorites' | 'recent';
 
-export function ContactsPermissionPanel({ onBack, onRequireSignIn }: { onBack: () => void; onRequireSignIn: () => void }) {
-  const { isGuest, user } = useAuth();
-  const { contacts, deleteAllContacts, deleteContact, error, loading, permission, requestAndImport, requestPermission, stopSyncing, syncEnabled, syncing, updateContact } = useContacts();
+export function ContactsPermissionPanel({ onBack }: { onBack: () => void }) {
+  const { contacts, deleteAllContacts, deleteContact, error, loading, permission, requestAndImport, updateContact } = useContacts();
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -30,33 +28,18 @@ export function ContactsPermissionPanel({ onBack, onRequireSignIn }: { onBack: (
       : a.displayName.localeCompare(b.displayName));
   }, [contacts, filter, query]);
 
-  if (!user || isGuest) return (
-    <View>
-      <Header onBack={onBack} />
-      <Text style={styles.title}>My Contacts</Text>
-      <Text style={styles.body}>Contact access and cloud synchronization are separate. You may allow device access now, but signing in is required before Interpreter reads and securely synchronizes contact details.</Text>
-      <View style={styles.statusCard}><Text style={styles.statusLabel}>Device contact access</Text><Text style={styles.statusValue}>{permissionLabel(permission)}</Text></View>
-      {permission === 'blocked'
-        ? <PrimaryButton label="Open Android Settings" onPress={() => void Linking.openSettings()} />
-        : permission !== 'granted'
-          ? <PrimaryButton label="Allow Device Contacts" onPress={() => void requestPermission().catch(() => Alert.alert('Unable to request access', 'Open Android Settings and try again.'))} />
-          : null}
-      <SecondaryButton label="Sign In to Sync Across Devices" onPress={onRequireSignIn} />
-    </View>
-  );
-
-  if (selected) return <ContactDetails contact={selected} onBack={() => setSelectedId(null)} onDelete={async () => { await deleteContact(selected.id); setSelectedId(null); }} onRequireSignIn={onRequireSignIn} onUpdate={(update) => updateContact(selected.id, update)} />;
+  if (selected) return <ContactDetails contact={selected} onBack={() => setSelectedId(null)} onDelete={async () => { await deleteContact(selected.id); setSelectedId(null); }} onUpdate={(update) => updateContact(selected.id, update)} />;
 
   if (permission !== 'granted' && !contacts.length) return (
     <View>
       <Header onBack={onBack} />
       <Text style={styles.title}>My Contacts</Text>
-      <Text style={styles.body}>Interpreter imports only names, phone numbers, email addresses, and company names after you approve access. Contacts are encrypted in transit and stored only in your authenticated account.</Text>
+      <Text style={styles.body}>Allow access to display contacts stored on this device.</Text>
       <View style={styles.statusCard}><Text style={styles.statusLabel}>Contacts permission</Text><Text style={styles.statusValue}>{permissionLabel(permission)}</Text></View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {permission === 'blocked'
         ? <PrimaryButton label="Open Android Settings" onPress={() => void Linking.openSettings()} />
-        : <PrimaryButton disabled={syncing || permission === 'checking'} label={syncing ? 'Importing…' : 'Allow Contacts & Import'} onPress={() => void requestAndImport().catch((nextError) => Alert.alert('Unable to import', nextError instanceof Error ? nextError.message : 'Contacts could not be imported right now. Please try again.'))} />}
+        : <PrimaryButton disabled={loading || permission === 'checking'} label={loading ? 'Loading…' : 'Allow Contacts'} onPress={() => void requestAndImport().catch((nextError) => Alert.alert('Unable to load contacts', nextError instanceof Error ? nextError.message : 'Contacts could not be loaded right now.'))} />}
       <SecondaryButton label="Not Now" onPress={onBack} />
     </View>
   );
@@ -64,7 +47,7 @@ export function ContactsPermissionPanel({ onBack, onRequireSignIn }: { onBack: (
   return (
     <View style={styles.listScreen}>
       <Header onBack={onBack} />
-      <View style={styles.titleRow}><View><Text style={styles.title}>My Contacts</Text><Text style={styles.syncText}>{syncing ? 'Synchronizing…' : syncEnabled ? 'Device sync on' : 'Cloud contacts'}</Text></View><Pressable accessibilityLabel="Import device contacts" onPress={() => void requestAndImport().catch((nextError) => Alert.alert('Unable to sync', nextError instanceof Error ? nextError.message : 'Contacts could not be imported right now. Please try again.'))} style={styles.syncButton}><Text style={styles.syncButtonText}>Sync</Text></Pressable></View>
+      <View style={styles.titleRow}><Text style={styles.title}>My Contacts</Text><Pressable accessibilityLabel="Reload device contacts" onPress={() => void requestAndImport().catch((nextError) => Alert.alert('Unable to load contacts', nextError instanceof Error ? nextError.message : 'Contacts could not be loaded right now.'))} style={styles.syncButton}><Text style={styles.syncButtonText}>Reload</Text></Pressable></View>
       <TextInput autoCapitalize="none" onChangeText={setQuery} placeholder="Search contacts" placeholderTextColor="#98A2B3" style={styles.search} value={query} />
       <View style={styles.filters}>{(['all', 'favorites', 'recent'] as Filter[]).map((item) => <Pressable key={item} onPress={() => setFilter(item)} style={[styles.filter, filter === item && styles.filterActive]}><Text style={[styles.filterText, filter === item && styles.filterTextActive]}>{item === 'all' ? 'All' : item === 'favorites' ? 'Favorites' : 'Recently Called'}</Text></Pressable>)}</View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -78,10 +61,7 @@ export function ContactsPermissionPanel({ onBack, onRequireSignIn }: { onBack: (
           </Pressable>
         ))}
         {!loading && !visibleContacts.length ? <Text style={styles.empty}>{filter === 'recent' ? 'No completed calls yet. Recently called contacts will appear when calling is enabled.' : 'No contacts found.'}</Text> : null}
-        <View style={styles.manageCard}>
-          <SecondaryButton label={syncEnabled ? 'Stop Syncing' : 'Enable Device Sync'} onPress={() => void (syncEnabled ? stopSyncing() : requestAndImport()).catch((nextError) => Alert.alert('Unable to update sync', nextError instanceof Error ? nextError.message : 'Contacts could not be imported right now. Please try again.'))} />
-          <Pressable onPress={() => Alert.alert('Delete imported contacts?', 'This removes only Interpreter’s cloud copies. Contacts on your phone will not be changed.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void deleteAllContacts().catch((nextError) => Alert.alert('Unable to delete contacts', nextError instanceof Error ? nextError.message : 'Contacts could not be deleted right now. Please try again.')) }])} style={styles.danger}><Text style={styles.dangerText}>Delete Imported Contacts</Text></Pressable>
-        </View>
+        <View style={styles.manageCard}><Pressable onPress={() => void deleteAllContacts()} style={styles.danger}><Text style={styles.dangerText}>Clear Contact List</Text></Pressable></View>
       </ScrollView>
     </View>
   );
@@ -95,8 +75,7 @@ function permissionLabel(permission: ReturnType<typeof useContacts>['permission'
   return 'Not requested';
 }
 
-function ContactDetails({ contact, onBack, onDelete, onRequireSignIn, onUpdate }: { contact: InterpreterContact; onBack: () => void; onDelete: () => Promise<void>; onRequireSignIn: () => void; onUpdate: (update: Parameters<ReturnType<typeof useContacts>['updateContact']>[1]) => Promise<InterpreterContact> }) {
-  const { isGuest } = useAuth();
+function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: InterpreterContact; onBack: () => void; onDelete: () => Promise<void>; onUpdate: (update: Parameters<ReturnType<typeof useContacts>['updateContact']>[1]) => Promise<InterpreterContact> }) {
   const { presenceFor, startCall } = useCalling();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(contact.displayName);
@@ -120,8 +99,7 @@ function ContactDetails({ contact, onBack, onDelete, onRequireSignIn, onUpdate }
     finally { setBusy(false); }
   };
   const beginCall = async (type: CallType) => {
-    if (type === 'business_video' && isGuest) { onRequireSignIn(); return; }
-    try { await startCall(contact.id, type); }
+    try { await startCall(contact.id, type, { emailAddresses: contact.emailAddresses, phoneNumbers: contact.phoneNumbers }); }
     catch (nextError) { Alert.alert('Unable to call', nextError instanceof Error ? nextError.message : 'Try again.'); }
   };
   const invite = async () => {
@@ -137,13 +115,13 @@ function ContactDetails({ contact, onBack, onDelete, onRequireSignIn, onUpdate }
       <Pressable onPress={onBack} style={styles.back}><Text style={styles.backText}>‹ Contacts</Text></Pressable>
       <View style={styles.detailAvatar}><Text style={styles.detailAvatarText}>{contact.displayName.slice(0, 1).toUpperCase()}</Text></View>
       {editing ? <TextInput onChangeText={setName} placeholder="Contact name" style={styles.input} value={name} /> : <Text style={styles.detailName}>{contact.displayName}</Text>}
-      <Text style={styles.userStatus}>{contact.isInterpreterUser ? `Uses Interpreter · ${presenceFor(contact.id).replace('_', ' ')}` : 'Not yet on Interpreter'}</Text>
-      <View style={styles.callGrid}>{([{ label: 'Voice Call', type: 'voice' }, { label: 'Video Call', type: 'video' }, { label: 'Business Video Call', type: 'business_video' }] as const).map((item) => <Pressable disabled={!contact.isInterpreterUser} key={item.type} onPress={() => void beginCall(item.type)} style={[styles.callButton, !contact.isInterpreterUser && styles.disabled]}><Text style={styles.callIcon}>{item.type === 'voice' ? '☎' : '▣'}</Text><Text style={styles.callLabel}>{item.label}</Text></Pressable>)}</View>
-      {!contact.isInterpreterUser ? <PrimaryButton label="Invite to Interpreter" onPress={() => void invite().catch(() => Alert.alert('Unable to open invite'))} /> : null}
+      <Text style={styles.userStatus}>{contact.isInterpreterUser ? `Uses Interpreter · ${presenceFor(contact.id).replace('_', ' ')}` : 'Device contact'}</Text>
+      <View style={styles.callGrid}>{([{ label: 'Voice Call', type: 'voice' }, { label: 'Video Call', type: 'video' }, { label: 'Business Video Call', type: 'business_video' }] as const).map((item) => <Pressable key={item.type} onPress={() => void beginCall(item.type)} style={styles.callButton}><Text style={styles.callIcon}>{item.type === 'voice' ? '☎' : '▣'}</Text><Text style={styles.callLabel}>{item.label}</Text></Pressable>)}</View>
+      <PrimaryButton label="Invite to Interpreter" onPress={() => void invite().catch(() => Alert.alert('Unable to open invite'))} />
       <Text style={styles.sectionTitle}>Contact details</Text>
       {editing ? <><TextInput keyboardType="phone-pad" onChangeText={setPhone} placeholder="Phone number" style={styles.input} value={phone} /><TextInput autoCapitalize="none" keyboardType="email-address" onChangeText={setEmail} placeholder="Email address" style={styles.input} value={email} /><Text style={styles.fieldLabel}>Preferred language</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.languages}>{LANGUAGES.map((item) => <Pressable key={item} onPress={() => setLanguage(item)} style={[styles.languageChip, language === item && styles.languageChipActive]}><Text style={[styles.languageText, language === item && styles.languageTextActive]}>{item}</Text></Pressable>)}</ScrollView></> : <View style={styles.detailCard}><Detail label="Phone" value={contact.phoneNumbers.map((item) => item.value).join('\n') || 'Not provided'} /><Detail label="Email" value={contact.emailAddresses.map((item) => item.value).join('\n') || 'Not provided'} /><Detail label="Company" value={contact.company || 'Not provided'} /><Detail label="Preferred language" value={contact.preferredLanguage} /></View>}
       {editing ? <><PrimaryButton disabled={busy} label={busy ? 'Saving…' : 'Save Contact'} onPress={() => void save()} /><SecondaryButton label="Cancel" onPress={() => setEditing(false)} /></> : <SecondaryButton label="Edit Contact" onPress={() => setEditing(true)} />}
-      <Pressable onPress={() => Alert.alert('Delete contact?', `Delete ${contact.displayName} from every signed-in device?`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void onDelete().catch(() => Alert.alert('Unable to delete contact')) }])} style={styles.danger}><Text style={styles.dangerText}>Delete Contact</Text></Pressable>
+      <Pressable onPress={() => Alert.alert('Remove contact?', `Remove ${contact.displayName} from this list? The contact remains on your phone.`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: () => void onDelete().catch(() => Alert.alert('Unable to remove contact')) }])} style={styles.danger}><Text style={styles.dangerText}>Remove from List</Text></Pressable>
     </ScrollView>
   );
 }

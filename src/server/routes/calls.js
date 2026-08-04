@@ -5,6 +5,7 @@ const { createCallRoom, createParticipantToken, deleteCallRoom, isLiveKitConfigu
 const { sendIncomingCallPush } = require("../push");
 const { getSupabaseAdmin, requireUser } = require("../supabase");
 const { stopInterpretedCall } = require("../interpreted-call-manager");
+const { normalizeContactPayload } = require("../contacts");
 
 const router = express.Router();
 const CALL_SELECT = "id,room_name,caller_id,callee_id,contact_id,call_type,status,ringing_at,answered_at,ended_at,ended_by,duration_seconds,decline_reason,interpretation_enabled,caller_spoken_language,caller_heard_language,callee_spoken_language,callee_heard_language,interpretation_started_at,interpretation_ended_at,interpreted_seconds,created_at,updated_at";
@@ -64,11 +65,24 @@ router.post("/", async (req, res) => {
   if (!isLiveKitConfigured()) return res.status(503).json({ error: "Calling services are not configured" });
   const callType = typeof req.body?.callType === "string" ? req.body.callType : "";
   const contactId = typeof req.body?.contactId === "string" ? req.body.contactId : "";
-  if (!CALL_TYPES.has(callType) || !contactId) return res.status(400).json({ error: "A valid contact and call type are required" });
+  if (!CALL_TYPES.has(callType)) return res.status(400).json({ error: "A valid contact and call type are required" });
   const admin = getSupabaseAdmin();
   await expireMissedCalls(admin);
-  const { data: contact, error: contactError } = await admin.from("contacts").select("id,interpreter_user_id,display_name").eq("id", contactId).eq("owner_id", req.interpreterUser.id).maybeSingle();
-  if (contactError) return res.status(500).json({ error: "Unable to load contact" });
+  let contact = null;
+  if (contactId) {
+    const result = await admin.from("contacts").select("id,interpreter_user_id,display_name").eq("id", contactId).eq("owner_id", req.interpreterUser.id).maybeSingle();
+    if (result.error) return res.status(500).json({ error: "Unable to load contact" });
+    contact = result.data;
+  }
+  if (!contact?.interpreter_user_id) {
+    const localContact = normalizeContactPayload(req.body?.contact);
+    const candidates = [];
+    if (localContact?.emailHashes.length) candidates.push(admin.from("interpreter_user_directory").select("user_id").in("email_hash", localContact.emailHashes));
+    if (localContact?.phoneHashes.length) candidates.push(admin.from("interpreter_user_directory").select("user_id").in("phone_hash", localContact.phoneHashes));
+    const matches = candidates.length ? await Promise.all(candidates) : [];
+    const match = matches.flatMap((result) => result.data || []).find((item) => item.user_id !== req.interpreterUser.id);
+    if (match) contact = { id: null, interpreter_user_id: match.user_id, display_name: localContact.displayName };
+  }
   if (!contact?.interpreter_user_id) return res.status(409).json({ error: "Invite this contact to Interpreter before calling" });
   if (contact.interpreter_user_id === req.interpreterUser.id) return res.status(400).json({ error: "You cannot call your own account" });
 
