@@ -64,25 +64,16 @@ async function loadParticipantCall(admin, callId, userId) {
 router.post("/", async (req, res) => {
   if (!isLiveKitConfigured()) return res.status(503).json({ error: "Calling services are not configured" });
   const callType = typeof req.body?.callType === "string" ? req.body.callType : "";
-  const contactId = typeof req.body?.contactId === "string" ? req.body.contactId : "";
   if (!CALL_TYPES.has(callType)) return res.status(400).json({ error: "A valid contact and call type are required" });
   const admin = getSupabaseAdmin();
   await expireMissedCalls(admin);
-  let contact = null;
-  if (contactId) {
-    const result = await admin.from("contacts").select("id,interpreter_user_id,display_name").eq("id", contactId).eq("owner_id", req.interpreterUser.id).maybeSingle();
-    if (result.error) return res.status(500).json({ error: "Unable to load contact" });
-    contact = result.data;
-  }
-  if (!contact?.interpreter_user_id) {
-    const localContact = normalizeContactPayload(req.body?.contact);
-    const candidates = [];
-    if (localContact?.emailHashes.length) candidates.push(admin.from("interpreter_user_directory").select("user_id").in("email_hash", localContact.emailHashes));
-    if (localContact?.phoneHashes.length) candidates.push(admin.from("interpreter_user_directory").select("user_id").in("phone_hash", localContact.phoneHashes));
-    const matches = candidates.length ? await Promise.all(candidates) : [];
-    const match = matches.flatMap((result) => result.data || []).find((item) => item.user_id !== req.interpreterUser.id);
-    if (match) contact = { id: null, interpreter_user_id: match.user_id, display_name: localContact.displayName };
-  }
+  const localContact = normalizeContactPayload(req.body?.contact);
+  const candidates = [];
+  if (localContact?.emailHashes.length) candidates.push(admin.from("interpreter_user_directory").select("user_id").in("email_hash", localContact.emailHashes));
+  if (localContact?.phoneHashes.length) candidates.push(admin.from("interpreter_user_directory").select("user_id").in("phone_hash", localContact.phoneHashes));
+  const matches = candidates.length ? await Promise.all(candidates) : [];
+  const match = matches.flatMap((result) => result.data || []).find((item) => item.user_id !== req.interpreterUser.id);
+  const contact = match ? { interpreter_user_id: match.user_id, display_name: localContact.displayName } : null;
   if (!contact?.interpreter_user_id) return res.status(409).json({ error: "Invite this contact to Interpreter before calling" });
   if (contact.interpreter_user_id === req.interpreterUser.id) return res.status(400).json({ error: "You cannot call your own account" });
 
@@ -95,7 +86,7 @@ router.post("/", async (req, res) => {
       p_room_name: roomName,
       p_caller_id: req.interpreterUser.id,
       p_callee_id: contact.interpreter_user_id,
-      p_contact_id: contact.id,
+      p_contact_id: null,
       p_call_type: callType
     }).single();
     if (error) {
@@ -107,7 +98,7 @@ router.post("/", async (req, res) => {
           room_name: roomName,
           caller_id: req.interpreterUser.id,
           callee_id: contact.interpreter_user_id,
-          contact_id: contact.id,
+          contact_id: null,
           call_type: callType,
           status: "busy",
           ended_at: now,
@@ -132,7 +123,6 @@ router.post("/", async (req, res) => {
     }).eq("id", callId).select(CALL_SELECT).single();
     if (languageError) throw languageError;
     const { data: callerProfile } = await admin.from("profiles").select("full_name").eq("id", req.interpreterUser.id).maybeSingle();
-    await admin.from("contacts").update({ last_called_at: new Date().toISOString() }).eq("id", contact.id).eq("owner_id", req.interpreterUser.id);
     void sendIncomingCallPush(admin, { callId, callType, callerName: callerProfile?.full_name || "Interpreter user", calleeId: contact.interpreter_user_id }).catch(() => console.warn("[Calls] Push delivery failed", { category: "notification" }));
     const [serialized] = await hydrateCalls(admin, [configuredCall], req.interpreterUser.id);
     return res.status(201).json({ call: serialized });

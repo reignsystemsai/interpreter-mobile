@@ -99,7 +99,7 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
     finally { setBusy(false); }
   };
   const beginCall = async (type: CallType) => {
-    try { await startCall(contact.id, type, { emailAddresses: contact.emailAddresses, phoneNumbers: contact.phoneNumbers }); }
+    try { await startCall(type, { emailAddresses: contact.emailAddresses, phoneNumbers: contact.phoneNumbers }); }
     catch (nextError) { Alert.alert('Unable to call', nextError instanceof Error ? nextError.message : 'Try again.'); }
   };
   const invite = async () => {

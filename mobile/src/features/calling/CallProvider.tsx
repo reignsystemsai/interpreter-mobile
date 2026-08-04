@@ -33,7 +33,7 @@ type CallContextValue = {
   presenceFor: (contactId: string) => PresenceStatus;
   refreshHistory: () => Promise<void>;
   retryCall: () => Promise<void>;
-  startCall: (contactId: string, callType: CallType, contact?: { emailAddresses: Array<{ value: string }>; phoneNumbers: Array<{ value: string }> }) => Promise<void>;
+  startCall: (callType: CallType, contact: { emailAddresses: Array<{ value: string }>; phoneNumbers: Array<{ value: string }> }) => Promise<void>;
   switchCamera: () => Promise<void>;
   toggleCamera: () => Promise<void>;
   toggleMute: () => Promise<void>;
@@ -194,13 +194,12 @@ export function CallProvider({ children }: PropsWithChildren) {
     }
   }, [updateConnectionStatus]);
 
-  const startCall = useCallback(async (contactId: string, callType: CallType, contact?: { emailAddresses: Array<{ value: string }>; phoneNumbers: Array<{ value: string }> }) => {
+  const startCall = useCallback(async (callType: CallType, contact: { emailAddresses: Array<{ value: string }>; phoneNumbers: Array<{ value: string }> }) => {
     if (currentCall || incomingCall) throw new Error('Finish the current call first.');
     try {
       const result = await authenticatedRequest<{ call: CallRecord }>('/api/v1/calls', {
         method: 'POST',
         body: JSON.stringify({
-          contactId,
           contact,
           callType,
           callerSpokenLanguage: languageOne,
@@ -284,8 +283,6 @@ export function CallProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!user) {
-      setIncomingCall(null); setCurrentCall(null); setHistory([]); setPresence({});
-      void disconnectRoom();
       return;
     }
     void heartbeat('available').catch(() => undefined);
