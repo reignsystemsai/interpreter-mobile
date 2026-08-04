@@ -6,6 +6,7 @@ import { CallService, type CallServiceState } from './CallService';
 
 const LABELS: Record<Exclude<CallServiceState['status'], 'idle'>, string> = {
   connecting: 'Connecting',
+  reconnecting: 'Reconnecting',
   connected: 'Connected',
   participant_joined: 'Other participant joined',
   audio_active: 'Audio active',

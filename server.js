@@ -9,7 +9,7 @@ const subscriptionRoutes = require("./src/server/routes/subscriptions");
 const deviceRoutes = require("./src/server/routes/devices");
 const voiceCallRoutes = require("./src/server/routes/voice-call");
 const { isSupabaseConfigured } = require("./src/server/supabase");
-const { isLiveKitConfigured } = require("./src/server/livekit");
+const { clearStaleVoiceRooms, isLiveKitConfigured } = require("./src/server/livekit");
 require("dotenv").config();
 
 const app = express();
@@ -356,4 +356,7 @@ app.use((req, res) => {
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Interpreter.ai API listening on port ${PORT}`);
+  void clearStaleVoiceRooms()
+    .then((count) => console.info("[LiveKitCall] stale rooms cleared", { count }))
+    .catch(() => console.warn("[LiveKitCall] stale room cleanup failed"));
 });

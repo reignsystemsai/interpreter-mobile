@@ -17,6 +17,25 @@ async function createVoiceRoom(roomName) {
   await roomService().createRoom({ name: roomName, emptyTimeout: 120, departureTimeout: 15, maxParticipants: 2 });
 }
 
+async function deleteVoiceRoom(roomName) {
+  if (typeof roomName !== "string" || !roomName.startsWith("voice-")) return false;
+  try {
+    await roomService().deleteRoom(roomName);
+    return true;
+  } catch (error) {
+    if (/not found/i.test(error instanceof Error ? error.message : "")) return false;
+    throw error;
+  }
+}
+
+async function clearStaleVoiceRooms() {
+  if (!isLiveKitConfigured()) return 0;
+  const rooms = await roomService().listRooms();
+  const staleRooms = rooms.filter((room) => room.name.startsWith("voice-"));
+  await Promise.all(staleRooms.map((room) => roomService().deleteRoom(room.name)));
+  return staleRooms.length;
+}
+
 async function createVoiceToken({ identity, roomName }) {
   if (!isLiveKitConfigured()) throw new Error("LiveKit is not configured");
   const token = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, {
@@ -35,4 +54,4 @@ async function createVoiceToken({ identity, roomName }) {
   return token.toJwt();
 }
 
-module.exports = { createVoiceRoom, createVoiceToken, isLiveKitConfigured, liveKitHttpUrl };
+module.exports = { clearStaleVoiceRooms, createVoiceRoom, createVoiceToken, deleteVoiceRoom, isLiveKitConfigured, liveKitHttpUrl };

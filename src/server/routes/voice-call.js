@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const express = require("express");
-const { createVoiceRoom, createVoiceToken, isLiveKitConfigured } = require("../livekit");
+const { createVoiceRoom, createVoiceToken, deleteVoiceRoom, isLiveKitConfigured } = require("../livekit");
 const { sendTemporaryVoiceCallPush } = require("../push");
 const { getSupabaseAdmin } = require("../supabase");
 
@@ -64,6 +64,26 @@ router.post("/create", async (req, res) => {
     return res.status(201).json(response);
   } catch {
     return res.status(502).json({ error: "Unable to create the voice call." });
+  }
+});
+
+router.post("/end", async (req, res) => {
+  const temporaryCallCode = typeof req.body?.temporaryCallCode === "string"
+    ? req.body.temporaryCallCode.trim().toUpperCase()
+    : "";
+  const roomName = typeof req.body?.roomName === "string" ? req.body.roomName.trim() : "";
+  const call = temporaryCallCode ? temporaryCalls.get(temporaryCallCode) : null;
+  const matchedRoomName = call?.response?.roomName || "";
+  if (!temporaryCallCode || !call || !roomName || matchedRoomName !== roomName) {
+    return res.status(204).end();
+  }
+  temporaryCalls.delete(temporaryCallCode);
+  try {
+    await deleteVoiceRoom(roomName);
+    console.info("[LiveKitCall] backend call ended");
+    return res.status(204).end();
+  } catch {
+    return res.status(502).json({ error: "Unable to close the voice call." });
   }
 });
 

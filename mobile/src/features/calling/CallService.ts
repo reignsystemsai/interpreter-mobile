@@ -1,11 +1,11 @@
 import { AndroidAudioTypePresets, AudioSession } from '@livekit/react-native';
 import { PermissionsAndroid, Platform } from 'react-native';
-import { AudioPresets, Room, RoomEvent, Track } from 'livekit-client';
+import { AudioPresets, ConnectionState, Room, RoomEvent, Track } from 'livekit-client';
 
 import { API_BASE_URL } from '../../config/runtime';
 import { lookupDeviceByPhone } from '../../services/deviceRegistration';
 
-export type CallServiceStatus = 'idle' | 'connecting' | 'connected' | 'participant_joined' | 'audio_active' | 'ended';
+export type CallServiceStatus = 'idle' | 'connecting' | 'reconnecting' | 'connected' | 'participant_joined' | 'audio_active' | 'ended';
 export type CallServiceState = { callCode: string | null; status: CallServiceStatus };
 type Role = 'caller' | 'recipient';
 type CreateResponse = {
@@ -21,6 +21,9 @@ const AUDIO_CAPTURE = { autoGainControl: true, channelCount: 1, echoCancellation
 class CentralCallService {
   private listeners = new Set<(state: CallServiceState) => void>();
   private room: Room | null = null;
+  private activeCall: CreateResponse | null = null;
+  private operationInProgress = false;
+  private operationVersion = 0;
   private state: CallServiceState = { callCode: null, status: 'idle' };
 
   getState() {
@@ -38,13 +41,6 @@ class CentralCallService {
     for (const listener of this.listeners) listener(state);
   }
 
-  private showEnded(callCode: string | null) {
-    this.setState({ callCode, status: 'ended' });
-    setTimeout(() => {
-      if (!this.room && this.state.status === 'ended') this.setState({ callCode: null, status: 'idle' });
-    }, 1200);
-  }
-
   private async request(body: Record<string, string> = {}) {
     const response = await fetch(`${API_BASE_URL}/api/v1/voice-call/create`, {
       method: 'POST',
@@ -59,8 +55,31 @@ class CentralCallService {
     return payload as CreateResponse;
   }
 
+  private roomIsActive() {
+    return Boolean(this.room && [ConnectionState.Connecting, ConnectionState.Connected, ConnectionState.Reconnecting].includes(this.room.state));
+  }
+
+  hasActiveRoom() {
+    return this.operationInProgress || this.roomIsActive();
+  }
+
+  async resetStaleCallState() {
+    if (this.hasActiveRoom()) return false;
+    const staleRoom = this.room;
+    const staleCall = this.activeCall;
+    this.room = null;
+    this.activeCall = null;
+    await this.releaseRoom(staleRoom);
+    await this.endBackendCall(staleCall);
+    this.setState({ callCode: null, status: 'idle' });
+    return true;
+  }
+
   async startVoiceCall(phoneNumber?: string) {
-    if (this.room) throw new Error('A voice call is already active.');
+    await this.resetStaleCallState();
+    if (this.hasActiveRoom()) throw new Error('A voice call is already active.');
+    this.operationInProgress = true;
+    const operationVersion = ++this.operationVersion;
     this.setState({ callCode: null, status: 'connecting' });
     try {
       let recipientInstallationId = '';
@@ -70,24 +89,41 @@ class CentralCallService {
         recipientInstallationId = recipient.installationId;
       }
       const call = await this.request(recipientInstallationId ? { recipientInstallationId } : {});
+      if (operationVersion !== this.operationVersion) {
+        await this.endBackendCall(call);
+        throw new Error('Call ended.');
+      }
+      this.activeCall = call;
       this.setState({ callCode: call.temporaryCallCode, status: 'connecting' });
       await this.connect('caller', call, call.callerToken);
+      this.operationInProgress = false;
     } catch (error) {
-      this.showEnded(this.state.callCode);
+      this.operationInProgress = false;
+      await this.endCall();
       throw error;
     }
   }
 
   async joinVoiceCall(callCode: string) {
-    if (this.room) throw new Error('A voice call is already active.');
+    await this.resetStaleCallState();
+    if (this.hasActiveRoom()) throw new Error('A voice call is already active.');
     const normalized = callCode.trim().toUpperCase();
     if (!normalized) throw new Error('Enter the call code.');
+    this.operationInProgress = true;
+    const operationVersion = ++this.operationVersion;
     this.setState({ callCode: normalized, status: 'connecting' });
     try {
       const call = await this.request({ temporaryCallCode: normalized });
+      if (operationVersion !== this.operationVersion) {
+        await this.endBackendCall(call);
+        throw new Error('Call ended.');
+      }
+      this.activeCall = call;
       await this.connect('recipient', call, call.recipientToken);
+      this.operationInProgress = false;
     } catch (error) {
-      this.showEnded(normalized);
+      this.operationInProgress = false;
+      await this.endCall();
       throw error;
     }
   }
@@ -116,11 +152,7 @@ class CentralCallService {
       nextRoom.on(RoomEvent.ParticipantConnected, () => this.setState({ callCode: call.temporaryCallCode, status: 'participant_joined' }));
       nextRoom.on(RoomEvent.ParticipantDisconnected, () => {
         if (this.room !== nextRoom) return;
-        this.room = null;
-        void nextRoom?.disconnect().catch(() => undefined);
-        void AudioSession.stopAudioSession().catch(() => undefined);
-        console.info('[LiveKitCall] call ended');
-        this.showEnded(call.temporaryCallCode);
+        void this.endCall();
       });
       nextRoom.on(RoomEvent.TrackSubscribed, (track) => {
         if (track.kind !== Track.Kind.Audio) return;
@@ -129,12 +161,14 @@ class CentralCallService {
       });
       nextRoom.on(RoomEvent.Disconnected, () => {
         if (this.room !== nextRoom) return;
-        this.room = null;
-        void AudioSession.stopAudioSession().catch(() => undefined);
-        this.showEnded(call.temporaryCallCode);
+        void this.endCall();
+      });
+      nextRoom.on(RoomEvent.Reconnecting, () => {
+        if (this.room === nextRoom) this.setState({ callCode: call.temporaryCallCode, status: 'reconnecting' });
       });
       this.room = nextRoom;
       await nextRoom.connect(call.livekitUrl, token, { autoSubscribe: true, maxRetries: 3 });
+      if (this.room !== nextRoom || this.activeCall !== call) throw new Error('Call ended.');
       console.info(`[LiveKitCall] ${role} connected`);
       this.setState({ callCode: call.temporaryCallCode, status: nextRoom.remoteParticipants.size ? 'participant_joined' : 'connected' });
       await nextRoom.localParticipant.setMicrophoneEnabled(true, AUDIO_CAPTURE);
@@ -143,20 +177,48 @@ class CentralCallService {
       else await AudioSession.selectAudioOutput('force_speaker');
     } catch (error) {
       this.room = null;
-      await nextRoom?.disconnect().catch(() => undefined);
-      await AudioSession.stopAudioSession().catch(() => undefined);
-      this.showEnded(call.temporaryCallCode);
+      await this.releaseRoom(nextRoom);
       throw error;
     }
   }
 
+  private async releaseRoom(room: Room | null) {
+    if (room) {
+      await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
+      for (const publication of room.localParticipant.audioTrackPublications.values()) {
+        if (publication.track) await room.localParticipant.unpublishTrack(publication.track).catch(() => undefined);
+      }
+      for (const participant of room.remoteParticipants.values()) {
+        for (const publication of participant.audioTrackPublications.values()) {
+          publication.track?.detach();
+          if (publication.isSubscribed) publication.setSubscribed(false);
+        }
+      }
+      await room.disconnect().catch(() => undefined);
+    }
+    await AudioSession.stopAudioSession().catch(() => undefined);
+  }
+
+  private async endBackendCall(call: CreateResponse | null) {
+    if (!call) return;
+    await fetch(`${API_BASE_URL}/api/v1/voice-call/end`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomName: call.roomName, temporaryCallCode: call.temporaryCallCode }),
+    }).catch(() => undefined);
+  }
+
   async endCall() {
     const room = this.room;
+    const call = this.activeCall;
     this.room = null;
-    await room?.disconnect().catch(() => undefined);
-    await AudioSession.stopAudioSession().catch(() => undefined);
+    this.activeCall = null;
+    this.operationInProgress = false;
+    this.operationVersion += 1;
+    await this.releaseRoom(room);
+    await this.endBackendCall(call);
     console.info('[LiveKitCall] call ended');
-    this.showEnded(this.state.callCode);
+    this.setState({ callCode: null, status: 'idle' });
   }
 }
 

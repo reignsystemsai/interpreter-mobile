@@ -70,6 +70,10 @@ export async function restoreAndRefreshDeviceRegistration() {
   return true;
 }
 
+export async function getRegisteredPhoneNumber() {
+  return SecureStore.getItemAsync(PHONE_KEY);
+}
+
 export async function wasPhoneNumberPrompted() {
   return (await SecureStore.getItemAsync(PHONE_PROMPTED_KEY)) === '1';
 }

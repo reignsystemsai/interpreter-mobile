@@ -1,20 +1,28 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { type InterpreterContact, useContacts } from './ContactsProvider';
 import { CallService } from '../calling/CallService';
+import { getRegisteredPhoneNumber, registerDeviceInstallation } from '../../services/deviceRegistration';
 
 const LANGUAGES = ['English', 'Spanish', 'Brazilian Portuguese', 'French', 'German', 'Italian', 'Dutch', 'Russian', 'Polish', 'Romanian', 'Turkish', 'Arabic', 'Hebrew', 'Hindi', 'Japanese', 'Korean', 'Mandarin Chinese', 'Cantonese', 'Vietnamese', 'Thai'];
 const APP_DOWNLOAD_URL = 'https://interpreter.ai/download';
 type Filter = 'all' | 'favorites' | 'recent';
 type ContactCallType = 'voice' | 'video' | 'business_video';
 
-export function ContactsPermissionPanel({ onBack }: { onBack: () => void }) {
+export function ContactsPermissionPanel({ autoRequest = false, onBack }: { autoRequest?: boolean; onBack: () => void }) {
   const { contacts, deleteAllContacts, deleteContact, error, loading, permission, requestAndImport, updateContact } = useContacts();
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const automaticRequestStarted = useRef(false);
   const selected = contacts.find((contact) => contact.id === selectedId) ?? null;
+
+  useEffect(() => {
+    if (!autoRequest || permission !== 'undetermined' || automaticRequestStarted.current) return;
+    automaticRequestStarted.current = true;
+    void requestAndImport().catch(() => undefined);
+  }, [autoRequest, permission, requestAndImport]);
 
   const visibleContacts = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -38,8 +46,8 @@ export function ContactsPermissionPanel({ onBack }: { onBack: () => void }) {
       <Text style={styles.body}>Allow access to display contacts stored on this device.</Text>
       <View style={styles.statusCard}><Text style={styles.statusLabel}>Contacts permission</Text><Text style={styles.statusValue}>{permissionLabel(permission)}</Text></View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {permission === 'blocked'
-        ? <PrimaryButton label="Open Android Settings" onPress={() => void Linking.openSettings()} />
+      {permission === 'blocked' || permission === 'denied'
+        ? <PrimaryButton label="Open Settings" onPress={() => void Linking.openSettings()} />
         : <PrimaryButton disabled={loading || permission === 'checking'} label={loading ? 'Loading…' : 'Allow Contacts'} onPress={() => void requestAndImport().catch((nextError) => Alert.alert('Unable to load contacts', nextError instanceof Error ? nextError.message : 'Contacts could not be loaded right now.'))} />}
       <SecondaryButton label="Not Now" onPress={onBack} />
     </View>
@@ -83,6 +91,10 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
   const [email, setEmail] = useState(contact.emailAddresses[0]?.value ?? '');
   const [language, setLanguage] = useState(contact.preferredLanguage);
   const [busy, setBusy] = useState(false);
+  const [numberPromptVisible, setNumberPromptVisible] = useState(false);
+  const [ownPhoneNumber, setOwnPhoneNumber] = useState('');
+  const [pendingContactPhone, setPendingContactPhone] = useState('');
+  const [registrationError, setRegistrationError] = useState('');
   useEffect(() => { setName(contact.displayName); setPhone(contact.phoneNumbers[0]?.value ?? ''); setEmail(contact.emailAddresses[0]?.value ?? ''); setLanguage(contact.preferredLanguage); }, [contact]);
 
   const save = async () => {
@@ -103,6 +115,20 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
       message: `Download Interpreter so I can speak to you in your language.\n\n${APP_DOWNLOAD_URL}`,
     });
   };
+  const startContactCall = async (phoneNumber: string) => {
+    try { await CallService.startVoiceCall(phoneNumber); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : 'Please try again.';
+      if (message === 'This person does not have Interpreter yet.') {
+        Alert.alert(message, 'Invite to Interpreter.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Invite to Interpreter', onPress: () => void invite() },
+        ]);
+      } else {
+        Alert.alert('Unable to connect', message);
+      }
+    }
+  };
   const beginCall = async (type: ContactCallType) => {
     if (type === 'voice') {
       const phoneNumber = contact.phoneNumbers.find((item) => item.value.trim())?.value ?? '';
@@ -110,24 +136,32 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
         Alert.alert('This contact does not have a valid phone number.');
         return;
       }
-      try { await CallService.startVoiceCall(phoneNumber); }
-      catch (error) {
-        const message = error instanceof Error ? error.message : 'Please try again.';
-        if (message === 'This person does not have Interpreter yet.') {
-          Alert.alert(message, 'Invite to Interpreter.', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Invite to Interpreter', onPress: () => void invite() },
-          ]);
-        } else {
-          Alert.alert('Unable to connect', message);
-        }
+      if (!(await getRegisteredPhoneNumber().catch(() => null))) {
+        setPendingContactPhone(phoneNumber);
+        setNumberPromptVisible(true);
+        return;
       }
+      await startContactCall(phoneNumber);
       return;
     }
     Alert.alert('Coming soon', type === 'video' ? 'Video calling is not enabled yet.' : 'Business calling is not enabled yet.');
   };
 
-  return (
+  const registerAndCall = async () => {
+    setBusy(true);
+    setRegistrationError('');
+    try {
+      await registerDeviceInstallation(ownPhoneNumber);
+      setNumberPromptVisible(false);
+      await startContactCall(pendingContactPhone);
+    } catch (error) {
+      setRegistrationError(error instanceof Error ? error.message : 'Unable to register this phone number.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return <>
     <ScrollView contentContainerStyle={styles.details} showsVerticalScrollIndicator={false}>
       <Pressable onPress={onBack} style={styles.back}><Text style={styles.backText}>‹ Contacts</Text></Pressable>
       <View style={styles.detailAvatar}><Text style={styles.detailAvatarText}>{contact.displayName.slice(0, 1).toUpperCase()}</Text></View>
@@ -140,7 +174,19 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
       {editing ? <><PrimaryButton disabled={busy} label={busy ? 'Saving…' : 'Save Contact'} onPress={() => void save()} /><SecondaryButton label="Cancel" onPress={() => setEditing(false)} /></> : <SecondaryButton label="Edit Contact" onPress={() => setEditing(true)} />}
       <Pressable onPress={() => Alert.alert('Remove contact?', `Remove ${contact.displayName} from this list? The contact remains on your phone.`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: () => void onDelete().catch(() => Alert.alert('Unable to remove contact')) }])} style={styles.danger}><Text style={styles.dangerText}>Remove from List</Text></Pressable>
     </ScrollView>
-  );
+    <Modal animationType="fade" onRequestClose={() => setNumberPromptVisible(false)} transparent visible={numberPromptVisible}>
+      <View style={styles.numberBackdrop}>
+        <View accessibilityViewIsModal style={styles.numberCard}>
+          <Text style={styles.numberTitle}>Your phone number</Text>
+          <Text style={styles.numberBody}>Enter it once so this device can receive Interpreter calls.</Text>
+          <TextInput keyboardType="phone-pad" onChangeText={setOwnPhoneNumber} placeholder="(305) 555-1234" style={styles.input} value={ownPhoneNumber} />
+          {registrationError ? <Text style={styles.error}>{registrationError}</Text> : null}
+          <PrimaryButton disabled={busy} label={busy ? 'Saving…' : 'Continue'} onPress={() => void registerAndCall()} />
+          <SecondaryButton label="Not Now" onPress={() => setNumberPromptVisible(false)} />
+        </View>
+      </View>
+    </Modal>
+  </>;
 }
 
 function Header({ onBack }: { onBack: () => void }) { return <Pressable accessibilityRole="button" onPress={onBack} style={styles.back}><Text style={styles.backText}>‹ Calling</Text></Pressable>; }
@@ -156,4 +202,5 @@ const styles = StyleSheet.create({
   titleRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }, syncText: { color: '#667085', fontSize: 12, marginTop: 2 }, syncButton: { backgroundColor: '#EAF1FF', borderRadius: 15, paddingHorizontal: 15, paddingVertical: 9 }, syncButtonText: { color: BLUE, fontWeight: '700' }, search: { backgroundColor: 'rgba(255,255,255,0.86)', borderColor: '#DDE5F1', borderRadius: 16, borderWidth: 1, color: '#101828', fontSize: 15, marginTop: 15, paddingHorizontal: 15, paddingVertical: 12 }, filters: { flexDirection: 'row', gap: 6, marginTop: 10 }, filter: { borderRadius: 15, paddingHorizontal: 11, paddingVertical: 8 }, filterActive: { backgroundColor: BLUE }, filterText: { color: '#667085', fontSize: 12, fontWeight: '600' }, filterTextActive: { color: '#FFFFFF' },
   contactList: { paddingBottom: 28, paddingTop: 8 }, contactRow: { alignItems: 'center', borderBottomColor: '#E5EBF3', borderBottomWidth: 1, flexDirection: 'row', minHeight: 68 }, avatar: { alignItems: 'center', backgroundColor: '#EAF1FF', borderRadius: 20, height: 40, justifyContent: 'center', width: 40 }, avatarText: { color: BLUE, fontSize: 17, fontWeight: '800' }, contactCopy: { flex: 1, marginLeft: 11 }, contactName: { color: '#101828', fontSize: 16, fontWeight: '700' }, contactMeta: { color: '#667085', fontSize: 11, marginTop: 3 }, star: { color: '#98A2B3', fontSize: 24, padding: 5 }, starActive: { color: '#FFB000' }, chevron: { color: '#7E8BA3', fontSize: 28 }, empty: { color: '#667085', fontSize: 14, lineHeight: 21, paddingHorizontal: 15, paddingVertical: 28, textAlign: 'center' }, pressed: { opacity: 0.62 }, manageCard: { borderTopColor: '#DDE5F1', borderTopWidth: 1, marginTop: 12, paddingTop: 4 }, danger: { alignItems: 'center', marginTop: 9, paddingVertical: 13 }, dangerText: { color: '#D92D20', fontSize: 15, fontWeight: '600' },
   details: { paddingBottom: 34 }, detailAvatar: { alignItems: 'center', alignSelf: 'center', backgroundColor: '#EAF1FF', borderRadius: 40, height: 80, justifyContent: 'center', width: 80 }, detailAvatarText: { color: BLUE, fontSize: 34, fontWeight: '800' }, detailName: { color: '#101828', fontSize: 25, fontWeight: '800', marginTop: 9, textAlign: 'center' }, userStatus: { color: '#667085', fontSize: 13, marginTop: 4, textAlign: 'center' }, callGrid: { flexDirection: 'row', gap: 7, marginTop: 17 }, callButton: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.8)', borderColor: '#DDE5F1', borderRadius: 16, borderWidth: 1, flex: 1, minHeight: 78, justifyContent: 'center', padding: 6 }, callIcon: { color: BLUE, fontSize: 22 }, callLabel: { color: '#344054', fontSize: 10, fontWeight: '600', marginTop: 5, textAlign: 'center' }, sectionTitle: { color: '#344054', fontSize: 15, fontWeight: '800', marginBottom: 7, marginTop: 20 }, detailCard: { backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 18, paddingHorizontal: 15 }, detailRow: { borderBottomColor: '#E8EDF4', borderBottomWidth: 1, paddingVertical: 11 }, fieldLabel: { color: '#667085', fontSize: 11, fontWeight: '700' }, detailValue: { color: '#101828', fontSize: 15, lineHeight: 21, marginTop: 3 }, input: { backgroundColor: '#FFFFFF', borderColor: '#DDE5F1', borderRadius: 15, borderWidth: 1, color: '#101828', fontSize: 15, marginTop: 9, paddingHorizontal: 14, paddingVertical: 12 }, languages: { marginTop: 8 }, languageChip: { backgroundColor: '#FFFFFF', borderColor: '#DDE5F1', borderRadius: 15, borderWidth: 1, marginRight: 7, paddingHorizontal: 11, paddingVertical: 8 }, languageChipActive: { backgroundColor: BLUE, borderColor: BLUE }, languageText: { color: '#475467', fontSize: 12 }, languageTextActive: { color: '#FFFFFF' },
+  numberBackdrop: { alignItems: 'center', backgroundColor: 'rgba(8,18,38,0.22)', flex: 1, justifyContent: 'center', padding: 24 }, numberCard: { backgroundColor: 'rgba(248,251,255,0.92)', borderRadius: 26, maxWidth: 420, padding: 22, width: '100%' }, numberTitle: { color: '#101828', fontSize: 22, fontWeight: '800', textAlign: 'center' }, numberBody: { color: '#667085', fontSize: 14, lineHeight: 20, marginTop: 7, textAlign: 'center' },
 });
