@@ -39,7 +39,7 @@ export function ContactsPermissionPanel({ onBack, onRequireSignIn }: { onBack: (
     </View>
   );
 
-  if (selected) return <ContactDetails contact={selected} onBack={() => setSelectedId(null)} onDelete={async () => { await deleteContact(selected.id); setSelectedId(null); }} onUpdate={(update) => updateContact(selected.id, update)} />;
+  if (selected) return <ContactDetails contact={selected} onBack={() => setSelectedId(null)} onDelete={async () => { await deleteContact(selected.id); setSelectedId(null); }} onRequireSignIn={onRequireSignIn} onUpdate={(update) => updateContact(selected.id, update)} />;
 
   if (permission !== 'granted' && !contacts.length) return (
     <View>
@@ -79,7 +79,8 @@ export function ContactsPermissionPanel({ onBack, onRequireSignIn }: { onBack: (
   );
 }
 
-function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: InterpreterContact; onBack: () => void; onDelete: () => Promise<void>; onUpdate: (update: Parameters<ReturnType<typeof useContacts>['updateContact']>[1]) => Promise<InterpreterContact> }) {
+function ContactDetails({ contact, onBack, onDelete, onRequireSignIn, onUpdate }: { contact: InterpreterContact; onBack: () => void; onDelete: () => Promise<void>; onRequireSignIn: () => void; onUpdate: (update: Parameters<ReturnType<typeof useContacts>['updateContact']>[1]) => Promise<InterpreterContact> }) {
+  const { isGuest } = useAuth();
   const { presenceFor, startCall } = useCalling();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(contact.displayName);
@@ -103,6 +104,7 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
     finally { setBusy(false); }
   };
   const beginCall = async (type: CallType) => {
+    if (type === 'business_video' && isGuest) { onRequireSignIn(); return; }
     try { await startCall(contact.id, type); }
     catch (nextError) { Alert.alert('Unable to call', nextError instanceof Error ? nextError.message : 'Try again.'); }
   };

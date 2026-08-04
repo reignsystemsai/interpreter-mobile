@@ -10,9 +10,9 @@ import { CallHistoryPanel } from './CallHistoryPanel';
 type CallingView = 'actions' | 'contacts' | 'history';
 
 const ACTIONS = [
-  { icon: '☎', label: 'Voice Call' },
-  { icon: '▣', label: 'Video Call' },
-  { icon: '▦', label: 'Business Video Call' },
+  { icon: '☎', label: 'Voice Call', type: 'voice' },
+  { icon: '▣', label: 'Video Call', type: 'video' },
+  { icon: '▦', label: 'Business Video Call', type: 'business_video' },
 ] as const;
 
 export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
@@ -20,7 +20,7 @@ export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
   onRequireSignIn: () => void;
   visible: boolean;
 }) {
-  const { user } = useAuth();
+  const { initializing, isGuest, user } = useAuth();
   const { enableIncomingNotifications } = useCalling();
   const [view, setView] = useState<CallingView>('actions');
   const close = () => { setView('actions'); onClose(); };
@@ -33,12 +33,8 @@ export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
     if (visible && user) void enableIncomingNotifications().catch(() => undefined);
   }, [enableIncomingNotifications, user, visible]);
 
-  const openCall = () => {
-    if (!user) {
-      close();
-      onRequireSignIn();
-      return;
-    }
+  const openCall = (type: typeof ACTIONS[number]['type']) => {
+    if (type === 'business_video' && isGuest) { close(); onRequireSignIn(); return; }
     setView('contacts');
   };
 
@@ -56,7 +52,7 @@ export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
               <Text style={styles.subtitle}>Choose a contact, then start a secure voice or video call.</Text>
               <View style={styles.actions}>
                 {ACTIONS.map((action) => (
-                  <Pressable key={action.label} accessibilityRole="button" onPress={openCall} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
+                  <Pressable disabled={initializing || !user} key={action.label} accessibilityRole="button" onPress={() => openCall(action.type)} style={({ pressed }) => [styles.action, (initializing || !user) && styles.disabled, pressed && styles.pressed]}>
                     <View style={styles.iconCircle}><Text style={styles.icon}>{action.icon}</Text></View>
                     <Text style={styles.actionLabel}>{action.label}</Text>
                     <Text style={styles.chevron}>›</Text>
@@ -73,7 +69,7 @@ export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
                   <Text style={styles.chevron}>›</Text>
                 </Pressable>
               </View>
-              {!user ? <Text style={styles.signInNote}>Sign in is required before starting a call.</Text> : null}
+              {initializing || !user ? <Text style={styles.signInNote}>Preparing secure calling...</Text> : isGuest ? <Text style={styles.signInNote}>3 free Interpreter Minutes every 30 days. No account required.</Text> : null}
             </View>
           )}
         </View>
@@ -99,5 +95,6 @@ const styles = StyleSheet.create({
   actionLabel: { color: '#101828', flex: 1, fontSize: 17, fontWeight: '600', marginLeft: 14 },
   chevron: { color: '#7181A0', fontSize: 30, fontWeight: '300' },
   pressed: { opacity: 0.66 },
+  disabled: { opacity: 0.45 },
   signInNote: { color: '#667085', fontSize: 12, marginTop: 14, textAlign: 'center' },
 });

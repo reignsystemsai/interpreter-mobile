@@ -11,8 +11,8 @@ const { validExpoPushToken } = require("../src/server/push");
 const { hashIdentity, normalizeContactPayload, normalizeEmail, normalizePhone } = require("../src/server/contacts");
 
 test("plan catalog preserves approved limits without exposing store identifiers", () => {
-  assert.equal(PLAN_CATALOG.free.interpretedMinutes, 2);
-  assert.equal(PLAN_CATALOG.free.allowancePeriod, "day");
+  assert.equal(PLAN_CATALOG.free.interpretedMinutes, 3);
+  assert.equal(PLAN_CATALOG.free.allowancePeriod, "rolling_30_days");
   assert.equal(PLAN_CATALOG.pro.interpretedMinutes, 500);
   assert.equal(PLAN_CATALOG.unlimited.interpretedMinutes, 2000);
   assert.equal(PLAN_CATALOG.pro.rolloverPeriods, 1);

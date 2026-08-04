@@ -1,6 +1,5 @@
 const express = require("express");
 const { ensureInterpretedCall, getInterpretedCallState, stopInterpretedCall } = require("../interpreted-call-manager");
-const { PLAN_CATALOG } = require("../plans");
 const { getSupabaseAdmin, requireUser } = require("../supabase");
 
 const router = express.Router();
@@ -20,15 +19,28 @@ async function loadCall(admin, callId, userId) {
 }
 
 async function allowanceFor(admin, userId) {
-  const { data: entitlement } = await admin.from("subscription_entitlements").select("plan_id,status,expires_at").eq("user_id", userId).maybeSingle();
-  const entitlementActive = entitlement && ["active", "trialing", "grace_period"].includes(entitlement.status) && (!entitlement.expires_at || new Date(entitlement.expires_at) > new Date());
-  const plan = PLAN_CATALOG[entitlementActive ? entitlement.plan_id : "free"] || PLAN_CATALOG.free;
-  const periodStart = plan.allowancePeriod === "day" ? new Date().toISOString().slice(0, 10) : new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString().slice(0, 10);
-  const { data: usage } = await admin.from("usage_periods").select("seconds_used,rollover_seconds").eq("user_id", userId).eq("period_start", periodStart).maybeSingle();
-  const limitSeconds = plan.interpretedMinutes * 60 + (usage?.rollover_seconds || 0);
-  const usedSeconds = usage?.seconds_used || 0;
-  return { planId: plan.id, limitSeconds, usedSeconds, remainingSeconds: Math.max(0, limitSeconds - usedSeconds) };
+  const { data, error } = await admin.rpc("get_or_renew_interpreter_allowance", { p_user_id: userId }).single();
+  if (error || !data) throw new Error("Unable to load Interpreter Minutes");
+  return {
+    planId: data.plan_id,
+    cycleStartedAt: data.cycle_started_at,
+    cycleRenewsAt: data.cycle_renews_at,
+    includedSeconds: data.included_seconds,
+    usedSeconds: data.used_seconds,
+    remainingSeconds: data.total_remaining_seconds,
+    includedRemainingSeconds: data.remaining_seconds,
+    purchasedSeconds: data.purchased_seconds,
+    purchasedRemainingSeconds: data.purchased_remaining_seconds
+  };
 }
+
+router.get("/allowance", async (req, res) => {
+  try {
+    return res.json({ allowance: await allowanceFor(getSupabaseAdmin(), req.interpreterUser.id) });
+  } catch {
+    return res.status(503).json({ error: "Unable to load Interpreter Minutes" });
+  }
+});
 
 router.post("/:callId/start", async (req, res) => {
   if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "Interpretation service is not configured" });

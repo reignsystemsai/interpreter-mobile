@@ -14,7 +14,7 @@ export const INTERPRETER_PLANS: InterpreterPlan[] = [
     id: 'free',
     name: 'Free',
     price: '$0',
-    allowance: '2 interpreted minutes per day',
+    allowance: '3 free Interpreter Minutes every 30 days',
     features: ['Voice calls', 'Video calls', 'Basic AI voices'],
   },
   {

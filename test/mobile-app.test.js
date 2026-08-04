@@ -21,6 +21,7 @@ const realtimeHookSource = fs.readFileSync(path.join(root, "mobile", "src", "hoo
 const interpretedRouteSource = fs.readFileSync(path.join(root, "src", "server", "routes", "interpreted-calls.js"), "utf8");
 const interpretedManagerSource = fs.readFileSync(path.join(root, "src", "server", "interpreted-call-manager.js"), "utf8");
 const interpretedMigrationSource = fs.readFileSync(path.join(root, "supabase", "migrations", "202608030004_interpreted_calling.sql"), "utf8");
+const trialMigrationSource = fs.readFileSync(path.join(root, "supabase", "migrations", "202608040001_three_minute_interpreter_trial.sql"), "utf8");
 const callMessagesSource = fs.readFileSync(path.join(root, "mobile", "src", "features", "calling", "callMessages.ts"), "utf8");
 const menuSource = fs.readFileSync(path.join(root, "mobile", "src", "features", "menu", "AppMenu.tsx"), "utf8");
 const destinationSource = fs.readFileSync(path.join(root, "mobile", "src", "features", "menu", "DestinationSheet.tsx"), "utf8");
@@ -69,7 +70,7 @@ test("final MVP uses explicit mirrored directions without transcripts", () => {
   assert.match(serverSource, /mobile-pair/);
   assert.doesNotMatch(appSource, /showTranscript|conversationOpen|diagnosticMessage/);
   assert.equal(appConfig.expo.name, "interpreter");
-  assert.equal(appConfig.expo.android.versionCode, 9);
+  assert.equal(appConfig.expo.android.versionCode, 10);
 });
 
 test("Phase 3 preserves the existing calling overlay and approved destinations", () => {
@@ -182,5 +183,33 @@ test("Phase 5 uses speech media protection and an informational calls sheet", ()
   assert.match(appSource, /overlay === 'interpreter_calls' \? null : 'menu'/);
   for (const copy of ["No switching apps.", "No typing.", "No passing the phone back and forth.", "Just conversation.", "Got It"]) {
     assert.match(destinationSource, new RegExp(copy.replace(/[.]/g, "\\.")));
+  }
+});
+
+test("Phase 6 keeps the home visible, creates a guest session, and enforces rolling Interpreter Minutes", () => {
+  assert.match(authSource, /signInAnonymously/);
+  assert.match(authSource, /isGuest[\s\S]*updateUser\(\{ email:/);
+  assert.match(callingSource, /3 free Interpreter Minutes every 30 days\. No account required\./);
+  assert.match(callScreensSource, /transparent visible=\{Boolean\(currentCall\)\}/);
+  assert.match(callScreensSource, /You've used all of your Interpreter Minutes\./);
+  assert.match(callScreensSource, /Your free minutes renew on/);
+  assert.match(callScreensSource, /Upgrade Membership/);
+  assert.match(callScreensSource, /Add More Minutes/);
+  assert.match(callScreensSource, /Maybe Later/);
+  assert.match(callScreensSource, /void calling\.endCall\(\)/);
+  for (const field of ['cycle_started_at', 'cycle_renews_at', 'included_seconds', 'used_seconds', 'remaining_seconds']) assert.match(trialMigrationSource, new RegExp(field));
+  assert.match(trialMigrationSource, /interval '30 days'/);
+  assert.match(trialMigrationSource, /interpreter_minute_credits/);
+  for (const source of [menuSource, destinationSource, callScreensSource]) assert.match(source, /BlurView/);
+  for (const source of [menuSource, destinationSource, callScreensSource, callingSource]) assert.match(source, /<Modal[\s\S]*transparent/);
+  assert.doesNotMatch(appSource, /router\.(push|replace|navigate)|navigation\.(push|navigate)/);
+  assert.match(appSource, /onPress=\{\(\) => setOverlay\('calling'\)\}/);
+  assert.match(callingSource, /type === 'business_video' && isGuest/);
+  assert.doesNotMatch(callingSource, /Sign in is required before starting a call/);
+  assert.match(menuSource, /!isGuest \|\| !\['membership', 'billing'\]\.includes/);
+  assert.match(interpretedRouteSource, /get_or_renew_interpreter_allowance/);
+  assert.match(interpretedRouteSource, /router\.get\("\/allowance"/);
+  for (const copy of ["Production integration", "Public project keys", "Server configuration", "Account services are not active yet"]) {
+    assert.doesNotMatch(destinationSource, new RegExp(copy));
   }
 });

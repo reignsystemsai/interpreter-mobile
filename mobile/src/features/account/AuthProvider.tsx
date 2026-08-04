@@ -9,6 +9,7 @@ import { supabase } from '../../services/supabase';
 type AuthContextValue = {
   configured: boolean;
   initializing: boolean;
+  isGuest: boolean;
   legalApproved: boolean;
   recoveryMode: boolean;
   session: Session | null;
@@ -28,17 +29,26 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [recoveryMode, setRecoveryMode] = useState(false);
+  const isGuest = Boolean(session?.user?.is_anonymous);
 
   useEffect(() => {
-    if (!supabase) {
+    const client = supabase;
+    if (!client) {
       setInitializing(false);
       return;
     }
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setInitializing(false);
-    });
-    const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
+    void client.auth.getSession().then(async ({ data }) => {
+      if (data.session) {
+        setSession(data.session);
+        return;
+      }
+      const { data: guestData, error } = await client.auth.signInAnonymously({
+        options: { data: { access: 'interpreter_guest' } },
+      });
+      if (error) throw error;
+      setSession(guestData.session);
+    }).catch(() => setSession(null)).finally(() => setInitializing(false));
+    const { data } = client.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
       if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
     });
@@ -74,6 +84,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     configured: ACCOUNT_SERVICES_CONFIGURED,
     initializing,
     legalApproved: LEGAL_REVIEW_APPROVED,
+    isGuest,
     recoveryMode,
     session,
     user: session?.user ?? null,
@@ -83,9 +94,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     async deleteAccount() {
       await authenticatedRequest<void>('/api/v1/account/me', { method: 'DELETE' });
       await supabase?.auth.signOut();
+      await supabase?.auth.signInAnonymously({ options: { data: { access: 'interpreter_guest' } } });
     },
     async sendPasswordReset(email) {
-      if (!supabase) throw new Error('Account services are not configured yet.');
+      if (!supabase) throw new Error('Unable to continue. Please try again.');
       const normalizedEmail = email.trim();
       if (!normalizedEmail) throw new Error('Enter your account email.');
       const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
@@ -94,37 +106,38 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (error) throw error;
     },
     async signIn(email, password) {
-      if (!supabase) throw new Error('Account services are not configured yet.');
+      if (!supabase) throw new Error('Unable to continue. Please try again.');
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error) throw error;
     },
     async signOut() {
-      const { error } = (await supabase?.auth.signOut()) ?? { error: null };
+      const client = supabase;
+      const { error } = (await client?.auth.signOut()) ?? { error: null };
       if (error) throw error;
+      await client?.auth.signInAnonymously({ options: { data: { access: 'interpreter_guest' } } });
     },
     async signUp(email, password, fullName) {
       if (!LEGAL_REVIEW_APPROVED) {
         throw new Error('Account creation opens after the Terms and Privacy Notice complete legal review.');
       }
-      if (!supabase) throw new Error('Account services are not configured yet.');
-      const { error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: { full_name: fullName.trim() },
-          emailRedirectTo: Linking.createURL('auth/callback'),
-        },
-      });
+      if (!supabase) throw new Error('Unable to continue. Please try again.');
+      const { error } = isGuest
+        ? await supabase.auth.updateUser({ email: email.trim(), password, data: { full_name: fullName.trim() } }, { emailRedirectTo: Linking.createURL('auth/callback') })
+        : await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: { data: { full_name: fullName.trim() }, emailRedirectTo: Linking.createURL('auth/callback') },
+        });
       if (error) throw error;
     },
     async updatePassword(password) {
-      if (!supabase) throw new Error('Account services are not configured yet.');
+      if (!supabase) throw new Error('Unable to continue. Please try again.');
       if (password.length < 8) throw new Error('Use at least 8 characters.');
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
       setRecoveryMode(false);
     },
-  }), [initializing, recoveryMode, session]);
+  }), [initializing, isGuest, recoveryMode, session]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

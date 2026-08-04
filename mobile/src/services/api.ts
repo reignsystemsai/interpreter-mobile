@@ -1,6 +1,13 @@
 import { API_BASE_URL } from '../config/runtime';
 import { supabase } from './supabase';
 
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number, readonly payload: Record<string, unknown>) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 export async function authenticatedRequest<T>(path: string, init?: RequestInit) {
   const session = (await supabase?.auth.getSession())?.data.session;
   if (!session?.access_token) throw new Error('Sign in to continue.');
@@ -15,6 +22,6 @@ export async function authenticatedRequest<T>(path: string, init?: RequestInit) 
   });
   if (response.status === 204) return undefined as T;
   const payload = (await response.json().catch(() => ({}))) as T & { error?: string };
-  if (!response.ok) throw new Error(payload.error || `Request failed (${response.status}).`);
+  if (!response.ok) throw new ApiError(payload.error || `Request failed (${response.status}).`, response.status, payload as Record<string, unknown>);
   return payload;
 }

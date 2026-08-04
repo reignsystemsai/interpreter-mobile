@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import Animated, {
@@ -261,8 +262,9 @@ function LanguageButton({ color, disabled, language, onPress }: { color: string;
 
 function LanguageSheet({ onClose, onSelect, selectedLanguage, visible }: { onClose: () => void; onSelect: (language: string) => void; selectedLanguage: string; visible: boolean }) {
   return (
-    <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
-      <Pressable onPress={onClose} style={styles.modalBackdrop}>
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
+      <BlurView experimentalBlurMethod="dimezisBlurView" intensity={46} style={styles.modalBackdrop} tint="light">
+        <Pressable accessibilityLabel="Close language selector" onPress={onClose} style={StyleSheet.absoluteFill} />
         <Pressable accessibilityViewIsModal onPress={() => undefined} style={styles.languageSheet}>
           <View style={styles.sheetHandle} /><Text style={styles.sheetTitle}>Choose language</Text>
           <ScrollView showsVerticalScrollIndicator={false}>{LANGUAGES.map((language) => (
@@ -271,7 +273,7 @@ function LanguageSheet({ onClose, onSelect, selectedLanguage, visible }: { onClo
             </Pressable>
           ))}</ScrollView>
         </Pressable>
-      </Pressable>
+      </BlurView>
     </Modal>
   );
 }
@@ -312,9 +314,9 @@ const styles = StyleSheet.create({
   startButton: { alignSelf: 'center', borderRadius: 32, marginTop: 'auto', maxWidth: 480, overflow: 'hidden', shadowColor: BLUE, shadowOffset: { height: 8, width: 0 }, shadowOpacity: 0.22, shadowRadius: 16, width: '84%' },
   startGradient: { alignItems: 'center', flexDirection: 'row', height: 62, justifyContent: 'center' },
   startText: { color: '#FFFFFF', fontSize: 19, fontWeight: '600', marginLeft: 14 },
-  modalBackdrop: { backgroundColor: 'rgba(8, 18, 38, 0.3)', flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: { backgroundColor: 'rgba(8, 18, 38, 0.16)', flex: 1, justifyContent: 'flex-end' },
   sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 28, paddingHorizontal: 22, paddingTop: 12 },
-  languageSheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '82%', paddingBottom: 24, paddingHorizontal: 22, paddingTop: 12 },
+  languageSheet: { backgroundColor: 'rgba(248,251,255,0.92)', borderColor: 'rgba(255,255,255,0.96)', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, maxHeight: '82%', paddingBottom: 24, paddingHorizontal: 22, paddingTop: 12, shadowColor: '#164995', shadowOffset: { height: -8, width: 0 }, shadowOpacity: 0.18, shadowRadius: 28 },
   sheetHandle: { alignSelf: 'center', backgroundColor: '#CBD5E1', borderRadius: 3, height: 5, marginBottom: 18, width: 44 },
   sheetTitle: { color: '#101828', fontSize: 24, fontWeight: '700', marginBottom: 12 },
   menuRow: { alignItems: 'center', borderBottomColor: '#EEF1F6', borderBottomWidth: 1, flexDirection: 'row', minHeight: 66, paddingHorizontal: 5 },

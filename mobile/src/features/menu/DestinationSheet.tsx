@@ -78,8 +78,10 @@ export function DestinationSheet({ destination, onClose }: {
     );
   }
   return (
-    <Modal animationType="slide" onRequestClose={onClose} visible={Boolean(destination)}>
-      <View style={styles.page}>
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={Boolean(destination)}>
+      <BlurView experimentalBlurMethod="dimezisBlurView" intensity={48} style={styles.destinationBackdrop} tint="light">
+      <Pressable accessibilityLabel={`Close ${title}`} onPress={onClose} style={StyleSheet.absoluteFill} />
+      <View accessibilityViewIsModal style={styles.page}>
         <View style={styles.header}>
           <Pressable onPress={onClose} style={styles.back}><Text style={styles.backText}>‹</Text></Pressable>
           <Text style={styles.title}>{title}</Text><View style={styles.headerSpacer} />
@@ -95,12 +97,13 @@ export function DestinationSheet({ destination, onClose }: {
           {destination === 'support' ? <SupportContent /> : null}
         </ScrollView>
       </View>
+      </BlurView>
     </Modal>
   );
 }
 
 function AccountContent() {
-  const { clearRecovery, configured, deleteAccount, legalApproved, recoveryMode, sendPasswordReset, signIn, signUp, updatePassword, user } = useAuth();
+  const { clearRecovery, configured, deleteAccount, isGuest, legalApproved, recoveryMode, sendPasswordReset, signIn, signUp, updatePassword, user } = useAuth();
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -113,16 +116,16 @@ function AccountContent() {
   const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || isGuest) return;
     void authenticatedRequest<{ profile?: { full_name?: string; phone?: string } }>('/api/v1/account/me')
       .then((account) => {
         setProfileName(account.profile?.full_name ?? '');
         setProfilePhone(account.profile?.phone ?? '');
       })
       .catch(() => undefined);
-  }, [user]);
+  }, [isGuest, user]);
 
-  if (!configured) return <ConfigurationNotice service="Account services" />;
+  if (!configured) return <GuestAccountIntroduction />;
   if (recoveryMode) {
     const savePassword = async () => {
       setBusy(true); setMessage('');
@@ -143,7 +146,7 @@ function AccountContent() {
       </View>
     );
   }
-  if (user) {
+  if (user && !isGuest) {
     const saveProfile = async () => {
       setBusy(true); setMessage('');
       try {
@@ -223,7 +226,7 @@ function MembershipContent() {
   const purchase = async (productId?: string) => {
     if (!user) return Alert.alert('Sign in required', 'Sign in under My Account before subscribing.');
     const selected = packages.find((item) => item.product.identifier === productId);
-    if (!selected) return Alert.alert('Not configured', 'This Google Play product is not available yet.');
+    if (!selected) return Alert.alert('Coming soon', 'Membership upgrades will be available soon.');
     setBusy(true);
     try { await purchaseMembership(selected); Alert.alert('Membership updated', 'Your entitlement is now active.'); }
     catch (error) { Alert.alert('Purchase incomplete', error instanceof Error ? error.message : 'Unable to complete purchase.'); }
@@ -241,7 +244,7 @@ function MembershipContent() {
           {plan.productId ? <PrimaryButton disabled={busy} label={`Choose ${plan.name}`} onPress={() => void purchase(plan.productId)} /> : null}
         </Card>
       ))}
-      {!membershipConfigured() ? <ConfigurationNotice service="Google Play subscriptions" /> : null}
+      {!membershipConfigured() ? <FriendlyNotice title="Memberships are coming soon" body="Your free Interpreter Minutes remain available. Upgrade options will appear here when purchasing opens." /> : null}
     </View>
   );
 }
@@ -261,7 +264,7 @@ function SettingsContent() {
 }
 
 function LanguagesContent() {
-  return <View><Text style={styles.intro}>Language choices are controlled by the two speaker rows on the home screen. Each row defines an explicit source and destination to keep interpretation accurate.</Text><Card><Text style={styles.cardTitle}>Saved defaults</Text><Text style={styles.cardBody}>Account-based saved language defaults will activate when account services are configured.</Text></Card></View>;
+  return <View><Text style={styles.intro}>Language choices are controlled by the two speaker rows on the home screen. Each row defines an explicit source and destination to keep interpretation accurate.</Text><Card><Text style={styles.cardTitle}>Your language choices</Text><Text style={styles.cardBody}>Interpreter remembers the language pair selected on the home screen.</Text></Card></View>;
 }
 
 function NotificationsContent() {
@@ -274,7 +277,7 @@ function NotificationsContent() {
       .then((account) => account.notifications && setPreferences(account.notifications))
       .catch(() => undefined);
   }, [user]);
-  if (!user) return <ConfigurationNotice service="Notification preferences (sign-in required)" />;
+  if (!user) return <FriendlyNotice title="Notifications are unavailable" body="Try again after your secure session is ready." />;
   const update = async (key: keyof NotificationPreferences, value: boolean) => {
     const next = { ...preferences, [key]: value }; setPreferences(next);
     try { await authenticatedRequest('/api/v1/notifications/preferences', { method: 'PUT', body: JSON.stringify(next) }); }
@@ -298,7 +301,8 @@ function SupportContent() {
   return <View><Text style={styles.intro}>Include your device, app version, approximate time, and steps taken. Never send passwords, card details, identification numbers, or private conversation recordings.</Text><PrimaryButton label="Email support@interpreter.ai" onPress={() => void Linking.openURL('mailto:support@interpreter.ai?subject=Interpreter%20Support')} /><Text style={styles.caption}>Support is not an emergency channel.</Text></View>;
 }
 
-function ConfigurationNotice({ service }: { service: string }) { return <View style={styles.notice}><Text style={styles.noticeTitle}>{service} are not active yet</Text><Text style={styles.noticeBody}>The production integration is ready for its public project keys and server configuration. The interpreter remains available without exposing secrets.</Text></View>; }
+function GuestAccountIntroduction() { return <FriendlyNotice title="Try Interpreter free" body="Make your first interpreted call now. Create your account when you are ready to keep your preferences across devices." />; }
+function FriendlyNotice({ body, title }: { body: string; title: string }) { return <View style={styles.notice}><Text style={styles.noticeTitle}>{title}</Text><Text style={styles.noticeBody}>{body}</Text></View>; }
 function Card({ children }: { children: React.ReactNode }) { return <View style={styles.card}>{children}</View>; }
 function Label({ children }: { children: React.ReactNode }) { return <Text style={styles.fieldLabel}>{children}</Text>; }
 function PrimaryButton({ disabled = false, label, onPress }: { disabled?: boolean; label: string; onPress: () => void }) { return <Pressable disabled={disabled} onPress={onPress} style={[styles.primaryButton, disabled && styles.disabled]}><Text style={styles.primaryText}>{label}</Text></Pressable>; }
@@ -307,15 +311,16 @@ function SettingRow({ label, onChange, value }: { label: string; onChange: (valu
 
 const BLUE = '#075BFF';
 const styles = StyleSheet.create({
-  page: { backgroundColor: '#FFFFFF', flex: 1 },
-  header: { alignItems: 'center', borderBottomColor: '#EEF1F6', borderBottomWidth: 1, flexDirection: 'row', paddingHorizontal: 14, paddingTop: 48 },
+  destinationBackdrop: { backgroundColor: 'rgba(9,28,64,0.14)', flex: 1, justifyContent: 'flex-end', paddingHorizontal: 10, paddingTop: 40 },
+  page: { backgroundColor: 'rgba(248,251,255,0.92)', borderColor: 'rgba(255,255,255,0.96)', borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, maxHeight: '91%', overflow: 'hidden', shadowColor: '#164995', shadowOffset: { height: -8, width: 0 }, shadowOpacity: 0.18, shadowRadius: 28 },
+  header: { alignItems: 'center', borderBottomColor: 'rgba(180,197,225,0.35)', borderBottomWidth: 1, flexDirection: 'row', paddingHorizontal: 14, paddingTop: 6 },
   back: { alignItems: 'center', height: 58, justifyContent: 'center', width: 50 },
   backText: { color: BLUE, fontSize: 45, fontWeight: '300', lineHeight: 48 },
   title: { color: '#101828', flex: 1, fontSize: 21, fontWeight: '700', textAlign: 'center' },
   headerSpacer: { width: 50 },
   content: { padding: 22, paddingBottom: 48 },
   intro: { color: '#475467', fontSize: 15, lineHeight: 23, marginBottom: 18 },
-  card: { backgroundColor: '#FFFFFF', borderColor: '#E3E8F1', borderRadius: 18, borderWidth: 1, marginBottom: 14, padding: 17, shadowColor: '#153A78', shadowOffset: { height: 4, width: 0 }, shadowOpacity: 0.05, shadowRadius: 10 },
+  card: { backgroundColor: 'rgba(255,255,255,0.74)', borderColor: 'rgba(255,255,255,0.92)', borderRadius: 18, borderWidth: 1, marginBottom: 14, padding: 17, shadowColor: '#153A78', shadowOffset: { height: 4, width: 0 }, shadowOpacity: 0.07, shadowRadius: 12 },
   cardTitle: { color: '#101828', fontSize: 16, fontWeight: '700' },
   cardBody: { color: '#667085', fontSize: 14, lineHeight: 21, marginTop: 7 },
   planHeader: { alignItems: 'center', flexDirection: 'row' },

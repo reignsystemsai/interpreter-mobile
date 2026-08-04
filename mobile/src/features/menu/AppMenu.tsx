@@ -1,4 +1,5 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BlurView } from 'expo-blur';
 
 import { useAuth } from '../account/AuthProvider';
 
@@ -47,9 +48,11 @@ export function AppMenu({ onClose, onNavigate, visible }: {
   onNavigate: (destination: MenuDestination) => void;
   visible: boolean;
 }) {
-  const { signOut, user } = useAuth();
+  const { isGuest, signOut, user } = useAuth();
   return (
-    <Modal animationType="slide" onRequestClose={onClose} visible={visible}>
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
+      <BlurView experimentalBlurMethod="dimezisBlurView" intensity={48} style={styles.backdrop} tint="light">
+      <Pressable accessibilityLabel="Close menu" onPress={onClose} style={StyleSheet.absoluteFill} />
       <View style={styles.page}>
         <Pressable accessibilityLabel="Close menu" onPress={onClose} style={styles.close}>
           <Text style={styles.closeText}>×</Text>
@@ -58,7 +61,7 @@ export function AppMenu({ onClose, onNavigate, visible }: {
           {SECTIONS.map((section) => (
             <View key={section.label} style={styles.section}>
               <Text style={styles.sectionLabel}>{section.label}</Text>
-              {section.items.map((item) => (
+              {section.items.filter((item) => !isGuest || !['membership', 'billing'].includes(item.destination)).map((item) => (
                 <Pressable
                   key={item.destination}
                   accessibilityRole="button"
@@ -72,11 +75,7 @@ export function AppMenu({ onClose, onNavigate, visible }: {
               ))}
             </View>
           ))}
-          <View style={styles.legalNotice}>
-            <Text style={styles.legalTitle}>Legal review in progress</Text>
-            <Text style={styles.legalBody}>Privacy Policy and Terms of Service will appear here after final legal approval.</Text>
-          </View>
-          {user ? (
+          {user && !isGuest ? (
             <Pressable
               onPress={() => void signOut().then(onClose)}
               style={({ pressed }) => [styles.logout, pressed && styles.pressed]}
@@ -86,25 +85,24 @@ export function AppMenu({ onClose, onNavigate, visible }: {
           ) : null}
         </ScrollView>
       </View>
+      </BlurView>
     </Modal>
   );
 }
 
 const BLUE = '#075BFF';
 const styles = StyleSheet.create({
-  page: { backgroundColor: '#FFFFFF', flex: 1 },
-  close: { alignItems: 'center', height: 54, justifyContent: 'center', position: 'absolute', right: 18, top: 42, width: 54, zIndex: 2 },
+  backdrop: { alignItems: 'flex-end', backgroundColor: 'rgba(9,28,64,0.14)', flex: 1, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 26 },
+  page: { backgroundColor: 'rgba(248,251,255,0.90)', borderColor: 'rgba(255,255,255,0.94)', borderRadius: 32, borderWidth: 1, maxHeight: '94%', shadowColor: '#164995', shadowOffset: { height: 10, width: 0 }, shadowOpacity: 0.20, shadowRadius: 30, width: '92%' },
+  close: { alignItems: 'center', height: 54, justifyContent: 'center', position: 'absolute', right: 12, top: 10, width: 54, zIndex: 2 },
   closeText: { color: BLUE, fontSize: 42, fontWeight: '300', lineHeight: 45 },
-  content: { paddingBottom: 38, paddingHorizontal: 34, paddingTop: 120 },
+  content: { paddingBottom: 30, paddingHorizontal: 28, paddingTop: 76 },
   section: { borderBottomColor: '#E5EAF2', borderBottomWidth: 1, marginBottom: 25, paddingBottom: 12 },
   sectionLabel: { color: '#667399', fontSize: 14, fontWeight: '700', marginBottom: 10 },
   row: { alignItems: 'center', flexDirection: 'row', minHeight: 58 },
   icon: { color: BLUE, fontSize: 25, textAlign: 'center', width: 44 },
   label: { color: '#101828', flex: 1, fontSize: 18, marginLeft: 8 },
   chevron: { color: '#65718A', fontSize: 34, fontWeight: '300' },
-  legalNotice: { backgroundColor: '#F4F7FC', borderRadius: 14, marginBottom: 18, padding: 14 },
-  legalTitle: { color: '#344054', fontSize: 14, fontWeight: '700' },
-  legalBody: { color: '#667085', fontSize: 12, lineHeight: 18, marginTop: 4 },
   logout: { alignItems: 'center', flexDirection: 'row', minHeight: 58 },
   logoutIcon: { color: '#FF315D', fontSize: 27, textAlign: 'center', width: 44 },
   logoutText: { color: '#FF315D', fontSize: 18, marginLeft: 8 },

@@ -80,7 +80,7 @@ Account creation and customer-facing legal links stay disabled while
 `EXPO_PUBLIC_LEGAL_REVIEW_APPROVED` is false. Change it only after final Terms and
 Privacy pages have completed legal review and are hosted at stable public URLs.
 
-- Free: 2 interpreted minutes per day, voice/video calls, basic AI voices.
+- Free: 3 Interpreter Minutes every rolling 30-day cycle, voice/video calls, basic AI voices.
 - Interpreter Pro: $9.99/month, 500 minutes/month, seven-day trial.
 - Interpreter Unlimited: $19.99/month, 2,000 minutes/month under fair use,
   seven-day trial.

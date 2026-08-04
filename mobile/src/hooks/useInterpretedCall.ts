@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Room, RoomEvent, Track, type RemoteParticipant, type RemoteTrackPublication } from 'livekit-client';
 
-import { authenticatedRequest } from '../services/api';
+import { ApiError, authenticatedRequest } from '../services/api';
 import { configureMembership } from '../services/membership';
 import { useAuth } from '../features/account/AuthProvider';
 import { friendlyCallMessage } from '../features/calling/callMessages';
@@ -17,6 +17,7 @@ type TranscriptTurn = {
 };
 
 type InterpretationState = 'idle' | 'connecting' | 'active' | 'reconnecting' | 'degraded' | 'unavailable';
+type Allowance = { cycleRenewsAt: string; remainingSeconds: number };
 
 export function useInterpretedCall({ call, connectionStatus, room }: { call: CallRecord | null; connectionStatus: ConnectionStatus; room: Room | null }) {
   const { user } = useAuth();
@@ -24,6 +25,8 @@ export function useInterpretedCall({ call, connectionStatus, room }: { call: Cal
   const [error, setError] = useState<string | null>(null);
   const [turns, setTurns] = useState<TranscriptTurn[]>([]);
   const [latencies, setLatencies] = useState<number[]>([]);
+  const [allowanceExhausted, setAllowanceExhausted] = useState(false);
+  const [renewsAt, setRenewsAt] = useState<string | null>(null);
   const startedCallId = useRef<string | null>(null);
   const rawAudioFallback = useRef(true);
   const retryAttempts = useRef(0);
@@ -52,15 +55,27 @@ export function useInterpretedCall({ call, connectionStatus, room }: { call: Cal
     const spokenLanguage = isCaller ? call.interpretation.callerSpokenLanguage : call.interpretation.calleeSpokenLanguage;
     const heardLanguage = isCaller ? call.interpretation.callerHeardLanguage : call.interpretation.calleeHeardLanguage;
     try {
-      const result = await authenticatedRequest<{ interpretation: { active: boolean; status: string } }>(`/api/v1/interpreted-calls/${call.id}/start`, {
+      const result = await authenticatedRequest<{ allowance: Allowance; interpretation: { active: boolean; status: string } }>(`/api/v1/interpreted-calls/${call.id}/start`, {
         method: 'POST',
         body: JSON.stringify({ spokenLanguage, heardLanguage }),
       });
       startedCallId.current = call.id;
+      setRenewsAt(result.allowance.cycleRenewsAt);
       setRawAudioFallback(!result.interpretation.active);
       setState(result.interpretation.active ? 'active' : 'connecting');
       if (result.interpretation.active) retryAttempts.current = 0;
     } catch (startError) {
+      const allowanceEnded = startError instanceof Error && /allowance is exhausted/i.test(startError.message);
+      if (allowanceEnded) {
+        const payloadAllowance = startError instanceof ApiError ? startError.payload.allowance as Allowance | undefined : undefined;
+        setRenewsAt(payloadAllowance?.cycleRenewsAt ?? null);
+        retryable.current = false;
+        setAllowanceExhausted(true);
+        setState('unavailable');
+        setError(null);
+        setRawAudioFallback(false);
+        return;
+      }
       setState('unavailable');
       setError(friendlyCallMessage(startError, 'The translation service is temporarily unavailable.'));
       retryAttempts.current += 1;
@@ -107,10 +122,11 @@ export function useInterpretedCall({ call, connectionStatus, room }: { call: Cal
         }
         else if (status.includes('reconnecting')) { retryable.current = true; setState('reconnecting'); }
         else if (status === 'allowance_exhausted') {
+          setAllowanceExhausted(true);
           setState('unavailable');
-          setError('Your interpreted-minute allowance is exhausted.');
+          setError(null);
           retryable.current = false;
-          setRawAudioFallback(true);
+          setRawAudioFallback(false);
         }
         else if (status === 'openai_unavailable') {
           retryable.current = true;
@@ -189,6 +205,8 @@ export function useInterpretedCall({ call, connectionStatus, room }: { call: Cal
     startedCallId.current = null;
     setTurns([]);
     setLatencies([]);
+    setAllowanceExhausted(false);
+    setRenewsAt(null);
     rawAudioFallback.current = true;
     retryAttempts.current = 0;
     retryable.current = true;
@@ -199,6 +217,7 @@ export function useInterpretedCall({ call, connectionStatus, room }: { call: Cal
   }, [call?.id]);
 
   return useMemo(() => ({
+    allowanceExhausted,
     averageLatencyMs: latencies.length ? Math.round(latencies.reduce((sum, value) => sum + value, 0) / latencies.length) : null,
     error,
     retry: async () => {
@@ -206,9 +225,10 @@ export function useInterpretedCall({ call, connectionStatus, room }: { call: Cal
       retryable.current = true;
       await startInterpretation();
     },
+    renewsAt,
     state,
     turns,
-  }), [error, latencies, startInterpretation, state, turns]);
+  }), [allowanceExhausted, error, latencies, renewsAt, startInterpretation, state, turns]);
 }
 
 function decodeData(payload: Uint8Array) {

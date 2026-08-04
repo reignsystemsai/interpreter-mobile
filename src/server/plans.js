@@ -3,8 +3,8 @@ const PLAN_CATALOG = Object.freeze({
     id: "free",
     name: "Free",
     priceUsdMonthly: 0,
-    interpretedMinutes: 2,
-    allowancePeriod: "day",
+    interpretedMinutes: 3,
+    allowancePeriod: "rolling_30_days",
     rolloverPeriods: 0,
     features: ["Voice calls", "Video calls", "Basic AI voices"]
   },
