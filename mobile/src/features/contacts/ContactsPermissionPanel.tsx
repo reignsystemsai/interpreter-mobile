@@ -3,6 +3,8 @@ import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, Vie
 
 import { useAuth } from '../account/AuthProvider';
 import { type InterpreterContact, useContacts } from './ContactsProvider';
+import { useCalling } from '../calling/CallProvider';
+import type { CallType } from '../calling/types';
 
 const LANGUAGES = ['English', 'Spanish', 'Brazilian Portuguese', 'French', 'German', 'Italian', 'Dutch', 'Russian', 'Polish', 'Romanian', 'Turkish', 'Arabic', 'Hebrew', 'Hindi', 'Japanese', 'Korean', 'Mandarin Chinese', 'Cantonese', 'Vietnamese', 'Thai'];
 type Filter = 'all' | 'favorites' | 'recent';
@@ -78,6 +80,7 @@ export function ContactsPermissionPanel({ onBack, onRequireSignIn }: { onBack: (
 }
 
 function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: InterpreterContact; onBack: () => void; onDelete: () => Promise<void>; onUpdate: (update: Parameters<ReturnType<typeof useContacts>['updateContact']>[1]) => Promise<InterpreterContact> }) {
+  const { presenceFor, startCall } = useCalling();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(contact.displayName);
   const [phone, setPhone] = useState(contact.phoneNumbers[0]?.value ?? '');
@@ -99,7 +102,10 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
     } catch (nextError) { Alert.alert('Unable to save', nextError instanceof Error ? nextError.message : 'Try again.'); }
     finally { setBusy(false); }
   };
-  const callPlaceholder = (type: string) => Alert.alert(type, `${type} will connect to ${contact.displayName} when calling is enabled in the next phase. No room or call was created.`);
+  const beginCall = async (type: CallType) => {
+    try { await startCall(contact.id, type); }
+    catch (nextError) { Alert.alert('Unable to call', nextError instanceof Error ? nextError.message : 'Try again.'); }
+  };
   const invite = async () => {
     const text = encodeURIComponent('Join me on Interpreter.ai for language-friendly voice and video conversations.');
     const phoneValue = contact.phoneNumbers[0]?.value;
@@ -113,8 +119,8 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
       <Pressable onPress={onBack} style={styles.back}><Text style={styles.backText}>‹ Contacts</Text></Pressable>
       <View style={styles.detailAvatar}><Text style={styles.detailAvatarText}>{contact.displayName.slice(0, 1).toUpperCase()}</Text></View>
       {editing ? <TextInput onChangeText={setName} placeholder="Contact name" style={styles.input} value={name} /> : <Text style={styles.detailName}>{contact.displayName}</Text>}
-      <Text style={styles.userStatus}>{contact.isInterpreterUser ? '✓ Uses Interpreter' : 'Not yet on Interpreter'}</Text>
-      <View style={styles.callGrid}>{['Voice Call', 'Video Call', 'Business Video Call'].map((type) => <Pressable key={type} onPress={() => callPlaceholder(type)} style={styles.callButton}><Text style={styles.callIcon}>{type === 'Voice Call' ? '☎' : '▣'}</Text><Text style={styles.callLabel}>{type}</Text></Pressable>)}</View>
+      <Text style={styles.userStatus}>{contact.isInterpreterUser ? `Uses Interpreter · ${presenceFor(contact.id).replace('_', ' ')}` : 'Not yet on Interpreter'}</Text>
+      <View style={styles.callGrid}>{([{ label: 'Voice Call', type: 'voice' }, { label: 'Video Call', type: 'video' }, { label: 'Business Video Call', type: 'business_video' }] as const).map((item) => <Pressable disabled={!contact.isInterpreterUser} key={item.type} onPress={() => void beginCall(item.type)} style={[styles.callButton, !contact.isInterpreterUser && styles.disabled]}><Text style={styles.callIcon}>{item.type === 'voice' ? '☎' : '▣'}</Text><Text style={styles.callLabel}>{item.label}</Text></Pressable>)}</View>
       {!contact.isInterpreterUser ? <PrimaryButton label="Invite to Interpreter" onPress={() => void invite().catch(() => Alert.alert('Unable to open invite'))} /> : null}
       <Text style={styles.sectionTitle}>Contact details</Text>
       {editing ? <><TextInput keyboardType="phone-pad" onChangeText={setPhone} placeholder="Phone number" style={styles.input} value={phone} /><TextInput autoCapitalize="none" keyboardType="email-address" onChangeText={setEmail} placeholder="Email address" style={styles.input} value={email} /><Text style={styles.fieldLabel}>Preferred language</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.languages}>{LANGUAGES.map((item) => <Pressable key={item} onPress={() => setLanguage(item)} style={[styles.languageChip, language === item && styles.languageChipActive]}><Text style={[styles.languageText, language === item && styles.languageTextActive]}>{item}</Text></Pressable>)}</ScrollView></> : <View style={styles.detailCard}><Detail label="Phone" value={contact.phoneNumbers.map((item) => item.value).join('\n') || 'Not provided'} /><Detail label="Email" value={contact.emailAddresses.map((item) => item.value).join('\n') || 'Not provided'} /><Detail label="Company" value={contact.company || 'Not provided'} /><Detail label="Preferred language" value={contact.preferredLanguage} /></View>}

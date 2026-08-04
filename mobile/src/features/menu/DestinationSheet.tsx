@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Linking,
   Modal,
@@ -12,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import type { PurchasesPackage } from 'react-native-purchases';
 
 import { INTERPRETER_PLANS } from '../../config/plans';
@@ -48,7 +48,7 @@ export function DestinationSheet({ destination, onClose }: {
   destination: MenuDestination | null;
   onClose: () => void;
 }) {
-  const title = useMemo(() => ({
+  const title = ({
     account: 'My Account',
     membership: 'Interpreter Pro',
     billing: 'Billing & Payments',
@@ -57,8 +57,26 @@ export function DestinationSheet({ destination, onClose }: {
     notifications: 'Notifications',
     help: 'Help & FAQ',
     support: 'Contact Support',
-  }[destination ?? 'help']), [destination]);
-
+  } as const)[destination === 'interpreter_calls' ? 'help' : destination ?? 'help'];
+  if (destination === 'interpreter_calls') {
+    return (
+      <Modal animationType="fade" onRequestClose={onClose} transparent visible>
+        <BlurView experimentalBlurMethod="dimezisBlurView" intensity={46} style={styles.infoBackdrop} tint="light">
+          <Pressable accessibilityLabel="Close Interpreter Calls information" onPress={onClose} style={StyleSheet.absoluteFill} />
+          <View accessibilityViewIsModal style={styles.infoSheet}>
+            <Text style={styles.infoTitle}>Interpreter Calls</Text>
+            <Text style={styles.infoBody}>Interpreter lets two people naturally communicate in different languages.</Text>
+            <Text style={styles.infoBody}>Each participant chooses:</Text>
+            <Text style={styles.infoPoint}>• The language they speak.</Text>
+            <Text style={styles.infoPoint}>• The language they want to hear.</Text>
+            <Text style={styles.infoBody}>Interpreter translates the conversation in real time.</Text>
+            <Text style={styles.infoClosing}>No switching apps.{`\n`}No typing.{`\n`}No passing the phone back and forth.{`\n`}Just conversation.</Text>
+            <PrimaryButton label="✓ Got It" onPress={onClose} />
+          </View>
+        </BlurView>
+      </Modal>
+    );
+  }
   return (
     <Modal animationType="slide" onRequestClose={onClose} visible={Boolean(destination)}>
       <View style={styles.page}>
@@ -327,4 +345,10 @@ const styles = StyleSheet.create({
   notice: { backgroundColor: '#EFF5FF', borderRadius: 16, marginTop: 16, padding: 16 },
   noticeTitle: { color: '#1849A9', fontSize: 15, fontWeight: '700' },
   noticeBody: { color: '#475467', fontSize: 13, lineHeight: 20, marginTop: 5 },
+  infoBackdrop: { flex: 1, justifyContent: 'flex-end' },
+  infoSheet: { backgroundColor: 'rgba(248,251,255,0.94)', borderColor: 'rgba(255,255,255,0.9)', borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, paddingBottom: 34, paddingHorizontal: 26, paddingTop: 30, shadowColor: '#164995', shadowOffset: { height: -8, width: 0 }, shadowOpacity: 0.14, shadowRadius: 24 },
+  infoTitle: { color: '#101828', fontSize: 26, fontWeight: '800', marginBottom: 14 },
+  infoBody: { color: '#475467', fontSize: 15, lineHeight: 23, marginTop: 9 },
+  infoPoint: { color: '#344054', fontSize: 15, lineHeight: 23, paddingLeft: 8 },
+  infoClosing: { color: BLUE, fontSize: 16, fontWeight: '700', lineHeight: 25, marginTop: 16 },
 });

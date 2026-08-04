@@ -1,11 +1,13 @@
-import { useState } from 'react';
-import { Alert, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 
 import { useAuth } from '../account/AuthProvider';
 import { ContactsPermissionPanel } from '../contacts/ContactsPermissionPanel';
+import { useCalling } from './CallProvider';
+import { CallHistoryPanel } from './CallHistoryPanel';
 
-type CallingView = 'actions' | 'contacts';
+type CallingView = 'actions' | 'contacts' | 'history';
 
 const ACTIONS = [
   { icon: '☎', label: 'Voice Call' },
@@ -19,6 +21,7 @@ export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
   visible: boolean;
 }) {
   const { user } = useAuth();
+  const { enableIncomingNotifications } = useCalling();
   const [view, setView] = useState<CallingView>('actions');
   const close = () => { setView('actions'); onClose(); };
   const panResponder = PanResponder.create({
@@ -26,13 +29,17 @@ export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
     onPanResponderRelease: (_, gesture) => { if (gesture.dy > 80) close(); },
   });
 
-  const openCall = (label: string) => {
+  useEffect(() => {
+    if (visible && user) void enableIncomingNotifications().catch(() => undefined);
+  }, [enableIncomingNotifications, user, visible]);
+
+  const openCall = () => {
     if (!user) {
       close();
       onRequireSignIn();
       return;
     }
-    Alert.alert(label, 'The calling screen is ready for Phase 2 connection. No call or room has been created.');
+    setView('contacts');
   };
 
   return (
@@ -42,14 +49,14 @@ export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
         <View accessibilityViewIsModal {...panResponder.panHandlers} style={styles.sheet}>
           <View style={styles.handle} />
           <Pressable accessibilityLabel="Close calling" accessibilityRole="button" onPress={close} style={styles.close}><Text style={styles.closeText}>×</Text></Pressable>
-          {view === 'contacts' ? <ContactsPermissionPanel onBack={() => setView('actions')} onRequireSignIn={() => { close(); onRequireSignIn(); }} /> : (
+          {view === 'contacts' ? <ContactsPermissionPanel onBack={() => setView('actions')} onRequireSignIn={() => { close(); onRequireSignIn(); }} /> : view === 'history' ? <CallHistoryPanel onBack={() => setView('actions')} onRequireSignIn={() => { close(); onRequireSignIn(); }} /> : (
             <View>
               <Text style={styles.eyebrow}>INTERPRETER CALLING</Text>
               <Text style={styles.title}>Connect in any language</Text>
-              <Text style={styles.subtitle}>Choose how you want to connect. Calling is shown as Phase 1 interface only.</Text>
+              <Text style={styles.subtitle}>Choose a contact, then start a secure voice or video call.</Text>
               <View style={styles.actions}>
                 {ACTIONS.map((action) => (
-                  <Pressable key={action.label} accessibilityRole="button" onPress={() => openCall(action.label)} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
+                  <Pressable key={action.label} accessibilityRole="button" onPress={openCall} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
                     <View style={styles.iconCircle}><Text style={styles.icon}>{action.icon}</Text></View>
                     <Text style={styles.actionLabel}>{action.label}</Text>
                     <Text style={styles.chevron}>›</Text>
@@ -60,8 +67,13 @@ export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
                   <Text style={styles.actionLabel}>My Contacts</Text>
                   <Text style={styles.chevron}>›</Text>
                 </Pressable>
+                <Pressable accessibilityRole="button" onPress={() => setView('history')} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
+                  <View style={styles.iconCircle}><Text style={styles.icon}>↺</Text></View>
+                  <Text style={styles.actionLabel}>Call History</Text>
+                  <Text style={styles.chevron}>›</Text>
+                </Pressable>
               </View>
-              {!user ? <Text style={styles.signInNote}>Sign in is required before starting a future call.</Text> : null}
+              {!user ? <Text style={styles.signInNote}>Sign in is required before starting a call.</Text> : null}
             </View>
           )}
         </View>

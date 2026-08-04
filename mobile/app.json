@@ -13,7 +13,13 @@
       "supportsTablet": true,
       "bundleIdentifier": "ai.interpreter.mobile",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Interpreter.ai uses the microphone to translate live speech."
+        "NSMicrophoneUsageDescription": "Interpreter.ai uses the microphone for translation and voice or video calls.",
+        "NSCameraUsageDescription": "Interpreter.ai uses the camera when you start or accept a video call.",
+        "UIBackgroundModes": [
+          "audio",
+          "remote-notification",
+          "voip"
+        ]
       }
     },
     "android": {
@@ -26,7 +32,9 @@
       },
       "permissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "blockedPermissions": [
         "android.permission.WRITE_CONTACTS"
@@ -46,6 +54,17 @@
         "expo-notifications",
         {
           "color": "#075BFF"
+        }
+      ],
+      [
+        "@livekit/react-native-expo-plugin",
+        {
+          "android": {
+            "audioType": "communication"
+          },
+          "ios": {
+            "enableMultitaskingCameraAccess": false
+          }
         }
       ],
       "@config-plugins/react-native-webrtc"

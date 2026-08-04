@@ -7,10 +7,23 @@ const root = path.join(__dirname, "..");
 const appSource = fs.readFileSync(path.join(root, "mobile", "app", "index.tsx"), "utf8");
 const authSource = fs.readFileSync(path.join(root, "mobile", "src", "features", "account", "AuthProvider.tsx"), "utf8");
 const callingSource = fs.readFileSync(path.join(root, "mobile", "src", "features", "calling", "CallingOverlay.tsx"), "utf8");
+const callProviderSource = fs.readFileSync(path.join(root, "mobile", "src", "features", "calling", "CallProvider.tsx"), "utf8");
+const callScreensSource = fs.readFileSync(path.join(root, "mobile", "src", "features", "calling", "CallScreens.tsx"), "utf8");
 const contactsSource = fs.readFileSync(path.join(root, "mobile", "src", "features", "contacts", "ContactsPermissionPanel.tsx"), "utf8");
 const contactsProviderSource = fs.readFileSync(path.join(root, "mobile", "src", "features", "contacts", "ContactsProvider.tsx"), "utf8");
 const contactsRouteSource = fs.readFileSync(path.join(root, "src", "server", "routes", "contacts.js"), "utf8");
 const contactsMigrationSource = fs.readFileSync(path.join(root, "supabase", "migrations", "202608030002_contacts_system.sql"), "utf8");
+const callsMigrationSource = fs.readFileSync(path.join(root, "supabase", "migrations", "202608030003_calling_foundation.sql"), "utf8");
+const callsRouteSource = fs.readFileSync(path.join(root, "src", "server", "routes", "calls.js"), "utf8");
+const liveKitWebhookSource = fs.readFileSync(path.join(root, "src", "server", "routes", "livekit-webhook.js"), "utf8");
+const interpretedHookSource = fs.readFileSync(path.join(root, "mobile", "src", "hooks", "useInterpretedCall.ts"), "utf8");
+const realtimeHookSource = fs.readFileSync(path.join(root, "mobile", "src", "hooks", "useRealtimeInterpreter.ts"), "utf8");
+const interpretedRouteSource = fs.readFileSync(path.join(root, "src", "server", "routes", "interpreted-calls.js"), "utf8");
+const interpretedManagerSource = fs.readFileSync(path.join(root, "src", "server", "interpreted-call-manager.js"), "utf8");
+const interpretedMigrationSource = fs.readFileSync(path.join(root, "supabase", "migrations", "202608030004_interpreted_calling.sql"), "utf8");
+const callMessagesSource = fs.readFileSync(path.join(root, "mobile", "src", "features", "calling", "callMessages.ts"), "utf8");
+const menuSource = fs.readFileSync(path.join(root, "mobile", "src", "features", "menu", "AppMenu.tsx"), "utf8");
+const destinationSource = fs.readFileSync(path.join(root, "mobile", "src", "features", "menu", "DestinationSheet.tsx"), "utf8");
 const serverSource = fs.readFileSync(path.join(root, "server.js"), "utf8");
 const appConfig = JSON.parse(
   fs.readFileSync(path.join(root, "mobile", "app.json"), "utf8")
@@ -59,14 +72,16 @@ test("final MVP uses explicit mirrored directions without transcripts", () => {
   assert.equal(appConfig.expo.android.versionCode, 9);
 });
 
-test("Phase 1 calling overlay is UI-only and exposes exactly the approved destinations", () => {
-  for (const label of ["Voice Call", "Video Call", "Business Video Call", "My Contacts"]) {
+test("Phase 3 preserves the existing calling overlay and approved destinations", () => {
+  for (const label of ["Voice Call", "Video Call", "Business Video Call", "My Contacts", "Call History"]) {
     assert.match(callingSource, new RegExp(label));
   }
   assert.match(appSource, /accessibilityLabel="Open calling"/);
   assert.match(appSource, /disabled=\{conversationRunning\}/);
   assert.match(appSource, /if \(recoveryMode\) setOverlay\('account'\)/);
-  assert.doesNotMatch(callingSource, /LiveKit|createRoom|joinRoom|mediaDevices|authenticatedRequest/);
+  assert.match(callProviderSource, /\/api\/v1\/calls/);
+  assert.match(callProviderSource, /RoomEvent\.Reconnecting/);
+  assert.match(callProviderSource, /registerForCallNotifications/);
 });
 
 test("Phase 2 imports and synchronizes contacts only after permission", () => {
@@ -85,7 +100,21 @@ test("Phase 2 exposes search, favorites, recent, details, editing, deletion, lan
   for (const label of ["Search contacts", "Favorites", "Recently Called", "Contact details", "Edit Contact", "Delete Contact", "Preferred language", "Voice Call", "Video Call", "Business Video Call", "Invite to Interpreter"]) {
     assert.match(contactsSource, new RegExp(label));
   }
-  assert.doesNotMatch(contactsSource, /LiveKit|createRoom|joinRoom|mediaDevices/);
+  assert.match(contactsSource, /startCall/);
+});
+
+test("Phase 3 implements secure calling lifecycle, controls, history, presence, and RLS", () => {
+  for (const endpoint of ["incoming", "history", "accept", "active", "decline", "missed", "end", "token", "connection"]) assert.match(callsRouteSource, new RegExp(endpoint));
+  assert.match(serverSource, /app\.use\("\/api\/v1\/calls", callRoutes\)/);
+  assert.match(serverSource, /app\.use\("\/api\/v1\/presence", presenceRoutes\)/);
+  for (const control of ["Accept", "Decline", "End Call", "Mute", "Speaker", "Camera", "Flip", "Reconnecting"]) assert.match(callScreensSource, new RegExp(control));
+  for (const table of ["public.calls", "public.call_events", "public.user_presence"]) assert.match(callsMigrationSource, new RegExp(`create table if not exists ${table.replace('.', '\\.')}`));
+  assert.match(callsMigrationSource, /enable row level security/g);
+  assert.match(callsMigrationSource, /reserve_interpreter_call/);
+  assert.match(callsMigrationSource, /grant select, insert, update, delete on table public\.calls to service_role/);
+  assert.match(serverSource, /app\.use\("\/api\/v1\/livekit\/webhook", liveKitWebhookRoutes\)/);
+  assert.match(liveKitWebhookSource, /WebhookReceiver/);
+  assert.match(liveKitWebhookSource, /room_finished/);
 });
 
 test("contacts backend and migration enforce ownership and private directory matching", () => {
@@ -105,4 +134,53 @@ test("authentication supports confirmation and password recovery deep links", ()
   assert.match(authSource, /exchangeCodeForSession/);
   assert.match(authSource, /PASSWORD_RECOVERY/);
   assert.match(authSource, /updateUser\(\{ password \}\)/);
+});
+
+test("Phase 4 keeps interpreted calls separate from the in-person interpreter", () => {
+  assert.match(interpretedHookSource, /export function useInterpretedCall/);
+  assert.doesNotMatch(interpretedHookSource, /useRealtimeInterpreter/);
+  assert.match(realtimeHookSource, /export function useRealtimeInterpreter/);
+  assert.match(callScreensSource, /useInterpretedCall/);
+  assert.match(interpretedHookSource, /RoomEvent\.DataReceived/);
+  assert.match(interpretedHookSource, /interpreter-to-/);
+  assert.match(interpretedHookSource, /setRawAudioFallback/);
+});
+
+test("Phase 4 provides ephemeral transcripts, recovery, metering, and private metrics", () => {
+  assert.match(serverSource, /app\.use\("\/api\/v1\/interpreted-calls", interpretedCallRoutes\)/);
+  for (const endpoint of ["start", "status", "metrics", "stop"]) assert.match(interpretedRouteSource, new RegExp(endpoint));
+  assert.match(interpretedManagerSource, /DirectionalRealtimeSession/);
+  assert.match(interpretedManagerSource, /record_interpreted_usage/);
+  assert.match(interpretedManagerSource, /speech-started/);
+  assert.match(interpretedManagerSource, /clearQueue/);
+  assert.match(interpretedMigrationSource, /call_interpretation_metrics/);
+  assert.match(interpretedMigrationSource, /enable row level security/);
+  assert.doesNotMatch(interpretedMigrationSource, /transcript_text|original_text|translated_text/);
+  assert.match(callScreensSource, /Live interpretation/);
+});
+
+test("Phase 5 keeps connection feedback singular, temporary, and user friendly", () => {
+  for (const status of ["Connecting...", "Ringing...", "Connected", "Reconnecting...", "Connection Lost", "Call Failed"]) {
+    assert.match(callScreensSource, new RegExp(status.replace(/[.]/g, "\\.")));
+  }
+  assert.match(callScreensSource, /setTimeout\(\(\) => setShowConnected\(false\), 1_500\)/);
+  assert.match(callProviderSource, /MAX_CONNECT_ATTEMPTS = 4/);
+  assert.match(callProviderSource, /maxRetries: 3/);
+  assert.match(callProviderSource, /retryCall/);
+  for (const message of ["No internet connection.", "Call declined.", "User unavailable.", "Unable to connect. Please try again.", "The translation service is temporarily unavailable."]) {
+    assert.match(callMessagesSource, new RegExp(message.replace(/[.]/g, "\\.")));
+  }
+  assert.doesNotMatch(callScreensSource, /error\.message/);
+});
+
+test("Phase 5 uses speech media protection and an informational calls sheet", () => {
+  for (const setting of ["echoCancellation: true", "noiseSuppression: true", "autoGainControl: true", "voiceIsolation: { ideal: true }", "AudioPresets.speech", "dtx: true", "red: true"]) {
+    assert.match(callProviderSource, new RegExp(setting.replace(/[.]/g, "\\.")));
+  }
+  assert.match(callProviderSource, /preferredOutputList: \['bluetooth', 'headset', 'speaker', 'earpiece'\]/);
+  assert.match(menuSource, /Interpreter Calls/);
+  assert.match(appSource, /overlay === 'interpreter_calls' \? null : 'menu'/);
+  for (const copy of ["No switching apps.", "No typing.", "No passing the phone back and forth.", "Just conversation.", "Got It"]) {
+    assert.match(destinationSource, new RegExp(copy.replace(/[.]/g, "\\.")));
+  }
 });

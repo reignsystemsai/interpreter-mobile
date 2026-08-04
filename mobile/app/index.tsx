@@ -22,10 +22,12 @@ import Animated, {
 import { AudioWaveform } from '../src/components/AudioWaveform';
 import { useDemoAudioLevel } from '../src/hooks/useDemoAudioLevel';
 import { useRealtimeInterpreter } from '../src/hooks/useRealtimeInterpreter';
+import { recordAppReady } from '../src/services/performance';
 import { CallingOverlay } from '../src/features/calling/CallingOverlay';
 import { useAuth } from '../src/features/account/AuthProvider';
 import { AppMenu, type MenuDestination } from '../src/features/menu/AppMenu';
 import { DestinationSheet } from '../src/features/menu/DestinationSheet';
+import { useLanguagePreferences } from '../src/features/languages/LanguagePreferencesProvider';
 
 const LANGUAGES = [
   'English', 'Spanish', 'Brazilian Portuguese', 'French', 'German', 'Italian',
@@ -119,14 +121,17 @@ function ListeningOrb({ hearingSpeech, statusText, compact }: { hearingSpeech: b
 export default function InterpreterScreen() {
   const { height } = useWindowDimensions();
   const compact = height < 780;
-  const [languageOne, setLanguageOne] = useState('English');
-  const [languageTwo, setLanguageTwo] = useState('Spanish');
+  const { languageOne, languageTwo, setLanguageOne, setLanguageTwo } = useLanguagePreferences();
   const [genderOne, setGenderOne] = useState<Gender>('female');
   const [genderTwo, setGenderTwo] = useState<Gender>('male');
   const [languageSide, setLanguageSide] = useState<LanguageSide>('one');
   const [overlay, setOverlay] = useState<Overlay>(null);
   const { recoveryMode } = useAuth();
   const { isActive, start, status, stop } = useRealtimeInterpreter(languageOne, languageTwo);
+
+  useEffect(() => {
+    recordAppReady();
+  }, []);
 
   useEffect(() => {
     if (recoveryMode) setOverlay('account');
@@ -219,7 +224,7 @@ export default function InterpreterScreen() {
       <CallingOverlay onClose={() => setOverlay(null)} onRequireSignIn={() => setOverlay('account')} visible={overlay === 'calling'} />
       <DestinationSheet
         destination={overlay && overlay !== 'menu' && overlay !== 'language' && overlay !== 'calling' ? overlay : null}
-        onClose={() => setOverlay('menu')}
+        onClose={() => setOverlay(overlay === 'interpreter_calls' ? null : 'menu')}
       />
     </View>
   );

@@ -60,3 +60,32 @@ enabling accounts, then configure RevenueCat's authorized webhook at
 Google Play products use `interpreter_pro_monthly` and
 `interpreter_unlimited_monthly`. The Free allowance is 2 interpreted minutes per
 day. Paid unused minutes roll over for one billing cycle, then expire.
+
+## Interpreted calls
+
+Phase 4 extends the existing LiveKit voice, video, and business-video calls with
+a server-side interpretation bridge. The two people remain connected through
+LiveKit while a hidden backend participant runs one independent OpenAI Realtime
+session for each translation direction. The original in-person
+`useRealtimeInterpreter` flow is unchanged.
+
+Authenticated call controls are available under:
+
+- `POST /api/v1/interpreted-calls/:callId/start`
+- `GET /api/v1/interpreted-calls/:callId/status`
+- `GET /api/v1/interpreted-calls/:callId/metrics`
+- `POST /api/v1/interpreted-calls/:callId/stop`
+
+Apply `supabase/migrations/202608030004_interpreted_calling.sql` after the Phase
+3 calling migration. Live transcript messages are ephemeral LiveKit data and are
+shown only during the active call; transcript text is not stored. Supabase stores
+only call usage and performance measurements. Interpreted usage is metered only
+while both translation directions are ready, against the allowance synchronized
+from RevenueCat.
+
+The bridge requires the existing server-only `OPENAI_API_KEY`, `LIVEKIT_API_KEY`,
+`LIVEKIT_API_SECRET`, and `SUPABASE_SECRET_KEY`. No permanent credential belongs
+in the browser or Android bundle.
+
+Phase 5 reliability, media, privacy, validation, and physical-device follow-up
+are documented in [docs/beta-readiness-report.md](docs/beta-readiness-report.md).

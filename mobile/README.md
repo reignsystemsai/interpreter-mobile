@@ -85,3 +85,27 @@ Privacy pages have completed legal review and are hosted at stable public URLs.
 - Interpreter Unlimited: $19.99/month, 2,000 minutes/month under fair use,
   seven-day trial.
 - Paid unused minutes roll over for one billing cycle and then expire.
+
+## Test an interpreted call
+
+This test requires two authenticated Interpreter accounts on two physical
+devices and a deployed backend containing the Phase 4 server bridge.
+
+1. On the home screen, set each speaker's **Language Spoken** and **Language
+   Heard** preferences.
+2. Open the existing Phone overlay, select a contact, and start a Voice Call,
+   Video Call, or Business Video Call.
+3. Accept on the second device. Wait until the call reports that interpretation
+   is ready, then have Speaker 1 speak.
+4. Confirm Speaker 2 hears only the translated audio and both devices show the
+   latest original and translated transcript in the active-call panel.
+5. Have Speaker 2 reply, then alternate directions and interrupt translated
+   playback to exercise barge-in and overlapping-speech handling.
+6. Briefly disable and restore network access. Confirm the call reports the
+   interruption and reconnects or offers **Retry interpretation** while keeping
+   the call alive when possible.
+7. End the call and confirm the transcript panel disappears. Transcript content
+   must not appear in call history or Supabase.
+
+If interpretation cannot start or its allowance is exhausted, the call falls
+back to direct participant audio rather than ending the LiveKit call.

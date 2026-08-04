@@ -4,7 +4,11 @@ const helmet = require("helmet");
 const path = require("path");
 const accountRoutes = require("./src/server/routes/account");
 const contactRoutes = require("./src/server/routes/contacts");
+const callRoutes = require("./src/server/routes/calls");
+const interpretedCallRoutes = require("./src/server/routes/interpreted-calls");
+const liveKitWebhookRoutes = require("./src/server/routes/livekit-webhook");
 const notificationRoutes = require("./src/server/routes/notifications");
+const presenceRoutes = require("./src/server/routes/presence");
 const subscriptionRoutes = require("./src/server/routes/subscriptions");
 const { isSupabaseConfigured } = require("./src/server/supabase");
 const { isLiveKitConfigured } = require("./src/server/livekit");
@@ -24,12 +28,16 @@ app.use(
   })
 );
 app.use(cors());
+app.use("/api/v1/livekit/webhook", liveKitWebhookRoutes);
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 app.use("/api/v1/account", accountRoutes);
 app.use("/api/v1/contacts", contactRoutes);
+app.use("/api/v1/calls", callRoutes);
+app.use("/api/v1/interpreted-calls", interpretedCallRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
+app.use("/api/v1/presence", presenceRoutes);
 app.use("/api/v1/subscriptions", subscriptionRoutes);
 
 app.get("/health", (req, res) => {
@@ -116,10 +124,6 @@ app.post("/api/realtime/session", async (req, res) => {
   console.log("[Realtime session] Route received", {
     timestamp,
     route: "/api/realtime/session",
-    requestedLanguages: {
-      languageOne,
-      languageTwo
-    },
     mode: browserOneWay
       ? "browser-one-way"
       : browserTwoWay
@@ -136,7 +140,7 @@ app.post("/api/realtime/session", async (req, res) => {
       console.error("[Realtime session] Backend configuration error", {
         timestamp,
         route: "/api/realtime/session",
-        message: "OPENAI_API_KEY is not configured"
+        category: "configuration"
       });
 
       return res.status(503).json({
@@ -326,16 +330,11 @@ Rules:
       console.error("[Realtime session] OpenAI request failed", {
         timestamp,
         route: "/api/realtime/session",
-        openAIResponseStatus: openAIResponse.status,
-        message:
-          data?.error?.message ||
-          data?.error ||
-          "Unable to create realtime client secret"
+        openAIResponseStatus: openAIResponse.status
       });
 
       return res.status(openAIResponse.status).json({
-        error: "Unable to create realtime client secret",
-        details: data
+        error: "The translation service is temporarily unavailable"
       });
     }
 
@@ -344,8 +343,7 @@ Rules:
     console.error("[Realtime session] Caught backend error", {
       timestamp,
       route: "/api/realtime/session",
-      name: error instanceof Error ? error.name : "UnknownError",
-      message: error instanceof Error ? error.message : String(error)
+      category: error instanceof TypeError ? "network" : "internal"
     });
 
     return res.status(500).json({

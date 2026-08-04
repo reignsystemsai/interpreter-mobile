@@ -9,6 +9,7 @@ export type MenuDestination =
   | 'settings'
   | 'languages'
   | 'notifications'
+  | 'interpreter_calls'
   | 'help'
   | 'support';
 
@@ -34,6 +35,7 @@ const SECTIONS: Array<{ label: string; items: MenuItem[] }> = [
   {
     label: 'SUPPORT & LEGAL',
     items: [
+      { destination: 'interpreter_calls', icon: '☎', label: 'Interpreter Calls' },
       { destination: 'help', icon: '?', label: 'Help & FAQ' },
       { destination: 'support', icon: '⌁', label: 'Contact Support' },
     ],
