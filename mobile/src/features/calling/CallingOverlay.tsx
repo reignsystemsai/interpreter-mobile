@@ -42,7 +42,7 @@ export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
         <View accessibilityViewIsModal {...panResponder.panHandlers} style={styles.sheet}>
           <View style={styles.handle} />
           <Pressable accessibilityLabel="Close calling" accessibilityRole="button" onPress={close} style={styles.close}><Text style={styles.closeText}>×</Text></Pressable>
-          {view === 'contacts' ? <ContactsPermissionPanel onBack={() => setView('actions')} /> : (
+          {view === 'contacts' ? <ContactsPermissionPanel onBack={() => setView('actions')} onRequireSignIn={() => { close(); onRequireSignIn(); }} /> : (
             <View>
               <Text style={styles.eyebrow}>INTERPRETER CALLING</Text>
               <Text style={styles.title}>Connect in any language</Text>
@@ -73,7 +73,7 @@ export function CallingOverlay({ onClose, onRequireSignIn, visible }: {
 const BLUE = '#075BFF';
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end' },
-  sheet: { backgroundColor: 'rgba(244,248,255,0.9)', borderColor: 'rgba(255,255,255,0.85)', borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, minHeight: '58%', paddingBottom: 34, paddingHorizontal: 22, paddingTop: 14, shadowColor: '#164995', shadowOffset: { height: -8, width: 0 }, shadowOpacity: 0.16, shadowRadius: 24 },
+  sheet: { backgroundColor: 'rgba(244,248,255,0.9)', borderColor: 'rgba(255,255,255,0.85)', borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, height: '88%', paddingBottom: 24, paddingHorizontal: 22, paddingTop: 14, shadowColor: '#164995', shadowOffset: { height: -8, width: 0 }, shadowOpacity: 0.16, shadowRadius: 24 },
   handle: { alignSelf: 'center', backgroundColor: '#B7C5DA', borderRadius: 3, height: 5, marginBottom: 20, width: 46 },
   close: { alignItems: 'center', height: 42, justifyContent: 'center', position: 'absolute', right: 16, top: 16, width: 42, zIndex: 2 },
   closeText: { color: BLUE, fontSize: 34, fontWeight: '300' },
