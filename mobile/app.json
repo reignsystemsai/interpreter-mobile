@@ -27,12 +27,21 @@
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
+      "blockedPermissions": [
+        "android.permission.WRITE_CONTACTS"
       ]
     },
     "plugins": [
       "expo-router",
       "expo-dev-client",
       "expo-secure-store",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow Interpreter to access your contacts only when you choose My Contacts."
+        }
+      ],
       [
         "expo-notifications",
         {

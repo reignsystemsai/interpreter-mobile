@@ -22,6 +22,8 @@ import Animated, {
 import { AudioWaveform } from '../src/components/AudioWaveform';
 import { useDemoAudioLevel } from '../src/hooks/useDemoAudioLevel';
 import { useRealtimeInterpreter } from '../src/hooks/useRealtimeInterpreter';
+import { CallingOverlay } from '../src/features/calling/CallingOverlay';
+import { useAuth } from '../src/features/account/AuthProvider';
 import { AppMenu, type MenuDestination } from '../src/features/menu/AppMenu';
 import { DestinationSheet } from '../src/features/menu/DestinationSheet';
 
@@ -38,7 +40,7 @@ const LANGUAGE_LABELS: Record<string, string> = {
 
 type Gender = 'female' | 'male';
 type LanguageSide = 'one' | 'two';
-type Overlay = 'menu' | 'language' | MenuDestination | null;
+type Overlay = 'menu' | 'language' | 'calling' | MenuDestination | null;
 
 const PINK = '#FF3E91';
 const BLUE = '#075BFF';
@@ -49,6 +51,10 @@ function languageLabel(language: string) {
 
 function MenuIcon() {
   return <Svg height={30} viewBox="0 0 32 32" width={30}>{[7, 16, 25].map((y) => <Line key={y} stroke={BLUE} strokeLinecap="round" strokeWidth={3} x1={5} x2={27} y1={y} y2={y} />)}</Svg>;
+}
+
+function PhoneIcon() {
+  return <Svg height={29} viewBox="0 0 32 32" width={29}><Path d="M8.2 4.8 12 4l3.1 7.1-2.8 2.2c1.6 3.2 4.1 5.7 7.3 7.3l2.2-2.8L29 21l-.8 3.8c-.4 2-2.2 3.4-4.3 3.2C13.4 27 5 18.6 4 8.1 3.8 6 5.2 4.2 7.2 3.8" fill="none" stroke={BLUE} strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.3} /></Svg>;
 }
 
 function GlobeIcon({ color }: { color: string }) {
@@ -119,7 +125,12 @@ export default function InterpreterScreen() {
   const [genderTwo, setGenderTwo] = useState<Gender>('male');
   const [languageSide, setLanguageSide] = useState<LanguageSide>('one');
   const [overlay, setOverlay] = useState<Overlay>(null);
+  const { recoveryMode } = useAuth();
   const { isActive, start, status, stop } = useRealtimeInterpreter(languageOne, languageTwo);
+
+  useEffect(() => {
+    if (recoveryMode) setOverlay('account');
+  }, [recoveryMode]);
 
   const statusText = useMemo(() => {
     if (status === 'connecting') return 'Connecting...';
@@ -156,6 +167,7 @@ export default function InterpreterScreen() {
     <View style={styles.page}>
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <ScrollView bounces={false} contentContainerStyle={[styles.content, compact && styles.contentCompact]} scrollEnabled={compact} showsVerticalScrollIndicator={false}>
+          <Pressable accessibilityLabel="Open calling" accessibilityRole="button" disabled={conversationRunning} hitSlop={12} onPress={() => setOverlay('calling')} style={({ pressed }) => [styles.phoneButton, conversationRunning && styles.disabled, pressed && styles.pressed]}><PhoneIcon /></Pressable>
           <Pressable accessibilityLabel="Open menu" accessibilityRole="button" hitSlop={12} onPress={() => setOverlay('menu')} style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}><MenuIcon /></Pressable>
 
           <View style={[styles.hero, compact && styles.heroCompact]}>
@@ -204,8 +216,9 @@ export default function InterpreterScreen() {
 
       <AppMenu onClose={() => setOverlay(null)} onNavigate={setOverlay} visible={overlay === 'menu'} />
       <LanguageSheet onClose={() => setOverlay(null)} onSelect={chooseLanguage} selectedLanguage={languageSide === 'one' ? languageOne : languageTwo} visible={overlay === 'language'} />
+      <CallingOverlay onClose={() => setOverlay(null)} onRequireSignIn={() => setOverlay('account')} visible={overlay === 'calling'} />
       <DestinationSheet
-        destination={overlay && overlay !== 'menu' && overlay !== 'language' ? overlay : null}
+        destination={overlay && overlay !== 'menu' && overlay !== 'language' && overlay !== 'calling' ? overlay : null}
         onClose={() => setOverlay('menu')}
       />
     </View>
@@ -264,6 +277,7 @@ const styles = StyleSheet.create({
   content: { flexGrow: 1, paddingBottom: 22, paddingHorizontal: 24 },
   contentCompact: { paddingBottom: 14, paddingHorizontal: 18 },
   menuButton: { alignItems: 'center', height: 48, justifyContent: 'center', position: 'absolute', right: 12, top: 8, width: 48, zIndex: 2 },
+  phoneButton: { alignItems: 'center', height: 48, justifyContent: 'center', left: 12, position: 'absolute', top: 8, width: 48, zIndex: 2 },
   pressed: { opacity: 0.68, transform: [{ scale: 0.985 }] },
   disabled: { opacity: 0.56 },
   hero: { alignItems: 'center', marginTop: 24 },

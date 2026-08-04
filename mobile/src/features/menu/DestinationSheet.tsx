@@ -82,8 +82,8 @@ export function DestinationSheet({ destination, onClose }: {
 }
 
 function AccountContent() {
-  const { configured, deleteAccount, legalApproved, sendPasswordReset, signIn, signUp, user } = useAuth();
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const { clearRecovery, configured, deleteAccount, legalApproved, recoveryMode, sendPasswordReset, signIn, signUp, updatePassword, user } = useAuth();
+  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -92,6 +92,7 @@ function AccountContent() {
   const [message, setMessage] = useState('');
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
+  const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -104,6 +105,26 @@ function AccountContent() {
   }, [user]);
 
   if (!configured) return <ConfigurationNotice service="Account services" />;
+  if (recoveryMode) {
+    const savePassword = async () => {
+      setBusy(true); setMessage('');
+      try {
+        await updatePassword(newPassword);
+        setNewPassword('');
+        setMessage('Your password has been updated.');
+      } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to update password.'); }
+      finally { setBusy(false); }
+    };
+    return (
+      <View>
+        <Text style={styles.intro}>Choose a new password for your Interpreter account.</Text>
+        <TextInput autoCapitalize="none" autoComplete="new-password" onChangeText={setNewPassword} placeholder="New password" secureTextEntry style={styles.input} value={newPassword} />
+        {message ? <Text style={styles.message}>{message}</Text> : null}
+        <PrimaryButton disabled={busy} label={busy ? 'Updating...' : 'Update Password'} onPress={() => void savePassword()} />
+        <SecondaryButton label="Cancel" onPress={clearRecovery} />
+      </View>
+    );
+  }
   if (user) {
     const saveProfile = async () => {
       setBusy(true); setMessage('');
@@ -123,7 +144,7 @@ function AccountContent() {
         <TextInput keyboardType="phone-pad" onChangeText={setProfilePhone} placeholder="Phone number (optional)" style={styles.input} value={profilePhone} />
         {message ? <Text style={styles.message}>{message}</Text> : null}
         <PrimaryButton disabled={busy} label={busy ? 'Saving...' : 'Save Account'} onPress={() => void saveProfile()} />
-        <SecondaryButton label="Reset Password by Email" onPress={() => void sendPasswordReset().then(() => Alert.alert('Email sent', 'Check your inbox for password reset instructions.')).catch((error) => Alert.alert('Unable to send email', error instanceof Error ? error.message : 'Try again.'))} />
+        <SecondaryButton label="Reset Password by Email" onPress={() => void sendPasswordReset(user.email ?? '').then(() => Alert.alert('Email sent', 'Check your inbox for password reset instructions.')).catch((error) => Alert.alert('Unable to send email', error instanceof Error ? error.message : 'Try again.'))} />
         <Text style={styles.caption}>Your subscription must be canceled in Google Play before deleting your account.</Text>
         <Pressable onPress={() => Alert.alert('Delete account?', 'This permanently deletes the Interpreter account but does not cancel Google Play subscriptions.', [
           { text: 'Cancel', style: 'cancel' },
@@ -137,7 +158,10 @@ function AccountContent() {
     setBusy(true); setMessage('');
     try {
       if (mode === 'signin') await signIn(email, password);
-      else {
+      else if (mode === 'forgot') {
+        await sendPasswordReset(email);
+        setMessage('Check your email for a password reset link.');
+      } else {
         if (!accepted) throw new Error('Accept the Terms and Privacy Notice to create an account.');
         await signUp(email, password, fullName);
         setMessage('Check your email to confirm your account.');
@@ -149,10 +173,10 @@ function AccountContent() {
 
   return (
     <View>
-      <Text style={styles.intro}>{mode === 'signin' ? 'Sign in to manage your plan and preferences.' : 'Create your Interpreter account.'}</Text>
+      <Text style={styles.intro}>{mode === 'signin' ? 'Sign in to manage your plan and preferences.' : mode === 'forgot' ? 'Enter your account email to reset your password.' : 'Create your Interpreter account.'}</Text>
       {mode === 'signup' ? <TextInput autoCapitalize="words" onChangeText={setFullName} placeholder="Full name" style={styles.input} value={fullName} /> : null}
       <TextInput autoCapitalize="none" autoComplete="email" keyboardType="email-address" onChangeText={setEmail} placeholder="Email" style={styles.input} value={email} />
-      <TextInput autoCapitalize="none" autoComplete="password" onChangeText={setPassword} placeholder="Password" secureTextEntry style={styles.input} value={password} />
+      {mode !== 'forgot' ? <TextInput autoCapitalize="none" autoComplete="password" onChangeText={setPassword} placeholder="Password" secureTextEntry style={styles.input} value={password} /> : null}
       {mode === 'signup' ? (
         <Pressable disabled={!legalApproved} onPress={() => setAccepted((current) => !current)} style={styles.acceptRow}>
           <Text style={styles.checkbox}>{accepted ? '✓' : '○'}</Text>
@@ -160,9 +184,10 @@ function AccountContent() {
         </Pressable>
       ) : null}
       {message ? <Text style={styles.message}>{message}</Text> : null}
-      <PrimaryButton disabled={busy || (mode === 'signup' && !legalApproved)} label={busy ? 'Please wait...' : mode === 'signin' ? 'Sign In' : 'Create Account'} onPress={() => void submit()} />
-      <Pressable onPress={() => { setMode((current) => current === 'signin' ? 'signup' : 'signin'); setMessage(''); }} style={styles.linkButton}>
-        <Text style={styles.link}>{mode === 'signin' ? 'Create an account' : 'Already have an account? Sign in'}</Text>
+      <PrimaryButton disabled={busy || (mode === 'signup' && !legalApproved)} label={busy ? 'Please wait...' : mode === 'signin' ? 'Sign In' : mode === 'forgot' ? 'Send Reset Link' : 'Create Account'} onPress={() => void submit()} />
+      {mode === 'signin' ? <Pressable onPress={() => { setMode('forgot'); setMessage(''); }} style={styles.linkButton}><Text style={styles.link}>Forgot password?</Text></Pressable> : null}
+      <Pressable onPress={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setMessage(''); }} style={styles.linkButton}>
+        <Text style={styles.link}>{mode === 'signin' ? 'Create an account' : 'Back to sign in'}</Text>
       </Pressable>
     </View>
   );
