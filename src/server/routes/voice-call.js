@@ -1,6 +1,8 @@
 const crypto = require("crypto");
 const express = require("express");
 const { createVoiceRoom, createVoiceToken, isLiveKitConfigured } = require("../livekit");
+const { sendTemporaryVoiceCallPush } = require("../push");
+const { getSupabaseAdmin } = require("../supabase");
 
 const router = express.Router();
 const temporaryCalls = new Map();
@@ -29,6 +31,9 @@ router.post("/create", async (req, res) => {
   }
 
   const roomName = `voice-${crypto.randomUUID()}`;
+  const recipientInstallationId = typeof req.body?.recipientInstallationId === "string"
+    ? req.body.recipientInstallationId.trim()
+    : "";
   const callerIdentity = `caller-${crypto.randomUUID()}`;
   const recipientIdentity = `recipient-${crypto.randomUUID()}`;
   try {
@@ -48,6 +53,14 @@ router.post("/create", async (req, res) => {
       temporaryCallCode
     };
     temporaryCalls.set(temporaryCallCode, { expiresAt: Date.now() + 10 * 60 * 1000, recipientClaimed: false, response });
+    if (recipientInstallationId) {
+      try {
+        const delivery = await sendTemporaryVoiceCallPush(getSupabaseAdmin(), { installationId: recipientInstallationId, temporaryCallCode });
+        console.info("[LiveKitCall] push delivery", { accepted: delivery.accepted });
+      } catch {
+        console.warn("[LiveKitCall] push delivery failed");
+      }
+    }
     return res.status(201).json(response);
   } catch {
     return res.status(502).json({ error: "Unable to create the voice call." });

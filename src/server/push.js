@@ -33,4 +33,31 @@ async function sendIncomingCallPush(admin, { callId, callType, callerName, calle
   return { attempted: messages.length, accepted: tickets.filter((ticket) => ticket.status === "ok").length };
 }
 
-module.exports = { EXPO_PUSH_URL, sendIncomingCallPush, validExpoPushToken };
+async function sendTemporaryVoiceCallPush(admin, { installationId, temporaryCallCode }) {
+  const { data, error } = await admin
+    .from("device_installations")
+    .select("push_token")
+    .eq("id", installationId)
+    .eq("enabled", true)
+    .maybeSingle();
+  if (error) throw new Error("Unable to load the recipient device");
+  if (!validExpoPushToken(data?.push_token)) return { accepted: false };
+  const response = await fetch(EXPO_PUSH_URL, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({
+      to: data.push_token,
+      sound: "default",
+      priority: "high",
+      channelId: "incoming-calls",
+      title: "Incoming Interpreter call",
+      body: "Tap to answer the voice call.",
+      data: { type: "incoming_voice_call", temporaryCallCode }
+    })
+  });
+  if (!response.ok) throw new Error(`Expo push returned ${response.status}`);
+  const payload = await response.json().catch(() => ({}));
+  return { accepted: payload?.data?.status === "ok" };
+}
+
+module.exports = { EXPO_PUSH_URL, sendIncomingCallPush, sendTemporaryVoiceCallPush, validExpoPushToken };

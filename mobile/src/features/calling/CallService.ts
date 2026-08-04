@@ -3,6 +3,7 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import { AudioPresets, Room, RoomEvent, Track } from 'livekit-client';
 
 import { API_BASE_URL } from '../../config/runtime';
+import { lookupDeviceByPhone } from '../../services/deviceRegistration';
 
 export type CallServiceStatus = 'idle' | 'connecting' | 'connected' | 'participant_joined' | 'audio_active' | 'ended';
 export type CallServiceState = { callCode: string | null; status: CallServiceStatus };
@@ -58,11 +59,17 @@ class CentralCallService {
     return payload as CreateResponse;
   }
 
-  async startVoiceCall() {
+  async startVoiceCall(phoneNumber?: string) {
     if (this.room) throw new Error('A voice call is already active.');
     this.setState({ callCode: null, status: 'connecting' });
     try {
-      const call = await this.request();
+      let recipientInstallationId = '';
+      if (phoneNumber) {
+        const recipient = await lookupDeviceByPhone(phoneNumber);
+        if (!recipient.available) throw new Error('This person does not have Interpreter yet.');
+        recipientInstallationId = recipient.installationId;
+      }
+      const call = await this.request(recipientInstallationId ? { recipientInstallationId } : {});
       this.setState({ callCode: call.temporaryCallCode, status: 'connecting' });
       await this.connect('caller', call, call.callerToken);
     } catch (error) {

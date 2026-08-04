@@ -98,18 +98,33 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
     } catch (nextError) { Alert.alert('Unable to save', nextError instanceof Error ? nextError.message : 'Try again.'); }
     finally { setBusy(false); }
   };
-  const beginCall = async (type: ContactCallType) => {
-    if (type === 'voice') {
-      try { await CallService.startVoiceCall(); }
-      catch (error) { Alert.alert('Unable to connect', error instanceof Error ? error.message : 'Please try again.'); }
-      return;
-    }
-    Alert.alert('Coming soon', type === 'video' ? 'Video calling is not enabled yet.' : 'Business calling is not enabled yet.');
-  };
   const invite = async () => {
     await Share.share({
       message: `Download Interpreter so I can speak to you in your language.\n\n${APP_DOWNLOAD_URL}`,
     });
+  };
+  const beginCall = async (type: ContactCallType) => {
+    if (type === 'voice') {
+      const phoneNumber = contact.phoneNumbers.find((item) => item.value.trim())?.value ?? '';
+      if (!phoneNumber) {
+        Alert.alert('This contact does not have a valid phone number.');
+        return;
+      }
+      try { await CallService.startVoiceCall(phoneNumber); }
+      catch (error) {
+        const message = error instanceof Error ? error.message : 'Please try again.';
+        if (message === 'This person does not have Interpreter yet.') {
+          Alert.alert(message, 'Invite to Interpreter.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Invite to Interpreter', onPress: () => void invite() },
+          ]);
+        } else {
+          Alert.alert('Unable to connect', message);
+        }
+      }
+      return;
+    }
+    Alert.alert('Coming soon', type === 'video' ? 'Video calling is not enabled yet.' : 'Business calling is not enabled yet.');
   };
 
   return (
