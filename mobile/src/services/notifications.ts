@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { authenticatedRequest } from './api';
+import { registerCurrentInstallation } from './deviceRegistration';
 
 export async function registerForAccountNotifications() {
   if (!Device.isDevice) throw new Error('Push notifications require a physical device.');
@@ -25,6 +26,7 @@ export async function registerForAccountNotifications() {
     method: 'POST',
     body: JSON.stringify({ expoPushToken, platform: Platform.OS }),
   });
+  await registerCurrentInstallation(expoPushToken);
   return expoPushToken;
 }
 
@@ -56,5 +58,6 @@ export async function registerForCallNotifications(requestPermission = true) {
   await authenticatedRequest<void>('/api/v1/notifications/devices', {
     method: 'POST', body: JSON.stringify({ expoPushToken, platform: Platform.OS }),
   });
+  await registerCurrentInstallation(expoPushToken);
   return expoPushToken;
 }

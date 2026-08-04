@@ -4,6 +4,7 @@ const helmet = require("helmet");
 const path = require("path");
 const accountRoutes = require("./src/server/routes/account");
 const contactRoutes = require("./src/server/routes/contacts");
+const deviceRoutes = require("./src/server/routes/devices");
 const callRoutes = require("./src/server/routes/calls");
 const interpretedCallRoutes = require("./src/server/routes/interpreted-calls");
 const liveKitWebhookRoutes = require("./src/server/routes/livekit-webhook");
@@ -34,6 +35,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 app.use("/api/v1/account", accountRoutes);
 app.use("/api/v1/contacts", contactRoutes);
+app.use("/api/v1/devices", deviceRoutes);
 app.use("/api/v1/calls", callRoutes);
 app.use("/api/v1/interpreted-calls", interpretedCallRoutes);
 app.use("/api/v1/notifications", notificationRoutes);

@@ -5,7 +5,7 @@ const { createCallRoom, createParticipantToken, deleteCallRoom, isLiveKitConfigu
 const { sendIncomingCallPush } = require("../push");
 const { getSupabaseAdmin, requireUser } = require("../supabase");
 const { stopInterpretedCall } = require("../interpreted-call-manager");
-const { normalizeContactPayload } = require("../contacts");
+const { normalizeE164 } = require("../devices");
 
 const router = express.Router();
 const CALL_SELECT = "id,room_name,caller_id,callee_id,contact_id,call_type,status,ringing_at,answered_at,ended_at,ended_by,duration_seconds,decline_reason,interpretation_enabled,caller_spoken_language,caller_heard_language,callee_spoken_language,callee_heard_language,interpretation_started_at,interpretation_ended_at,interpreted_seconds,created_at,updated_at";
@@ -61,21 +61,33 @@ async function loadParticipantCall(admin, callId, userId) {
   return data;
 }
 
+router.post("/lookup-recipient", async (req, res) => {
+  const phoneE164 = normalizeE164(req.body?.phoneNumber);
+  if (!phoneE164) return res.status(400).json({ error: "A valid phone number is required" });
+  const { data, error } = await getSupabaseAdmin().from("device_installations")
+    .select("user_id,installation_id")
+    .eq("phone_e164", phoneE164)
+    .neq("user_id", req.interpreterUser.id)
+    .order("last_seen_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return res.status(500).json({ error: "Unable to look up recipient" });
+  if (!data) return res.json({ available: false });
+  return res.json({ available: true, recipientId: data.user_id, installationId: data.installation_id });
+});
+
 router.post("/", async (req, res) => {
   if (!isLiveKitConfigured()) return res.status(503).json({ error: "Calling services are not configured" });
   const callType = typeof req.body?.callType === "string" ? req.body.callType : "";
   if (!CALL_TYPES.has(callType)) return res.status(400).json({ error: "A valid contact and call type are required" });
   const admin = getSupabaseAdmin();
   await expireMissedCalls(admin);
-  const localContact = normalizeContactPayload(req.body?.contact);
-  const candidates = [];
-  if (localContact?.emailHashes.length) candidates.push(admin.from("interpreter_user_directory").select("user_id").in("email_hash", localContact.emailHashes));
-  if (localContact?.phoneHashes.length) candidates.push(admin.from("interpreter_user_directory").select("user_id").in("phone_hash", localContact.phoneHashes));
-  const matches = candidates.length ? await Promise.all(candidates) : [];
-  const match = matches.flatMap((result) => result.data || []).find((item) => item.user_id !== req.interpreterUser.id);
-  const contact = match ? { interpreter_user_id: match.user_id, display_name: localContact.displayName } : null;
-  if (!contact?.interpreter_user_id) return res.status(409).json({ error: "Invite this contact to Interpreter before calling" });
-  if (contact.interpreter_user_id === req.interpreterUser.id) return res.status(400).json({ error: "You cannot call your own account" });
+  const recipientId = typeof req.body?.recipientId === "string" ? req.body.recipientId : "";
+  const installationId = typeof req.body?.installationId === "string" ? req.body.installationId : "";
+  const { data: recipient } = await admin.from("device_installations").select("user_id,installation_id")
+    .eq("user_id", recipientId).eq("installation_id", installationId).maybeSingle();
+  if (!recipient) return res.status(409).json({ error: "Invite this contact to Interpreter before calling" });
+  if (recipient.user_id === req.interpreterUser.id) return res.status(400).json({ error: "You cannot call your own installation" });
 
   const callId = crypto.randomUUID();
   const roomName = createRoomName();
@@ -85,7 +97,7 @@ router.post("/", async (req, res) => {
       p_call_id: callId,
       p_room_name: roomName,
       p_caller_id: req.interpreterUser.id,
-      p_callee_id: contact.interpreter_user_id,
+      p_callee_id: recipient.user_id,
       p_contact_id: null,
       p_call_type: callType
     }).single();
@@ -97,7 +109,7 @@ router.post("/", async (req, res) => {
           id: callId,
           room_name: roomName,
           caller_id: req.interpreterUser.id,
-          callee_id: contact.interpreter_user_id,
+          callee_id: recipient.user_id,
           contact_id: null,
           call_type: callType,
           status: "busy",
@@ -123,9 +135,17 @@ router.post("/", async (req, res) => {
     }).eq("id", callId).select(CALL_SELECT).single();
     if (languageError) throw languageError;
     const { data: callerProfile } = await admin.from("profiles").select("full_name").eq("id", req.interpreterUser.id).maybeSingle();
-    void sendIncomingCallPush(admin, { callId, callType, callerName: callerProfile?.full_name || "Interpreter user", calleeId: contact.interpreter_user_id }).catch(() => console.warn("[Calls] Push delivery failed", { category: "notification" }));
+    const push = await sendIncomingCallPush(admin, { callId, callType, callerName: callerProfile?.full_name || "Interpreter user", calleeId: recipient.user_id, installationId }).catch(() => {
+      console.warn("[Calls] Push delivery failed", { category: "notification" });
+      return { attempted: 0, accepted: 0 };
+    });
+    const callerToken = await createParticipantToken({ callType, identity: req.interpreterUser.id, name: callerProfile?.full_name || "Interpreter user", roomName });
     const [serialized] = await hydrateCalls(admin, [configuredCall], req.interpreterUser.id);
-    return res.status(201).json({ call: serialized });
+    return res.status(201).json({
+      call: serialized,
+      credential: { expiresIn: 600, livekitUrl: process.env.LIVEKIT_URL, token: callerToken },
+      pushDelivered: push.accepted > 0
+    });
   } catch {
     await deleteCallRoom(roomName);
     console.error("[Calls] Creation failed", { category: "call_setup" });

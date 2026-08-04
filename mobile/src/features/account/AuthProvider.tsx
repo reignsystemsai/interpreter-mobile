@@ -4,6 +4,7 @@ import * as Linking from 'expo-linking';
 
 import { ACCOUNT_SERVICES_CONFIGURED, LEGAL_REVIEW_APPROVED } from '../../config/runtime';
 import { authenticatedRequest } from '../../services/api';
+import { provisionDevicePhoneNumber, registerCurrentInstallation } from '../../services/deviceRegistration';
 import { supabase } from '../../services/supabase';
 
 type AuthContextValue = {
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     void client.auth.getSession().then(async ({ data }) => {
       if (data.session) {
         setSession(data.session);
+        await registerCurrentInstallation().catch(() => undefined);
         return;
       }
       const { data: guestData, error } = await client.auth.signInAnonymously({
@@ -47,9 +49,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
       });
       if (error) throw error;
       setSession(guestData.session);
+      await registerCurrentInstallation().catch(() => undefined);
     }).catch(() => setSession(null)).finally(() => setInitializing(false));
     const { data } = client.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
+      if (nextSession) void registerCurrentInstallation().catch(() => undefined);
       if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
     });
     return () => data.subscription.unsubscribe();
@@ -64,6 +68,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const accessToken = params.get('access_token');
       const refreshToken = params.get('refresh_token');
       const code = params.get('code');
+      const phoneNumber = params.get('phoneNumber');
+      if (phoneNumber) await provisionDevicePhoneNumber(phoneNumber);
       if (accessToken && refreshToken) {
         const { error } = await client.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
         if (error) throw error;
@@ -72,6 +78,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         if (error) throw error;
       }
       if (params.get('type') === 'recovery') setRecoveryMode(true);
+      if (phoneNumber) await registerCurrentInstallation();
     };
     void Linking.getInitialURL().then(applyAuthUrl).catch(() => undefined);
     const subscription = Linking.addEventListener('url', ({ url }) => {

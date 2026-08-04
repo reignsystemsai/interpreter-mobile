@@ -4,10 +4,13 @@ function validExpoPushToken(token) {
   return typeof token === "string" && (token.startsWith("ExponentPushToken[") || token.startsWith("ExpoPushToken["));
 }
 
-async function sendIncomingCallPush(admin, { callId, callType, callerName, calleeId }) {
-  const { data, error } = await admin.from("push_devices").select("token").eq("user_id", calleeId);
+async function sendIncomingCallPush(admin, { callId, callType, callerName, calleeId, installationId }) {
+  const query = installationId
+    ? admin.from("device_installations").select("expo_push_token").eq("installation_id", installationId).eq("user_id", calleeId)
+    : admin.from("push_devices").select("token").eq("user_id", calleeId);
+  const { data, error } = await query;
   if (error) throw new Error("Unable to load push devices");
-  const tokens = (data || []).map((item) => item.token).filter(validExpoPushToken);
+  const tokens = (data || []).map((item) => item.expo_push_token || item.token).filter(validExpoPushToken);
   if (!tokens.length) return { attempted: 0, accepted: 0 };
   const messages = tokens.map((to) => ({
     to,

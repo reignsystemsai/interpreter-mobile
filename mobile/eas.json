@@ -9,10 +9,21 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_MVP_DEVICE_PHONE_NUMBER": "+16892828783"
+      },
       "android": {
         "buildType": "apk"
       }
     },
+    "production": {
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_MVP_DEVICE_PHONE_NUMBER": "+13055189384"
+      }
+    }
+  },
+  "submit": {
     "production": {}
   }
 }

@@ -5,6 +5,7 @@ import { AndroidAudioTypePresets, AudioSession } from '@livekit/react-native';
 import { AudioPresets, LogLevel, Room, RoomEvent, setLogLevel } from 'livekit-client';
 
 import { authenticatedRequest } from '../../services/api';
+import { normalizeE164, registerCurrentInstallation } from '../../services/deviceRegistration';
 import { registerForCallNotifications } from '../../services/notifications';
 import { finishPerformance, markPerformance } from '../../services/performance';
 import { useAuth } from '../account/AuthProvider';
@@ -77,6 +78,7 @@ export function CallProvider({ children }: PropsWithChildren) {
   const reconnectAttempts = useRef(0);
   const appState = useRef(AppState.currentState);
   const terminalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startingCall = useRef(false);
 
   const updateConnectionStatus = useCallback((status: ConnectionStatus) => {
     connectionStatusRef.current = status;
@@ -118,7 +120,7 @@ export function CallProvider({ children }: PropsWithChildren) {
     disconnectingIntentionally.current = false;
   }, [updateConnectionStatus]);
 
-  const connectToCall = useCallback(async (call: CallRecord) => {
+  const connectToCall = useCallback(async (call: CallRecord, prefetchedCredential?: { expiresIn: number; livekitUrl: string; token: string }) => {
     if (roomRef.current || connectingCallId.current === call.id || reconnectAttempts.current >= MAX_CONNECT_ATTEMPTS) return;
     connectingCallId.current = call.id;
     const recovering = reconnectAttempts.current > 0 || ['disconnected', 'reconnecting'].includes(connectionStatusRef.current);
@@ -127,7 +129,7 @@ export function CallProvider({ children }: PropsWithChildren) {
     markPerformance('call_setup');
     let nextRoom: Room | null = null;
     try {
-      const credential = await authenticatedRequest<{ expiresIn: number; livekitUrl: string; token: string }>(`/api/v1/calls/${call.id}/token`, { method: 'POST' });
+      const credential = prefetchedCredential ?? await authenticatedRequest<{ expiresIn: number; livekitUrl: string; token: string }>(`/api/v1/calls/${call.id}/token`, { method: 'POST' });
       await AudioSession.configureAudio({
         android: {
           preferredOutputList: ['bluetooth', 'headset', 'speaker', 'earpiece'],
@@ -165,7 +167,7 @@ export function CallProvider({ children }: PropsWithChildren) {
     });
     roomRef.current = nextRoom;
     setRoom(nextRoom);
-      await nextRoom.connect(credential.livekitUrl, credential.token, { autoSubscribe: false, maxRetries: 3, peerConnectionTimeout: 12_000, websocketTimeout: 12_000 });
+      await nextRoom.connect(credential.livekitUrl, credential.token, { autoSubscribe: true, maxRetries: 3, peerConnectionTimeout: 12_000, websocketTimeout: 12_000 });
       await nextRoom.localParticipant.setMicrophoneEnabled(true, CALL_AUDIO_CAPTURE);
       if (call.callType !== 'voice') {
         await nextRoom.localParticipant.setCameraEnabled(true, { facingMode: 'user' });
@@ -176,8 +178,12 @@ export function CallProvider({ children }: PropsWithChildren) {
       reconnectAttempts.current = 0;
       updateConnectionStatus('connected');
       finishPerformance('call_setup');
-      const result = await authenticatedRequest<{ call: CallRecord }>(`/api/v1/calls/${call.id}/active`, { method: 'POST' });
-      setCurrentCall(result.call);
+      if (['accepted', 'active'].includes(call.status)) {
+        const result = await authenticatedRequest<{ call: CallRecord }>(`/api/v1/calls/${call.id}/active`, { method: 'POST' });
+        setCurrentCall(result.call);
+      } else {
+        setCurrentCall(call);
+      }
     } catch (error) {
       roomRef.current = null;
       setRoom(null);
@@ -195,13 +201,24 @@ export function CallProvider({ children }: PropsWithChildren) {
   }, [updateConnectionStatus]);
 
   const startCall = useCallback(async (callType: CallType, contact: { emailAddresses: Array<{ value: string }>; phoneNumbers: Array<{ value: string }> }) => {
-    if (currentCall || incomingCall) throw new Error('Finish the current call first.');
+    if (startingCall.current || currentCall || incomingCall) throw new Error('Unable to connect. Please try again.');
+    startingCall.current = true;
     try {
-      const result = await authenticatedRequest<{ call: CallRecord }>('/api/v1/calls', {
+      const phoneNumber = contact.phoneNumbers.map((item) => normalizeE164(item.value)).find(Boolean);
+      if (!phoneNumber) throw new Error('Invite this contact to Interpreter before calling.');
+      const recipient = await authenticatedRequest<{ available: boolean; recipientId?: string; installationId?: string }>('/api/v1/calls/lookup-recipient', {
+        method: 'POST',
+        body: JSON.stringify({ phoneNumber }),
+      });
+      if (!recipient.available || !recipient.recipientId || !recipient.installationId) {
+        throw new Error('Invite this contact to Interpreter before calling.');
+      }
+      const result = await authenticatedRequest<{ call: CallRecord; credential: { expiresIn: number; livekitUrl: string; token: string } }>('/api/v1/calls', {
         method: 'POST',
         body: JSON.stringify({
-          contact,
           callType,
+          installationId: recipient.installationId,
+          recipientId: recipient.recipientId,
           callerSpokenLanguage: languageOne,
           callerHeardLanguage: languageOne,
           calleeSpokenLanguage: languageTwo,
@@ -211,10 +228,13 @@ export function CallProvider({ children }: PropsWithChildren) {
       setCurrentCall(result.call);
       reconnectAttempts.current = 0;
       updateConnectionStatus('connecting');
+      await connectToCall(result.call, result.credential);
     } catch (error) {
       throw new Error(friendlyCallMessage(error));
+    } finally {
+      startingCall.current = false;
     }
-  }, [currentCall, incomingCall, languageOne, languageTwo, updateConnectionStatus]);
+  }, [connectToCall, currentCall, incomingCall, languageOne, languageTwo, updateConnectionStatus]);
 
   const retryCall = useCallback(async () => {
     if (!currentCall) return;
@@ -286,12 +306,15 @@ export function CallProvider({ children }: PropsWithChildren) {
       return;
     }
     void heartbeat('available').catch(() => undefined);
-    void registerForCallNotifications(false).catch(() => undefined);
+    void registerForCallNotifications(true).catch(() => undefined);
     void refreshHistory().catch(() => undefined);
     void refreshIncoming().catch(() => undefined);
     const heartbeatTimer = setInterval(() => { if (appState.current === 'active') void heartbeat('available').catch(() => undefined); }, 25_000);
     const incomingTimer = setInterval(() => { if (appState.current === 'active') void refreshIncoming().catch(() => undefined); }, 6_000);
-    return () => { clearInterval(heartbeatTimer); clearInterval(incomingTimer); };
+    const pushTokenSubscription = Notifications.addPushTokenListener(({ data }) => {
+      void registerCurrentInstallation(data).catch(() => undefined);
+    });
+    return () => { clearInterval(heartbeatTimer); clearInterval(incomingTimer); pushTokenSubscription.remove(); };
   }, [disconnectRoom, heartbeat, refreshHistory, refreshIncoming, user]);
 
   useEffect(() => {
