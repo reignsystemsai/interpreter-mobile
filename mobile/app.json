@@ -4,7 +4,7 @@
     "slug": "interpreter-ai",
     "owner": "www.interpreter.ai",
     "version": "1.1.0",
-    "icon": "./assets/interpreter-mark.png",
+    "icon": "./assets/interpreter-mark-clean.png",
     "orientation": "portrait",
     "scheme": "interpreterai",
     "userInterfaceStyle": "light",
@@ -13,6 +13,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "ai.interpreter.mobile",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "Interpreter.ai uses the microphone for translation and voice or video calls.",
         "NSCameraUsageDescription": "Interpreter.ai uses the camera when you start or accept a video call.",
         "UIBackgroundModes": [
@@ -25,9 +26,9 @@
     "android": {
       "package": "ai.interpreter.mobile",
       "edgeToEdgeEnabled": true,
-      "versionCode": 13,
+      "versionCode": 14,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/interpreter-mark.png",
+        "foregroundImage": "./assets/interpreter-mark-clean.png",
         "backgroundColor": "#F8FBFF"
       },
       "permissions": [
@@ -71,7 +72,7 @@
       "@config-plugins/react-native-webrtc"
     ],
     "splash": {
-      "image": "./assets/interpreter-mark.png",
+      "image": "./assets/interpreter-mark-clean.png",
       "resizeMode": "contain",
       "backgroundColor": "#F8FBFF"
     },

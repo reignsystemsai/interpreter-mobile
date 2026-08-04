@@ -4,13 +4,9 @@ const helmet = require("helmet");
 const path = require("path");
 const accountRoutes = require("./src/server/routes/account");
 const contactRoutes = require("./src/server/routes/contacts");
-const deviceRoutes = require("./src/server/routes/devices");
-const callRoutes = require("./src/server/routes/calls");
-const interpretedCallRoutes = require("./src/server/routes/interpreted-calls");
-const liveKitWebhookRoutes = require("./src/server/routes/livekit-webhook");
 const notificationRoutes = require("./src/server/routes/notifications");
-const presenceRoutes = require("./src/server/routes/presence");
 const subscriptionRoutes = require("./src/server/routes/subscriptions");
+const voiceCallRoutes = require("./src/server/routes/voice-call");
 const { isSupabaseConfigured } = require("./src/server/supabase");
 const { isLiveKitConfigured } = require("./src/server/livekit");
 require("dotenv").config();
@@ -29,18 +25,14 @@ app.use(
   })
 );
 app.use(cors());
-app.use("/api/v1/livekit/webhook", liveKitWebhookRoutes);
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 app.use("/api/v1/account", accountRoutes);
 app.use("/api/v1/contacts", contactRoutes);
-app.use("/api/v1/devices", deviceRoutes);
-app.use("/api/v1/calls", callRoutes);
-app.use("/api/v1/interpreted-calls", interpretedCallRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
-app.use("/api/v1/presence", presenceRoutes);
 app.use("/api/v1/subscriptions", subscriptionRoutes);
+app.use("/api/v1/voice-call", voiceCallRoutes);
 
 app.get("/health", (req, res) => {
   res.status(200).json({

@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { type InterpreterContact, useContacts } from './ContactsProvider';
-import { useCalling } from '../calling/CallProvider';
-import type { CallType } from '../calling/types';
+import { CallService } from '../calling/CallService';
 
 const LANGUAGES = ['English', 'Spanish', 'Brazilian Portuguese', 'French', 'German', 'Italian', 'Dutch', 'Russian', 'Polish', 'Romanian', 'Turkish', 'Arabic', 'Hebrew', 'Hindi', 'Japanese', 'Korean', 'Mandarin Chinese', 'Cantonese', 'Vietnamese', 'Thai'];
 const APP_DOWNLOAD_URL = 'https://interpreter.ai/download';
 type Filter = 'all' | 'favorites' | 'recent';
+type ContactCallType = 'voice' | 'video' | 'business_video';
 
 export function ContactsPermissionPanel({ onBack }: { onBack: () => void }) {
   const { contacts, deleteAllContacts, deleteContact, error, loading, permission, requestAndImport, updateContact } = useContacts();
@@ -77,7 +77,6 @@ function permissionLabel(permission: ReturnType<typeof useContacts>['permission'
 }
 
 function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: InterpreterContact; onBack: () => void; onDelete: () => Promise<void>; onUpdate: (update: Parameters<ReturnType<typeof useContacts>['updateContact']>[1]) => Promise<InterpreterContact> }) {
-  const { presenceFor, startCall } = useCalling();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(contact.displayName);
   const [phone, setPhone] = useState(contact.phoneNumbers[0]?.value ?? '');
@@ -99,9 +98,13 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
     } catch (nextError) { Alert.alert('Unable to save', nextError instanceof Error ? nextError.message : 'Try again.'); }
     finally { setBusy(false); }
   };
-  const beginCall = async (type: CallType) => {
-    try { await startCall(type, { emailAddresses: contact.emailAddresses, phoneNumbers: contact.phoneNumbers }); }
-    catch (nextError) { Alert.alert('Unable to call', nextError instanceof Error ? nextError.message : 'Try again.'); }
+  const beginCall = async (type: ContactCallType) => {
+    if (type === 'voice') {
+      try { await CallService.startVoiceCall(); }
+      catch (error) { Alert.alert('Unable to connect', error instanceof Error ? error.message : 'Please try again.'); }
+      return;
+    }
+    Alert.alert('Coming soon', type === 'video' ? 'Video calling is not enabled yet.' : 'Business calling is not enabled yet.');
   };
   const invite = async () => {
     await Share.share({
@@ -114,7 +117,7 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
       <Pressable onPress={onBack} style={styles.back}><Text style={styles.backText}>‹ Contacts</Text></Pressable>
       <View style={styles.detailAvatar}><Text style={styles.detailAvatarText}>{contact.displayName.slice(0, 1).toUpperCase()}</Text></View>
       {editing ? <TextInput onChangeText={setName} placeholder="Contact name" style={styles.input} value={name} /> : <Text style={styles.detailName}>{contact.displayName}</Text>}
-      <Text style={styles.userStatus}>{contact.isInterpreterUser ? `Uses Interpreter · ${presenceFor(contact.id).replace('_', ' ')}` : 'Device contact'}</Text>
+      <Text style={styles.userStatus}>Device contact</Text>
       <View style={styles.callGrid}>{([{ label: 'Voice Call', type: 'voice' }, { label: 'Video Call', type: 'video' }, { label: 'Business Video Call', type: 'business_video' }] as const).map((item) => <Pressable key={item.type} onPress={() => void beginCall(item.type)} style={styles.callButton}><Text style={styles.callIcon}>{item.type === 'voice' ? '☎' : '▣'}</Text><Text style={styles.callLabel}>{item.label}</Text></Pressable>)}</View>
       <PrimaryButton label="Invite to Interpreter" onPress={() => void invite().catch(() => Alert.alert('Unable to open invite'))} />
       <Text style={styles.sectionTitle}>Contact details</Text>
