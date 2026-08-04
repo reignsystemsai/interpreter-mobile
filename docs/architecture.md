@@ -10,7 +10,7 @@ commerce work must never add a proxy hop to live audio.
   WebRTC media. This remains stateless and latency-sensitive.
 - **Identity:** Supabase Auth issues user sessions. The mobile client stores its
   refresh session in encrypted device storage. Render validates access tokens;
-  the Supabase service-role key is server-only.
+  `SUPABASE_SECRET_KEY` is server-only.
 - **Account data:** Supabase Postgres with row-level security and cascade deletion.
 - **Subscriptions:** Google Play Billing through RevenueCat. RevenueCat webhooks
   update a server-owned entitlement projection; the client never grants itself

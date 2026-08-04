@@ -3,7 +3,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import {
   ACCOUNT_SERVICES_CONFIGURED,
-  SUPABASE_ANON_KEY,
+  SUPABASE_PUBLISHABLE_KEY,
   SUPABASE_URL,
 } from '../config/runtime';
 
@@ -14,7 +14,7 @@ const secureStorage = {
 };
 
 export const supabase: SupabaseClient | null = ACCOUNT_SERVICES_CONFIGURED
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
       auth: {
         autoRefreshToken: true,
         detectSessionInUrl: false,

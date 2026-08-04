@@ -63,14 +63,17 @@ is absent; the live interpreter continues to use the production backend.
 Set only public mobile values in the EAS environment:
 
 ```text
-EXPO_PUBLIC_SUPABASE_URL
-EXPO_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_URL
+SUPABASE_PUBLISHABLE_KEY
+LIVEKIT_URL
 EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY
 EXPO_PUBLIC_LEGAL_REVIEW_APPROVED=false
 ```
 
-Never place the Supabase service-role key, RevenueCat webhook authorization, or
-OpenAI API key in Expo variables. Configure Google Play and RevenueCat products
+The active Expo config copies only the Supabase URL, publishable key, and LiveKit
+URL into public app configuration. Never place `SUPABASE_SECRET_KEY`,
+`LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, RevenueCat webhook authorization, or the
+OpenAI API key in Expo configuration. Configure Google Play and RevenueCat products
 with IDs `interpreter_pro_monthly` and `interpreter_unlimited_monthly`.
 
 Account creation and customer-facing legal links stay disabled while

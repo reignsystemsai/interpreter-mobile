@@ -50,8 +50,9 @@ The existing low-latency OpenAI Realtime route remains unchanged. Account,
 membership, notification, and usage data is isolated under versioned `/api/v1`
 modules so it can scale independently from live interpretation.
 
-Production account features require server-only `SUPABASE_URL`,
-`SUPABASE_SERVICE_ROLE_KEY`, and `REVENUECAT_WEBHOOK_AUTH` values. Apply
+Production account features require `SUPABASE_URL`, the server-only
+`SUPABASE_SECRET_KEY`, and `REVENUECAT_WEBHOOK_AUTH`. Calling services use
+`LIVEKIT_URL`, `LIVEKIT_API_KEY`, and the server-only `LIVEKIT_API_SECRET`. Apply
 `supabase/migrations/202608030001_account_membership_foundation.sql` before
 enabling accounts, then configure RevenueCat's authorized webhook at
 `POST /api/v1/subscriptions/revenuecat/webhook`.

@@ -6,6 +6,7 @@ const accountRoutes = require("./src/server/routes/account");
 const notificationRoutes = require("./src/server/routes/notifications");
 const subscriptionRoutes = require("./src/server/routes/subscriptions");
 const { isSupabaseConfigured } = require("./src/server/supabase");
+const { isLiveKitConfigured } = require("./src/server/livekit");
 require("dotenv").config();
 
 const app = express();
@@ -35,6 +36,7 @@ app.get("/health", (req, res) => {
     service: "interpreter-api",
     openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
     accountServicesConfigured: isSupabaseConfigured(),
+    liveKitConfigured: isLiveKitConfigured(),
     timestamp: new Date().toISOString()
   });
 });
