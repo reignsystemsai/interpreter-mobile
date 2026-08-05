@@ -7,4 +7,4 @@ The following applied migrations belong to the disconnected calling implementati
 - `202608040001_device_installations.sql`
 - `202608040001_three_minute_interpreter_trial.sql`
 
-Their calling tables, policies, indexes, and functions are historical only. Phase 1 does not rewrite applied migrations or execute destructive database changes. The clean calling foundation will supersede this schema with a new migration after its exact two-table contract is defined.
+Their calling tables, policies, indexes, and functions are historical only. They are superseded by `202608050001_clean_voice_call_rebuild.sql`, which removes the old account-based calling objects and creates only `device_installations` and `active_calls` for the clean voice-call architecture.

@@ -39,7 +39,7 @@ export function phoneRegionFromE164(value?: string | null) {
   catch { return undefined; }
 }
 
-async function getDeviceId() {
+export async function getDeviceId() {
   const existing = await SecureStore.getItemAsync(DEVICE_ID_KEY);
   if (existing) return existing;
   const created = `${Platform.OS}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
@@ -75,12 +75,28 @@ export async function registerDeviceInstallation(phoneNumber: string, defaultReg
   const response = await fetch(`${API_BASE_URL}/api/v1/devices/register`, {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ defaultRegion, deviceId, phoneNumber: phoneNumberE164, platform: Platform.OS, pushToken }),
+    body: JSON.stringify({
+      appVersion: Constants.expoConfig?.version ?? null,
+      defaultRegion,
+      deviceId,
+      phoneNumber: phoneNumberE164,
+      platform: Platform.OS,
+      pushToken,
+    }),
   });
-  if (!response.ok) throw new Error('Device registration is temporarily unavailable.');
+  const payload = (await response.json().catch(() => ({}))) as {
+    deviceId?: string;
+    enabled?: boolean;
+    installationId?: string;
+    phoneNumberE164?: string;
+    platform?: string;
+  };
+  if (!response.ok || payload.deviceId !== deviceId || payload.phoneNumberE164 !== phoneNumberE164 || !payload.installationId) {
+    throw new Error('Device registration is temporarily unavailable.');
+  }
   await SecureStore.setItemAsync(PHONE_KEY, phoneNumberE164);
   await SecureStore.setItemAsync(PHONE_PROMPTED_KEY, '1');
-  return phoneNumberE164;
+  return { ...payload, deviceId, phoneNumberE164 };
 }
 
 export async function restoreAndRefreshDeviceRegistration() {
@@ -111,11 +127,13 @@ export async function lookupDeviceByPhone(phoneNumber: string, defaultRegion = d
     body: JSON.stringify({ defaultRegion, phoneNumber: normalized }),
   });
   const payload = (await response.json().catch(() => ({}))) as {
-    available?: boolean;
-    recipient?: { installationId?: string };
+    deviceId?: string;
+    found?: boolean;
+    installationId?: string;
+    platform?: 'ios' | 'android';
   };
   if (!response.ok) throw new Error('Unable to check this contact right now.');
-  return payload.available && payload.recipient?.installationId
-    ? { available: true as const, installationId: payload.recipient.installationId }
-    : { available: false as const };
+  return payload.found && payload.installationId && payload.deviceId && payload.platform
+    ? { found: true as const, installationId: payload.installationId, deviceId: payload.deviceId, platform: payload.platform }
+    : { found: false as const };
 }

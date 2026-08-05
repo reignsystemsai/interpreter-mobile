@@ -28,14 +28,6 @@ async function deleteVoiceRoom(roomName) {
   }
 }
 
-async function clearStaleVoiceRooms() {
-  if (!isLiveKitConfigured()) return 0;
-  const rooms = await roomService().listRooms();
-  const staleRooms = rooms.filter((room) => room.name.startsWith("voice-"));
-  await Promise.all(staleRooms.map((room) => roomService().deleteRoom(room.name)));
-  return staleRooms.length;
-}
-
 async function createVoiceToken({ identity, roomName }) {
   if (!isLiveKitConfigured()) throw new Error("LiveKit is not configured");
   const token = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, {
@@ -54,4 +46,4 @@ async function createVoiceToken({ identity, roomName }) {
   return token.toJwt();
 }
 
-module.exports = { clearStaleVoiceRooms, createVoiceRoom, createVoiceToken, deleteVoiceRoom, isLiveKitConfigured, liveKitHttpUrl };
+module.exports = { createVoiceRoom, createVoiceToken, deleteVoiceRoom, isLiveKitConfigured, liveKitHttpUrl };

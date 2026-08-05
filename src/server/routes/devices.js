@@ -14,6 +14,7 @@ router.post("/register", async (req, res) => {
   const phoneNumberE164 = normalizeE164(req.body?.phoneNumber, req.body?.defaultRegion);
   const platform = req.body?.platform === "ios" ? "ios" : req.body?.platform === "android" ? "android" : "";
   const pushToken = cleanText(req.body?.pushToken, 300) || null;
+  const appVersion = cleanText(req.body?.appVersion, 40) || null;
   if (deviceId.length < 16 || !phoneNumberE164 || !platform) {
     return res.status(400).json({ error: "Invalid device registration." });
   }
@@ -28,13 +29,26 @@ router.post("/register", async (req, res) => {
       phone_number_e164: phoneNumberE164,
       platform,
       push_token: pushToken,
+      app_version: appVersion,
       updated_at: now
     }, { onConflict: "device_id" })
-    .select("id,device_id,phone_number_e164")
+    .select("id,device_id,phone_number_e164,platform,enabled")
     .single();
-  if (error) return res.status(500).json({ error: "Unable to register this device." });
+  if (error) {
+    console.error("[VoiceCall] device registration persistence failed", { code: error.code || "unknown" });
+    return res.status(500).json({ error: "Unable to register this device.", code: "registration_persistence_failed" });
+  }
+  if (!data || data.device_id !== deviceId || data.phone_number_e164 !== phoneNumberE164) {
+    return res.status(500).json({ error: "Unable to verify device registration.", code: "registration_verification_failed" });
+  }
   console.info("[DeviceRouting] device registered", { deviceId: data.device_id, platform });
-  return res.status(200).json({ registered: true, installationId: data.id });
+  return res.status(200).json({
+    installationId: data.id,
+    deviceId: data.device_id,
+    phoneNumberE164: data.phone_number_e164,
+    platform: data.platform,
+    enabled: data.enabled
+  });
 });
 
 router.post("/lookup", async (req, res) => {
@@ -43,15 +57,15 @@ router.post("/lookup", async (req, res) => {
   if (!phoneNumberE164) return res.status(400).json({ error: "Invalid phone number." });
   const { data, error } = await getSupabaseAdmin()
     .from("device_installations")
-    .select("id")
+    .select("id,device_id,platform")
     .eq("phone_number_e164", phoneNumberE164)
     .eq("enabled", true)
     .order("last_seen_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) return res.status(500).json({ error: "Unable to look up this device." });
-  if (!data) return res.status(200).json({ available: false });
-  return res.status(200).json({ available: true, recipient: { installationId: data.id } });
+  if (!data) return res.status(200).json({ found: false });
+  return res.status(200).json({ found: true, installationId: data.id, deviceId: data.device_id, platform: data.platform });
 });
 
 module.exports = router;

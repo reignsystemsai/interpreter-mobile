@@ -4,10 +4,9 @@ import { BlurView } from 'expo-blur';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 import { ContactsPermissionPanel } from '../contacts/ContactsPermissionPanel';
-import { VoiceCallTestPanel } from './VoiceCallTestPanel';
-import { CallService } from './CallService';
+import { VoiceCallService } from './VoiceCallService';
 
-type CallingView = 'actions' | 'contacts' | 'voice_test';
+type CallingView = 'actions' | 'contacts';
 
 const BLUE = '#075BFF';
 const ACTIONS = [
@@ -34,17 +33,15 @@ export function CallingOverlay({ onClose, visible }: {
   const close = () => {
     setView('actions');
     setAutoRequestContacts(false);
-    void CallService.endCall();
     onClose();
   };
   useEffect(() => {
-    if (visible) void CallService.resetStaleCallState();
-    else setView('actions');
+    if (!visible) setView('actions');
   }, [visible]);
   useEffect(() => {
     if (!visible) return;
-    return CallService.subscribe((state) => {
-      if (state.status !== 'connecting') return;
+    return VoiceCallService.subscribe((state) => {
+      if (state.status !== 'preparing') return;
       setView('actions');
       onClose();
     });
@@ -65,7 +62,7 @@ export function CallingOverlay({ onClose, visible }: {
           <Pressable accessibilityLabel="Close calling" onPress={close} style={StyleSheet.absoluteFill} />
           <View accessibilityViewIsModal {...panResponder.panHandlers} style={styles.sheet}>
             <Pressable accessibilityLabel="Close calling" accessibilityRole="button" onPress={close} style={styles.close}><Text style={styles.closeText}>×</Text></Pressable>
-            {view === 'contacts' ? <ContactsPermissionPanel autoRequest={autoRequestContacts} onBack={close} /> : view === 'voice_test' ? <VoiceCallTestPanel onBack={() => setView('actions')} /> : (
+            {view === 'contacts' ? <ContactsPermissionPanel autoRequest={autoRequestContacts} onBack={close} /> : (
               <View style={styles.content}>
                 <Text style={styles.eyebrow}>INTERPRETER CALLING</Text>
                 <Text style={styles.title}>Connect in any language</Text>
@@ -91,7 +88,6 @@ export function CallingOverlay({ onClose, visible }: {
                 <Pressable accessibilityRole="button" onPress={() => { setAutoRequestContacts(true); setView('contacts'); }} style={({ pressed }) => [styles.cta, pressed && styles.pressed]}>
                   <Text style={styles.ctaText}>Get Started</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" onPress={() => setView('voice_test')} style={styles.testFallback}><Text style={styles.testFallbackText}>Use temporary call code</Text></Pressable>
               </View>
             )}
           </View>
@@ -120,5 +116,4 @@ const styles = StyleSheet.create({
   noAccount: { color: BLUE, fontSize: 12, fontWeight: '600', marginTop: 3, textAlign: 'center' },
   cta: { alignItems: 'center', backgroundColor: BLUE, borderRadius: 30, justifyContent: 'center', marginTop: 'auto', minHeight: 58 },
   ctaText: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
-  testFallback: { alignItems: 'center', paddingVertical: 12 }, testFallbackText: { color: BLUE, fontSize: 13, fontWeight: '600' },
 });

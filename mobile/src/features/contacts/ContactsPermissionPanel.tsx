@@ -3,7 +3,7 @@ import { Alert, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Text, 
 import type { CountryCode } from 'libphonenumber-js';
 
 import { type InterpreterContact, useContacts } from './ContactsProvider';
-import { CallService } from '../calling/CallService';
+import { VoiceCallService } from '../calling/VoiceCallService';
 import {
   deviceDefaultPhoneRegion,
   getRegisteredPhoneNumber,
@@ -11,6 +11,7 @@ import {
   normalizePhoneRegion,
   phoneRegionFromE164,
   registerDeviceInstallation,
+  lookupDeviceByPhone,
 } from '../../services/deviceRegistration';
 
 const LANGUAGES = ['English', 'Spanish', 'Brazilian Portuguese', 'French', 'German', 'Italian', 'Dutch', 'Russian', 'Polish', 'Romanian', 'Turkish', 'Arabic', 'Hebrew', 'Hindi', 'Japanese', 'Korean', 'Mandarin Chinese', 'Cantonese', 'Vietnamese', 'Thai'];
@@ -103,6 +104,7 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
   const [ownPhoneNumber, setOwnPhoneNumber] = useState('');
   const [pendingContactPhone, setPendingContactPhone] = useState('');
   const [pendingContactRegion, setPendingContactRegion] = useState<CountryCode>(deviceDefaultPhoneRegion());
+  const [numberChoices, setNumberChoices] = useState<Array<{ raw: string; region: CountryCode }>>([]);
   const [registrationError, setRegistrationError] = useState('');
   useEffect(() => { setName(contact.displayName); setPhone(contact.phoneNumbers[0]?.value ?? ''); setEmail(contact.emailAddresses[0]?.value ?? ''); setLanguage(contact.preferredLanguage); }, [contact]);
 
@@ -125,39 +127,56 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
     });
   };
   const startContactCall = async (phoneNumber: string, defaultRegion: CountryCode) => {
-    try { await CallService.startVoiceCall(phoneNumber, defaultRegion); }
+    try {
+      const recipient = await lookupDeviceByPhone(phoneNumber, defaultRegion);
+      if (!recipient.found) throw new Error('This person does not have Interpreter yet.');
+      await VoiceCallService.startVoiceCall({ contactName: contact.displayName, defaultRegion, phoneNumber });
+    }
     catch (error) {
       const message = error instanceof Error ? error.message : 'Please try again.';
       if (message === 'This person does not have Interpreter yet.') {
         Alert.alert(message, 'Invite to Interpreter.', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Invite to Interpreter', onPress: () => void invite() },
+          { text: 'Cancel', style: 'cancel', onPress: () => void VoiceCallService.resetVoiceCall({ notifyBackend: false }) },
+          { text: 'Invite to Interpreter', onPress: () => void invite().finally(() => VoiceCallService.resetVoiceCall({ notifyBackend: false })) },
         ]);
-      } else {
+      } else if (VoiceCallService.getState().status !== 'failed') {
         Alert.alert('Unable to connect', message);
       }
     }
+  };
+  const choosePhoneForCall = async (raw: string, region: CountryCode) => {
+    setNumberChoices([]);
+    const registeredPhone = await getRegisteredPhoneNumber().catch(() => null);
+    if (!registeredPhone) {
+      setPendingContactPhone(raw);
+      setPendingContactRegion(region);
+      setNumberPromptVisible(true);
+      return;
+    }
+    await startContactCall(raw, region);
   };
   const beginCall = async (type: ContactCallType) => {
     if (type === 'voice') {
       const registeredPhone = await getRegisteredPhoneNumber().catch(() => null);
       const fallbackRegion = phoneRegionFromE164(registeredPhone) ?? deviceDefaultPhoneRegion();
-      const selectedPhone = contact.phoneNumbers.find((item) => {
+      const validPhones = contact.phoneNumbers.flatMap((item) => {
         const region = normalizePhoneRegion(item.countryCode) ?? fallbackRegion;
-        return Boolean(normalizeE164(item.value, region));
+        return normalizeE164(item.value, region) ? [{ raw: item.value, region }] : [];
       });
-      if (!selectedPhone) {
-        Alert.alert('This contact does not have a valid phone number.');
+      if (!validPhones.length) {
+        Alert.alert('This contact has no phone number saved.', 'Enter a phone number to continue.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Enter Number', onPress: () => setEditing(true) },
+        ]);
         return;
       }
-      const selectedRegion = normalizePhoneRegion(selectedPhone.countryCode) ?? fallbackRegion;
-      if (!registeredPhone) {
-        setPendingContactPhone(selectedPhone.value);
-        setPendingContactRegion(selectedRegion);
-        setNumberPromptVisible(true);
+      if (validPhones.length > 1) {
+        setNumberChoices(validPhones);
         return;
       }
-      await startContactCall(selectedPhone.value, selectedRegion);
+      const [onlyPhone] = validPhones;
+      if (!onlyPhone) return;
+      await choosePhoneForCall(onlyPhone.raw, onlyPhone.region);
       return;
     }
     Alert.alert('Coming soon', type === 'video' ? 'Video calling is not enabled yet.' : 'Business calling is not enabled yet.');
@@ -202,6 +221,16 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
         </View>
       </View>
     </Modal>
+    <Modal animationType="fade" onRequestClose={() => setNumberChoices([])} transparent visible={numberChoices.length > 0}>
+      <View style={styles.numberBackdrop}>
+        <View accessibilityViewIsModal style={styles.numberCard}>
+          <Text style={styles.numberTitle}>Choose a phone number</Text>
+          <Text style={styles.numberBody}>Select the number to call for {contact.displayName}.</Text>
+          {numberChoices.map((choice) => <Pressable key={`${choice.region}-${choice.raw}`} onPress={() => void choosePhoneForCall(choice.raw, choice.region)} style={styles.numberChoice}><Text style={styles.numberChoiceText}>{choice.raw}</Text></Pressable>)}
+          <SecondaryButton label="Cancel" onPress={() => setNumberChoices([])} />
+        </View>
+      </View>
+    </Modal>
   </>;
 }
 
@@ -219,4 +248,5 @@ const styles = StyleSheet.create({
   contactList: { paddingBottom: 28, paddingTop: 8 }, contactRow: { alignItems: 'center', borderBottomColor: '#E5EBF3', borderBottomWidth: 1, flexDirection: 'row', minHeight: 68 }, avatar: { alignItems: 'center', backgroundColor: '#EAF1FF', borderRadius: 20, height: 40, justifyContent: 'center', width: 40 }, avatarText: { color: BLUE, fontSize: 17, fontWeight: '800' }, contactCopy: { flex: 1, marginLeft: 11 }, contactName: { color: '#101828', fontSize: 16, fontWeight: '700' }, contactMeta: { color: '#667085', fontSize: 11, marginTop: 3 }, star: { color: '#98A2B3', fontSize: 24, padding: 5 }, starActive: { color: '#FFB000' }, chevron: { color: '#7E8BA3', fontSize: 28 }, empty: { color: '#667085', fontSize: 14, lineHeight: 21, paddingHorizontal: 15, paddingVertical: 28, textAlign: 'center' }, pressed: { opacity: 0.62 }, manageCard: { borderTopColor: '#DDE5F1', borderTopWidth: 1, marginTop: 12, paddingTop: 4 }, danger: { alignItems: 'center', marginTop: 9, paddingVertical: 13 }, dangerText: { color: '#D92D20', fontSize: 15, fontWeight: '600' },
   details: { paddingBottom: 34 }, detailAvatar: { alignItems: 'center', alignSelf: 'center', backgroundColor: '#EAF1FF', borderRadius: 40, height: 80, justifyContent: 'center', width: 80 }, detailAvatarText: { color: BLUE, fontSize: 34, fontWeight: '800' }, detailName: { color: '#101828', fontSize: 25, fontWeight: '800', marginTop: 9, textAlign: 'center' }, userStatus: { color: '#667085', fontSize: 13, marginTop: 4, textAlign: 'center' }, callGrid: { flexDirection: 'row', gap: 7, marginTop: 17 }, callButton: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.8)', borderColor: '#DDE5F1', borderRadius: 16, borderWidth: 1, flex: 1, minHeight: 78, justifyContent: 'center', padding: 6 }, callIcon: { color: BLUE, fontSize: 22 }, callLabel: { color: '#344054', fontSize: 10, fontWeight: '600', marginTop: 5, textAlign: 'center' }, sectionTitle: { color: '#344054', fontSize: 15, fontWeight: '800', marginBottom: 7, marginTop: 20 }, detailCard: { backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 18, paddingHorizontal: 15 }, detailRow: { borderBottomColor: '#E8EDF4', borderBottomWidth: 1, paddingVertical: 11 }, fieldLabel: { color: '#667085', fontSize: 11, fontWeight: '700' }, detailValue: { color: '#101828', fontSize: 15, lineHeight: 21, marginTop: 3 }, input: { backgroundColor: '#FFFFFF', borderColor: '#DDE5F1', borderRadius: 15, borderWidth: 1, color: '#101828', fontSize: 15, marginTop: 9, paddingHorizontal: 14, paddingVertical: 12 }, languages: { marginTop: 8 }, languageChip: { backgroundColor: '#FFFFFF', borderColor: '#DDE5F1', borderRadius: 15, borderWidth: 1, marginRight: 7, paddingHorizontal: 11, paddingVertical: 8 }, languageChipActive: { backgroundColor: BLUE, borderColor: BLUE }, languageText: { color: '#475467', fontSize: 12 }, languageTextActive: { color: '#FFFFFF' },
   numberBackdrop: { alignItems: 'center', backgroundColor: 'rgba(8,18,38,0.22)', flex: 1, justifyContent: 'center', padding: 24 }, numberCard: { backgroundColor: 'rgba(248,251,255,0.92)', borderRadius: 26, maxWidth: 420, padding: 22, width: '100%' }, numberTitle: { color: '#101828', fontSize: 22, fontWeight: '800', textAlign: 'center' }, numberBody: { color: '#667085', fontSize: 14, lineHeight: 20, marginTop: 7, textAlign: 'center' },
+  numberChoice: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.78)', borderRadius: 16, marginTop: 10, paddingVertical: 14 }, numberChoiceText: { color: '#075BFF', fontSize: 16, fontWeight: '700' },
 });

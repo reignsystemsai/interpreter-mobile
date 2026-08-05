@@ -68,7 +68,7 @@ export function ContactsProvider({ children }: PropsWithChildren) {
     setError('');
     try {
       const result = await Contacts.getContactsAsync({
-        fields: [Contacts.Fields.ID, Contacts.Fields.Name, Contacts.Fields.FirstName, Contacts.Fields.LastName, Contacts.Fields.Company, Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails],
+        fields: [Contacts.Fields.ID, Contacts.Fields.Name, Contacts.Fields.FirstName, Contacts.Fields.LastName, Contacts.Fields.Company, Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.ImageAvailable],
         pageSize: 0,
         sort: Contacts.SortTypes.FirstName,
       });

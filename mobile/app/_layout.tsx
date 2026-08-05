@@ -6,8 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import { AuthProvider } from '../src/features/account/AuthProvider';
 import { ContactsProvider } from '../src/features/contacts/ContactsProvider';
-import { CallProvider } from '../src/features/calling/CallProvider';
-import { DeviceRegistrationPrompt } from '../src/features/calling/DeviceRegistrationPrompt';
+import { VoiceCallHost } from '../src/features/calling/VoiceCallHost';
 import { LanguagePreferencesProvider } from '../src/features/languages/LanguagePreferencesProvider';
 
 registerGlobals();
@@ -17,8 +16,7 @@ export default function RootLayout() {
     <AuthProvider>
       <LanguagePreferencesProvider>
         <ContactsProvider>
-          <CallProvider>
-            <DeviceRegistrationPrompt />
+            <VoiceCallHost />
             <StatusBar backgroundColor="#FFFFFF" style="dark" />
             <Stack
               screenOptions={{
@@ -27,7 +25,6 @@ export default function RootLayout() {
                 headerShown: false,
               }}
             />
-          </CallProvider>
         </ContactsProvider>
       </LanguagePreferencesProvider>
     </AuthProvider>
