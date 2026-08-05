@@ -95,7 +95,7 @@ router.post("/start", async (req, res) => {
     }).select("*").single();
     if (inserted.error) throw inserted.error;
     row = inserted.data;
-    const callerToken = await createVoiceToken({ identity: `${callerDeviceId}:${row.id}:caller`, roomName });
+    const callerToken = await createVoiceToken({ identity: `${callerDeviceId}:${row.id}:caller`, roomName, callType });
     console.info("[VoiceCall] caller token generated", { callId: row.id });
     const push = await sendIncomingVoiceCallPush(admin, {
       callId: row.id,
@@ -132,7 +132,7 @@ router.post("/:callId/accept", async (req, res) => {
   }
   const updated = await admin.from("active_calls").update({ status: "accepted", accepted_at: new Date().toISOString() }).eq("id", callId).eq("status", "ringing").select("id").maybeSingle();
   if (updated.error || !updated.data) return callError(res, 409, "call_not_available", "This call is no longer available.");
-  const recipientToken = await createVoiceToken({ identity: `${recipientDeviceId}:${callId}:recipient`, roomName: row.room_name });
+  const recipientToken = await createVoiceToken({ identity: `${recipientDeviceId}:${callId}:recipient`, roomName: row.room_name, callType: row.call_type });
   console.info("[VoiceCall] recipient token generated", { callId });
   return res.status(200).json({ callId, callType: row.call_type, roomName: row.room_name, livekitUrl: process.env.LIVEKIT_URL, recipientToken });
 });

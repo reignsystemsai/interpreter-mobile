@@ -14,12 +14,13 @@ test("video calls reuse the existing LiveKit call lifecycle", () => {
   const migration = read("supabase", "migrations", "202608050002_video_calls.sql");
 
   assert.match(service, /startVideoCall/);
-  assert.match(service, /setCameraEnabled\(true\)/);
+  assert.match(service, /setCameraEnabled\(true, FRONT_CAMERA_CAPTURE\)/);
   assert.match(service, /remoteVideoTrack/);
   assert.match(surface, /VideoView/);
   assert.match(surface, /Camera Off/);
   assert.match(contacts, /beginCall\('video'\)/);
   assert.match(routes, /callType === "video"/);
   assert.match(routes, /call_type: callType/);
+  assert.match(routes, /createVoiceToken\([^\n]+callType/);
   assert.match(migration, /check \(call_type in \('voice', 'video'\)\)/);
 });
