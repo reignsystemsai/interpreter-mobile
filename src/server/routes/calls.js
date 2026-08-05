@@ -34,7 +34,7 @@ router.get("/incoming", async (req, res) => {
   if (deviceId.length < 16) return callError(res, 400, "invalid_device", "Unable to check incoming calls.");
   const { data, error } = await getSupabaseAdmin()
     .from("active_calls")
-    .select("id,caller_phone_e164")
+    .select("id,caller_phone_e164,call_type")
     .eq("recipient_device_id", deviceId)
     .eq("status", "ringing")
     .order("created_at", { ascending: false })
@@ -42,7 +42,7 @@ router.get("/incoming", async (req, res) => {
     .maybeSingle();
   if (error) return callError(res, 502, "call_state_unavailable", "Unable to check incoming calls.");
   if (!data) return res.status(200).json({ incoming: false });
-  return res.status(200).json({ incoming: true, callId: data.id, callerPhoneNumber: data.caller_phone_e164 });
+  return res.status(200).json({ incoming: true, callId: data.id, callerPhoneNumber: data.caller_phone_e164, callType: data.call_type });
 });
 
 router.post("/start", async (req, res) => {
@@ -51,6 +51,7 @@ router.post("/start", async (req, res) => {
     return callError(res, 503, "calling_unavailable", "Calling is temporarily unavailable.");
   }
   const callerDeviceId = cleanText(req.body?.callerDeviceId, 120);
+  const callType = req.body?.callType === "video" ? "video" : "voice";
   const recipientPhoneNumber = normalizeE164(req.body?.recipientPhoneNumber, req.body?.defaultRegion);
   if (callerDeviceId.length < 16 || !recipientPhoneNumber) {
     return callError(res, 400, "invalid_call_request", "The selected phone number is invalid.");
@@ -78,7 +79,7 @@ router.post("/start", async (req, res) => {
   if (callerOpen.error || recipientOpen.error) return callError(res, 502, "call_state_unavailable", "Unable to start the call.");
   if (callerOpen.data || recipientOpen.data) return callError(res, 409, "device_busy", "One of the devices is already in a call.");
 
-  const roomName = `voice-${crypto.randomUUID()}`;
+  const roomName = `${callType}-${crypto.randomUUID()}`;
   let row;
   try {
     await createVoiceRoom(roomName);
@@ -89,6 +90,7 @@ router.post("/start", async (req, res) => {
       recipient_device_id: recipientResult.data.device_id,
       caller_phone_e164: callerResult.data.phone_number_e164,
       recipient_phone_e164: recipientPhoneNumber,
+      call_type: callType,
       status: "ringing"
     }).select("*").single();
     if (inserted.error) throw inserted.error;
@@ -98,6 +100,7 @@ router.post("/start", async (req, res) => {
     const push = await sendIncomingVoiceCallPush(admin, {
       callId: row.id,
       callerPhoneNumber: callerResult.data.phone_number_e164,
+      callType,
       installationId: recipientResult.data.id
     }).catch(() => ({ accepted: false }));
     console.info("[VoiceCall] incoming push delivery", { accepted: push.accepted, callId: row.id });
@@ -131,7 +134,7 @@ router.post("/:callId/accept", async (req, res) => {
   if (updated.error || !updated.data) return callError(res, 409, "call_not_available", "This call is no longer available.");
   const recipientToken = await createVoiceToken({ identity: `${recipientDeviceId}:${callId}:recipient`, roomName: row.room_name });
   console.info("[VoiceCall] recipient token generated", { callId });
-  return res.status(200).json({ callId, roomName: row.room_name, livekitUrl: process.env.LIVEKIT_URL, recipientToken });
+  return res.status(200).json({ callId, callType: row.call_type, roomName: row.room_name, livekitUrl: process.env.LIVEKIT_URL, recipientToken });
 });
 
 router.post("/:callId/decline", async (req, res) => {
