@@ -228,7 +228,7 @@ export default function InterpreterScreen() {
 
       <AppMenu onClose={() => setOverlay(null)} onNavigate={setOverlay} visible={overlay === 'menu'} />
       <LanguageSheet onClose={() => setOverlay(null)} onSelect={chooseLanguage} selectedLanguage={languageSide === 'one' ? languageOne : languageTwo} visible={overlay === 'language'} />
-      <CallingOverlay onClose={() => setOverlay(null)} visible={overlay === 'calling'} />
+      <CallingOverlay languageOne={languageOne} languageTwo={languageTwo} onClose={() => setOverlay(null)} visible={overlay === 'calling'} />
       <Modal animationType="fade" onRequestClose={stop} transparent visible={status === 'failed'}>
         <BlurView experimentalBlurMethod="dimezisBlurView" intensity={52} style={styles.connectionErrorBackdrop} tint="light">
           <View accessibilityViewIsModal style={styles.connectionErrorCard}>

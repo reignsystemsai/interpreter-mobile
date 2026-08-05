@@ -77,8 +77,10 @@ test("contact routing, incoming calls, and cleanup use the new service only", ()
 test("normal Interpreter translation remains independent of voice calling", () => {
   const home = read("mobile", "app", "index.tsx");
   const realtime = read("mobile", "src", "hooks", "useRealtimeInterpreter.ts");
+  const callTranslation = read("src", "server", "translation", "translation-bridge.js");
   assert.match(home, /useRealtimeInterpreter\(languageOne, languageTwo\)/);
   assert.match(home, /Start Conversation/);
   assert.match(realtime, /export function useRealtimeInterpreter/);
-  assert.doesNotMatch(service, /useRealtimeInterpreter|OpenAI|translation/);
+  assert.doesNotMatch(service, /useRealtimeInterpreter|OPENAI_API_KEY|api\.openai\.com/);
+  assert.match(callTranslation, /gpt-realtime-translate/);
 });

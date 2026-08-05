@@ -5,6 +5,8 @@ const { normalizeE164 } = require("../devices");
 const { createVoiceRoom, createVoiceToken, deleteVoiceRoom, isLiveKitConfigured } = require("../livekit");
 const { sendIncomingVoiceCallPush } = require("../push");
 const { getSupabaseAdmin, isSupabaseConfigured } = require("../supabase");
+const { outputLanguageCode } = require("../translation/languages");
+const { startCallTranslation, stopCallTranslation } = require("../translation/translation-bridge");
 
 const router = express.Router();
 const OPEN_STATUSES = ["calling", "ringing", "accepted"];
@@ -25,6 +27,7 @@ async function finishCall(admin, row, status) {
   const endedAt = new Date().toISOString();
   const result = await admin.from("active_calls").update({ status, ended_at: endedAt }).eq("id", row.id);
   if (result.error) throw result.error;
+  await stopCallTranslation(row.id).catch(() => undefined);
   await deleteVoiceRoom(row.room_name);
 }
 
@@ -66,8 +69,17 @@ router.post("/start", async (req, res) => {
   }
   const callerDeviceId = cleanText(req.body?.callerDeviceId, 120);
   const recipientPhoneNumber = normalizeE164(req.body?.recipientPhoneNumber, req.body?.defaultRegion);
+  const translationEnabled = req.body?.translationMode === "realtime-translate";
+  const callerLanguageCode = outputLanguageCode(req.body?.callerLanguage) ?? "en";
+  const recipientLanguageCode = outputLanguageCode(req.body?.recipientLanguage) ?? "es";
   if (callerDeviceId.length < 16 || !recipientPhoneNumber) {
     return callError(res, 400, "invalid_call_request", "The selected phone number is invalid.");
+  }
+  if (translationEnabled && (!outputLanguageCode(req.body?.callerLanguage) || !outputLanguageCode(req.body?.recipientLanguage))) {
+    return callError(res, 400, "unsupported_call_language", "Choose a supported Interpreter language for both speakers.");
+  }
+  if (translationEnabled && callerLanguageCode === recipientLanguageCode) {
+    return callError(res, 400, "same_call_language", "Choose two different languages for this interpreted call.");
   }
 
   const admin = getSupabaseAdmin();
@@ -103,6 +115,9 @@ router.post("/start", async (req, res) => {
       recipient_device_id: recipientResult.data.device_id,
       caller_phone_e164: callerResult.data.phone_number_e164,
       recipient_phone_e164: recipientPhoneNumber,
+      translation_enabled: translationEnabled,
+      caller_language_code: callerLanguageCode,
+      recipient_language_code: recipientLanguageCode,
       status: "ringing"
     }).select("*").single();
     if (inserted.error) throw inserted.error;
@@ -120,6 +135,7 @@ router.post("/start", async (req, res) => {
       roomName,
       livekitUrl: process.env.LIVEKIT_URL,
       callerToken,
+      translationEnabled,
       recipientStatus: "ringing"
     });
   } catch (error) {
@@ -143,9 +159,38 @@ router.post("/:callId/accept", async (req, res) => {
   }
   const updated = await admin.from("active_calls").update({ status: "accepted", accepted_at: new Date().toISOString() }).eq("id", callId).eq("status", "ringing").select("id").maybeSingle();
   if (updated.error || !updated.data) return callError(res, 409, "call_not_available", "This call is no longer available.");
-  const recipientToken = await createVoiceToken({ identity: `${recipientDeviceId}:${callId}:recipient`, roomName: row.room_name });
-  console.info("[VoiceCall] recipient token generated", { callId });
-  return res.status(200).json({ callId, roomName: row.room_name, livekitUrl: process.env.LIVEKIT_URL, recipientToken });
+  try {
+    const recipientToken = await createVoiceToken({ identity: `${recipientDeviceId}:${callId}:recipient`, roomName: row.room_name });
+    console.info("[VoiceCall] recipient token generated", { callId });
+    if (row.translation_enabled) {
+      if (req.body?.translationCapable !== true) {
+        throw new Error("Recipient does not support interpreted calls");
+      }
+      await startCallTranslation({
+        callId,
+        callerLanguage: row.caller_language_code,
+        recipientLanguage: row.recipient_language_code,
+        roomName: row.room_name
+      });
+    }
+    return res.status(200).json({
+      callId,
+      roomName: row.room_name,
+      livekitUrl: process.env.LIVEKIT_URL,
+      recipientToken,
+      translationEnabled: row.translation_enabled
+    });
+  } catch (error) {
+    console.error("[Translation] bridge startup failed", { callId });
+    await finishCall(admin, row, "failed").catch(() => undefined);
+    const recipientUpgradeRequired = error instanceof Error && error.message === "Recipient does not support interpreted calls";
+    return callError(
+      res,
+      recipientUpgradeRequired ? 409 : 502,
+      recipientUpgradeRequired ? "recipient_update_required" : "translation_unavailable",
+      recipientUpgradeRequired ? "The other person needs the latest Interpreter update." : "The translation service is temporarily unavailable."
+    );
+  }
 });
 
 router.post("/:callId/decline", async (req, res) => {

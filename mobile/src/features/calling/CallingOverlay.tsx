@@ -23,7 +23,9 @@ function CallingIcon({ name }: { name: CallingIconName }) {
   return <Svg height={25} viewBox="0 0 24 24" width={25}><Circle cx={12} cy={7.5} fill="none" r={4} stroke={BLUE} strokeWidth={1.8} /><Path d="M4 21a8 8 0 0 1 16 0" fill="none" stroke={BLUE} strokeLinecap="round" strokeWidth={1.8} /></Svg>;
 }
 
-export function CallingOverlay({ onClose, visible }: {
+export function CallingOverlay({ languageOne, languageTwo, onClose, visible }: {
+  languageOne: string;
+  languageTwo: string;
   onClose: () => void;
   visible: boolean;
 }) {
@@ -62,7 +64,7 @@ export function CallingOverlay({ onClose, visible }: {
           <Pressable accessibilityLabel="Close calling" onPress={close} style={StyleSheet.absoluteFill} />
           <View accessibilityViewIsModal {...panResponder.panHandlers} style={[styles.sheet, { paddingTop: insets.top + 58 }]}>
             <Pressable accessibilityLabel="Close calling" accessibilityRole="button" hitSlop={12} onPress={close} style={[styles.close, { top: insets.top + 6 }]}><Text style={styles.closeText}>×</Text></Pressable>
-            {view === 'contacts' ? <ContactsPermissionPanel autoRequest={autoRequestContacts} onBack={close} /> : (
+            {view === 'contacts' ? <ContactsPermissionPanel autoRequest={autoRequestContacts} languageOne={languageOne} languageTwo={languageTwo} onBack={close} /> : (
               <View style={styles.content}>
                 <Text style={styles.eyebrow}>INTERPRETER CALLING</Text>
                 <Text style={styles.title}>Speak any language</Text>

@@ -19,7 +19,7 @@ import {
 const APP_DOWNLOAD_URL = 'https://interpreter.ai/download';
 const BLUE = '#075BFF';
 
-export function ContactsPermissionPanel({ autoRequest = false, onBack }: { autoRequest?: boolean; onBack: () => void }) {
+export function ContactsPermissionPanel({ autoRequest = false, languageOne, languageTwo, onBack }: { autoRequest?: boolean; languageOne: string; languageTwo: string; onBack: () => void }) {
   const { contacts, error, loading, permission, refresh, requestAndImport } = useContacts();
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -41,7 +41,7 @@ export function ContactsPermissionPanel({ autoRequest = false, onBack }: { autoR
     }).sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [contacts, query]);
 
-  if (selected) return <ContactDetails contact={selected} onBack={() => setSelectedId(null)} onRefresh={refresh} />;
+  if (selected) return <ContactDetails contact={selected} languageOne={languageOne} languageTwo={languageTwo} onBack={() => setSelectedId(null)} onRefresh={refresh} />;
 
   if (permission !== 'granted' && !contacts.length) return (
     <View>
@@ -85,7 +85,7 @@ function permissionLabel(permission: ReturnType<typeof useContacts>['permission'
   return 'Not requested';
 }
 
-function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterContact; onBack: () => void; onRefresh: () => Promise<void> }) {
+function ContactDetails({ contact, languageOne, languageTwo, onBack, onRefresh }: { contact: InterpreterContact; languageOne: string; languageTwo: string; onBack: () => void; onRefresh: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);
   const [numberPromptVisible, setNumberPromptVisible] = useState(false);
   const [ownPhoneNumber, setOwnPhoneNumber] = useState('');
@@ -112,7 +112,7 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     try {
       const recipient = await lookupDeviceByPhone(phoneNumberE164, defaultRegion);
       if (!recipient.found) throw new Error('This person does not have Interpreter yet.');
-      await VoiceCallService.startVoiceCall({ contactName: contact.displayName, defaultRegion, phoneNumber: phoneNumberE164 });
+      await VoiceCallService.startVoiceCall({ callerLanguage: languageOne, contactName: contact.displayName, defaultRegion, phoneNumber: phoneNumberE164, recipientLanguage: languageTwo });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Please try again.';
       if (message === 'This person does not have Interpreter yet.') {

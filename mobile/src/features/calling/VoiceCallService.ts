@@ -25,6 +25,7 @@ type ActiveCall = {
   remoteLabel: string;
   role: Exclude<VoiceCallRole, null>;
   token: string | null;
+  translationEnabled: boolean;
 };
 
 export type IncomingVoiceCall = {
@@ -84,7 +85,7 @@ class CleanVoiceCallService {
     return payload;
   }
 
-  async startVoiceCall(options: { contactName: string; defaultRegion?: CountryCode; phoneNumber: string }) {
+  async startVoiceCall(options: { callerLanguage: string; contactName: string; defaultRegion?: CountryCode; phoneNumber: string; recipientLanguage: string }) {
     if (this.resetPromise) await this.resetPromise;
     if (this.state.status !== 'idle') throw new VoiceCallError('call_active', 'A voice call is already active.');
     const callerDeviceId = await getDeviceId();
@@ -96,10 +97,14 @@ class CleanVoiceCallService {
         callerToken: string;
         livekitUrl: string;
         roomName: string;
+        translationEnabled: boolean;
       }>('/api/v1/calls/start', {
         callerDeviceId,
+        callerLanguage: options.callerLanguage,
         defaultRegion: options.defaultRegion,
         recipientPhoneNumber: options.phoneNumber,
+        recipientLanguage: options.recipientLanguage,
+        translationMode: 'realtime-translate',
       });
       this.callContext = {
         callId: response.callId,
@@ -108,6 +113,7 @@ class CleanVoiceCallService {
         role: 'caller',
         roomName: response.roomName,
         token: response.callerToken,
+        translationEnabled: response.translationEnabled,
       };
       this.updateState({ callId: response.callId, status: 'ringing' });
       this.startCallStatusPolling(response.callId);
@@ -130,6 +136,7 @@ class CleanVoiceCallService {
       role: 'recipient',
       roomName: null,
       token: null,
+      translationEnabled: false,
     };
     this.setState({ callId: incoming.callId, error: '', muted: false, remoteLabel: this.callContext.remoteLabel, role: 'recipient', status: 'ringing' });
     this.startCallStatusPolling(incoming.callId);
@@ -147,13 +154,14 @@ class CleanVoiceCallService {
     this.updateState({ status: 'connecting' });
     try {
       const recipientDeviceId = await getDeviceId();
-      const response = await this.request<{ callId: string; livekitUrl: string; recipientToken: string; roomName: string }>(
+      const response = await this.request<{ callId: string; livekitUrl: string; recipientToken: string; roomName: string; translationEnabled: boolean }>(
         `/api/v1/calls/${encodeURIComponent(call.callId)}/accept`,
-        { recipientDeviceId },
+        { recipientDeviceId, translationCapable: true },
       );
       call.livekitUrl = response.livekitUrl;
       call.roomName = response.roomName;
       call.token = response.recipientToken;
+      call.translationEnabled = response.translationEnabled;
       await this.connect(call);
     } catch (error) {
       await this.failAndCleanUp(error instanceof Error ? error.message : 'Unable to accept this call.');
@@ -272,19 +280,28 @@ class CleanVoiceCallService {
       publishDefaults: { audioPreset: AudioPresets.speech, dtx: true, forceStereo: false, red: true },
     });
     this.room = room;
-    room.on(RoomEvent.ParticipantConnected, () => {
+    room.on(RoomEvent.ParticipantConnected, (participant) => {
       if (this.room !== room) return;
+      if (participant.identity === `translator:${call.callId}`) return;
       InCallManager.stopRingback();
       InCallManager.stopRingtone();
       if (this.callTimer) clearTimeout(this.callTimer);
       this.callTimer = null;
       this.updateState({ status: 'connected' });
     });
-    room.on(RoomEvent.ParticipantDisconnected, () => {
+    room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+      if (participant.identity === `translator:${call.callId}`) return;
       if (this.room === room) void this.resetVoiceCall({ notifyBackend: true });
     });
-    room.on(RoomEvent.TrackSubscribed, (track) => {
+    room.on(RoomEvent.TrackPublished, (publication, participant) => {
+      publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName));
+    });
+    room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
       if (track.kind !== Track.Kind.Audio || this.room !== room) return;
+      if (!this.shouldSubscribe(call, participant.identity, publication.trackName)) {
+        publication.setSubscribed(false);
+        return;
+      }
       console.info('[VoiceCall] remote audio subscribed');
       this.updateState({ status: 'connected' });
     });
@@ -295,7 +312,12 @@ class CleanVoiceCallService {
       if (this.room === room) void this.resetVoiceCall({ notifyBackend: true });
     });
     this.updateState({ status: call.role === 'caller' ? 'ringing' : 'connecting' });
-    await room.connect(call.livekitUrl, call.token, { autoSubscribe: true, maxRetries: 3 });
+    await room.connect(call.livekitUrl, call.token, { autoSubscribe: false, maxRetries: 3 });
+    for (const participant of room.remoteParticipants.values()) {
+      for (const publication of participant.audioTrackPublications.values()) {
+        publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName));
+      }
+    }
     if (this.room !== room || this.callContext !== call) throw new VoiceCallError('call_ended', 'Call ended.');
     console.info(`[VoiceCall] ${call.role} connected`);
     await room.localParticipant.setMicrophoneEnabled(true, AUDIO_CAPTURE);
@@ -304,9 +326,17 @@ class CleanVoiceCallService {
       clearTimeout(this.callTimer);
       this.callTimer = null;
     }
-    this.updateState({ status: room.remoteParticipants.size > 0 ? 'connected' : call.role === 'caller' ? 'ringing' : 'connected' });
+    const humanParticipantConnected = [...room.remoteParticipants.values()].some((participant) => participant.identity !== `translator:${call.callId}`);
+    this.updateState({ status: humanParticipantConnected ? 'connected' : call.role === 'caller' ? 'ringing' : 'connecting' });
     if (Platform.OS === 'android') await AudioSession.selectAudioOutput('speaker');
     else await AudioSession.selectAudioOutput('force_speaker');
+  }
+
+  private shouldSubscribe(call: ActiveCall, participantIdentity: string, trackName: string) {
+    if (call.translationEnabled) {
+      return participantIdentity === `translator:${call.callId}` && trackName === `translation-to-${call.role}`;
+    }
+    return participantIdentity !== `translator:${call.callId}`;
   }
 
   private async releaseRoom(room: Room | null) {
