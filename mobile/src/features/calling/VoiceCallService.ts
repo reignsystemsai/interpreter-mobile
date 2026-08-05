@@ -51,6 +51,7 @@ export class VoiceCallError extends Error {
 
 const INITIAL_STATE: VoiceCallState = { callId: null, callType: 'voice', cameraEnabled: false, error: '', localVideoTrack: null, muted: false, remoteLabel: '', remoteVideoTrack: null, role: null, status: 'idle' };
 const AUDIO_CAPTURE = { autoGainControl: true, channelCount: 1, echoCancellation: true, noiseSuppression: true } as const;
+const FRONT_CAMERA_CAPTURE = { facingMode: 'user' } as const;
 const CALL_TIMEOUT_MS = 45_000;
 
 class CleanVoiceCallService {
@@ -195,7 +196,7 @@ class CleanVoiceCallService {
     const room = this.room;
     if (!room || this.state.callType !== 'video' || room.state !== ConnectionState.Connected) return;
     const nextEnabled = !this.state.cameraEnabled;
-    const publication = await room.localParticipant.setCameraEnabled(nextEnabled);
+    const publication = await room.localParticipant.setCameraEnabled(nextEnabled, nextEnabled ? FRONT_CAMERA_CAPTURE : undefined);
     this.updateState({ cameraEnabled: nextEnabled, localVideoTrack: nextEnabled ? publication?.videoTrack ?? null : null });
   }
 
@@ -284,6 +285,7 @@ class CleanVoiceCallService {
     const room = new Room({
       adaptiveStream: true,
       audioCaptureDefaults: AUDIO_CAPTURE,
+      videoCaptureDefaults: FRONT_CAMERA_CAPTURE,
       publishDefaults: { audioPreset: AudioPresets.speech, dtx: true, forceStereo: false, red: true },
     });
     this.room = room;
@@ -325,7 +327,7 @@ class CleanVoiceCallService {
     await room.localParticipant.setMicrophoneEnabled(true, AUDIO_CAPTURE);
     console.info('[VoiceCall] microphone published');
     if (call.callType === 'video') {
-      const cameraPublication = await room.localParticipant.setCameraEnabled(true);
+      const cameraPublication = await room.localParticipant.setCameraEnabled(true, FRONT_CAMERA_CAPTURE);
       this.updateState({ cameraEnabled: true, localVideoTrack: cameraPublication?.videoTrack ?? null });
       console.info('[VideoCall] camera published');
     }
