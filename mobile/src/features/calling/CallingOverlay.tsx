@@ -12,16 +12,14 @@ const BLUE = '#075BFF';
 const ACTIONS = [
   { icon: 'phone', label: 'Voice Call', type: 'voice' },
   { icon: 'video', label: 'Video Call', type: 'video' },
-  { icon: 'briefcase', label: 'Business Video Call', type: 'business_video' },
 ] as const;
 
 type CallingIconName = typeof ACTIONS[number]['icon'] | 'contacts';
 
 function CallingIcon({ name }: { name: CallingIconName }) {
-  if (name === 'phone') return <Svg height={25} viewBox="0 0 24 24" width={25}><Path d="M6.5 2.8 9 2.2c.7-.2 1.4.2 1.7.9l1.1 3.1c.2.6 0 1.2-.5 1.6L9.6 9.1a15.2 15.2 0 0 0 5.3 5.3l1.3-1.7c.4-.5 1-.7 1.6-.5l3.1 1.1c.7.3 1.1 1 1 1.7l-.7 2.5a3.2 3.2 0 0 1-3.2 2.4A15.9 15.9 0 0 1 4.1 6a3.2 3.2 0 0 1 2.4-3.2Z" fill={BLUE} /></Svg>;
-  if (name === 'video') return <Svg height={25} viewBox="0 0 24 24" width={25}><Rect fill={BLUE} height={14} rx={3} width={14} x={2} y={5} /><Path d="m16 9 4.2-2.4c.8-.5 1.8.1 1.8 1v8.8c0 .9-1 1.5-1.8 1L16 15V9Z" fill={BLUE} /></Svg>;
-  if (name === 'briefcase') return <Svg height={25} viewBox="0 0 24 24" width={25}><Path d="M9 4.5A2.5 2.5 0 0 1 11.5 2h1A2.5 2.5 0 0 1 15 4.5V6h4a3 3 0 0 1 3 3v2.1c-2.8 1.2-6.3 1.9-10 1.9s-7.2-.7-10-1.9V9a3 3 0 0 1 3-3h4V4.5Zm2 0V6h2V4.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5ZM2 13.2c2.9 1.1 6.3 1.8 10 1.8s7.1-.7 10-1.8V19a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-5.8Z" fill={BLUE} /></Svg>;
-  return <Svg height={25} viewBox="0 0 24 24" width={25}><Circle cx={12} cy={7.5} fill={BLUE} r={4.5} /><Path d="M3 21a9 9 0 0 1 18 0H3Z" fill={BLUE} /></Svg>;
+  if (name === 'phone') return <Svg height={25} viewBox="0 0 24 24" width={25}><Path d="M6.7 3.1 9 2.5c.7-.2 1.4.2 1.7.9l1 2.8c.2.6 0 1.2-.5 1.6L9.7 9a14.5 14.5 0 0 0 5.3 5.3l1.2-1.5c.4-.5 1-.7 1.6-.5l2.8 1c.7.3 1.1 1 1 1.7l-.6 2.3a3 3 0 0 1-3 2.3A15.4 15.4 0 0 1 4.4 6a3 3 0 0 1 2.3-2.9Z" fill="none" stroke={BLUE} strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} /></Svg>;
+  if (name === 'video') return <Svg height={25} viewBox="0 0 24 24" width={25}><Rect fill="none" height={13} rx={3} stroke={BLUE} strokeWidth={1.8} width={13} x={2.5} y={5.5} /><Path d="m15.5 9 4-2.2c.8-.4 1.7.1 1.7 1v8.4c0 .9-.9 1.4-1.7 1l-4-2.2V9Z" fill="none" stroke={BLUE} strokeLinejoin="round" strokeWidth={1.8} /></Svg>;
+  return <Svg height={25} viewBox="0 0 24 24" width={25}><Circle cx={12} cy={7.5} fill="none" r={4} stroke={BLUE} strokeWidth={1.8} /><Path d="M4 21a8 8 0 0 1 16 0" fill="none" stroke={BLUE} strokeLinecap="round" strokeWidth={1.8} /></Svg>;
 }
 
 export function CallingOverlay({ onClose, visible }: {

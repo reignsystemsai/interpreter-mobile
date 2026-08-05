@@ -11,49 +11,30 @@ export type InterpreterContact = {
   company: string | null;
   phoneNumbers: ContactValue[];
   emailAddresses: ContactValue[];
-  preferredLanguage: string;
-  isFavorite: boolean;
-  lastCalledAt: string | null;
-  interpreterUserId: string | null;
-  isInterpreterUser: boolean;
-  createdAt: string;
-  updatedAt: string;
 };
 
-type ContactUpdate = Partial<Pick<InterpreterContact, 'displayName' | 'givenName' | 'familyName' | 'company' | 'phoneNumbers' | 'emailAddresses' | 'preferredLanguage' | 'isFavorite' | 'lastCalledAt'>>;
 type ContactsContextValue = {
   contacts: InterpreterContact[];
   error: string;
   loading: boolean;
   permission: 'checking' | 'undetermined' | 'granted' | 'denied' | 'blocked';
-  deleteAllContacts: () => Promise<void>;
-  deleteContact: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
   requestAndImport: () => Promise<void>;
-  updateContact: (id: string, update: ContactUpdate) => Promise<InterpreterContact>;
 };
 
 const ContactsContext = createContext<ContactsContextValue | null>(null);
 
-function toInterpreterContact(contact: Contacts.Contact, index: number): InterpreterContact {
-  const now = new Date().toISOString();
-  const localId = `device-${index}-${contact.name || contact.phoneNumbers?.[0]?.number || contact.emails?.[0]?.email || 'contact'}`;
+function toInterpreterContact(contact: Contacts.ExistingContact, index: number): InterpreterContact {
+  const localId = contact.id || `device-${index}-${contact.name || contact.phoneNumbers?.[0]?.number || contact.emails?.[0]?.email || 'contact'}`;
   return {
     id: localId,
-    deviceContactId: localId,
+    deviceContactId: contact.id ?? null,
     displayName: contact.name || [contact.firstName, contact.lastName].filter(Boolean).join(' ') || 'Unnamed contact',
     givenName: contact.firstName ?? null,
     familyName: contact.lastName ?? null,
     company: contact.company ?? null,
     phoneNumbers: (contact.phoneNumbers ?? []).map((phone) => ({ countryCode: phone.countryCode ?? undefined, label: phone.label || 'phone', value: phone.number || phone.digits || '' })).filter((phone) => phone.value),
     emailAddresses: (contact.emails ?? []).map((email) => ({ label: email.label || 'email', value: email.email || '' })).filter((email) => email.value),
-    preferredLanguage: 'English',
-    isFavorite: false,
-    lastCalledAt: null,
-    interpreterUserId: null,
-    isInterpreterUser: false,
-    createdAt: now,
-    updatedAt: now,
   };
 }
 
@@ -103,8 +84,6 @@ export function ContactsProvider({ children }: PropsWithChildren) {
     error,
     loading,
     permission,
-    async deleteAllContacts() { setContacts([]); },
-    async deleteContact(id) { setContacts((current) => current.filter((contact) => contact.id !== id)); },
     refresh,
     async requestAndImport() {
       const current = await Contacts.getPermissionsAsync();
@@ -114,16 +93,6 @@ export function ContactsProvider({ children }: PropsWithChildren) {
       if (next === 'blocked') throw new Error('Open Android Settings to allow contact access, then try again.');
       if (next !== 'granted') throw new Error('Contact access was not allowed.');
       await loadDeviceContacts();
-    },
-    async updateContact(id, update) {
-      let updated: InterpreterContact | undefined;
-      setContacts((current) => current.map((contact) => {
-        if (contact.id !== id) return contact;
-        updated = { ...contact, ...update, updatedAt: new Date().toISOString() };
-        return updated;
-      }));
-      if (!updated) throw new Error('Contact was not found.');
-      return updated;
     },
   }), [contacts, error, loading, loadDeviceContacts, permission, refresh]);
 

@@ -2,6 +2,7 @@ import { AndroidAudioTypePresets, AudioSession } from '@livekit/react-native';
 import type { CountryCode } from 'libphonenumber-js';
 import { AudioPresets, ConnectionState, Room, RoomEvent, Track } from 'livekit-client';
 import { PermissionsAndroid, Platform } from 'react-native';
+import InCallManager from 'react-native-incall-manager';
 
 import { API_BASE_URL } from '../../config/runtime';
 import { getDeviceId } from '../../services/deviceRegistration';
@@ -86,6 +87,7 @@ class CleanVoiceCallService {
     if (this.state.status !== 'idle') throw new VoiceCallError('call_active', 'A voice call is already active.');
     const callerDeviceId = await getDeviceId();
     this.setState({ ...INITIAL_STATE, remoteLabel: options.contactName, role: 'caller', status: 'preparing' });
+    InCallManager.startRingback('_DEFAULT_');
     try {
       const response = await this.request<{
         callId: string;
@@ -127,6 +129,9 @@ class CleanVoiceCallService {
       token: null,
     };
     this.setState({ callId: incoming.callId, error: '', muted: false, remoteLabel: this.callContext.remoteLabel, role: 'recipient', status: 'ringing' });
+    InCallManager.turnScreenOn();
+    InCallManager.setKeepScreenOn(true);
+    InCallManager.startRingtone('_DEFAULT_', [0, 900, 700], 'playback', Math.ceil(CALL_TIMEOUT_MS / 1000));
     this.startTimeout();
     return true;
   }
@@ -134,6 +139,7 @@ class CleanVoiceCallService {
   async acceptIncomingCall() {
     const call = this.callContext;
     if (!call || call.role !== 'recipient' || this.state.status !== 'ringing') return;
+    InCallManager.stopRingtone();
     this.updateState({ status: 'connecting' });
     try {
       const recipientDeviceId = await getDeviceId();
@@ -189,6 +195,9 @@ class CleanVoiceCallService {
     const room = this.room;
     if (this.callTimer) clearTimeout(this.callTimer);
     this.callTimer = null;
+    InCallManager.stopRingback();
+    InCallManager.stopRingtone();
+    InCallManager.setKeepScreenOn(false);
     this.callContext = null;
     this.room = null;
     if (this.state.status !== 'idle') this.updateState({ status: 'ending' });
@@ -240,6 +249,8 @@ class CleanVoiceCallService {
     this.room = room;
     room.on(RoomEvent.ParticipantConnected, () => {
       if (this.room !== room) return;
+      InCallManager.stopRingback();
+      InCallManager.stopRingtone();
       if (this.callTimer) clearTimeout(this.callTimer);
       this.callTimer = null;
       this.updateState({ status: 'connected' });
