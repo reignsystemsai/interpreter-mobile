@@ -31,9 +31,15 @@ export function CallingOverlay({ onClose, visible }: {
 }) {
   const [view, setView] = useState<CallingView>('actions');
   const [autoRequestContacts, setAutoRequestContacts] = useState(false);
-  const close = () => { setView('actions'); onClose(); };
+  const close = () => {
+    setView('actions');
+    setAutoRequestContacts(false);
+    void CallService.endCall();
+    onClose();
+  };
   useEffect(() => {
     if (visible) void CallService.resetStaleCallState();
+    else setView('actions');
   }, [visible]);
   useEffect(() => {
     if (!visible) return;

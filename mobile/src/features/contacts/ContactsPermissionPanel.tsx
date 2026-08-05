@@ -1,9 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import type { CountryCode } from 'libphonenumber-js';
 
 import { type InterpreterContact, useContacts } from './ContactsProvider';
 import { CallService } from '../calling/CallService';
-import { getRegisteredPhoneNumber, registerDeviceInstallation } from '../../services/deviceRegistration';
+import {
+  deviceDefaultPhoneRegion,
+  getRegisteredPhoneNumber,
+  normalizeE164,
+  normalizePhoneRegion,
+  phoneRegionFromE164,
+  registerDeviceInstallation,
+} from '../../services/deviceRegistration';
 
 const LANGUAGES = ['English', 'Spanish', 'Brazilian Portuguese', 'French', 'German', 'Italian', 'Dutch', 'Russian', 'Polish', 'Romanian', 'Turkish', 'Arabic', 'Hebrew', 'Hindi', 'Japanese', 'Korean', 'Mandarin Chinese', 'Cantonese', 'Vietnamese', 'Thai'];
 const APP_DOWNLOAD_URL = 'https://interpreter.ai/download';
@@ -94,6 +102,7 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
   const [numberPromptVisible, setNumberPromptVisible] = useState(false);
   const [ownPhoneNumber, setOwnPhoneNumber] = useState('');
   const [pendingContactPhone, setPendingContactPhone] = useState('');
+  const [pendingContactRegion, setPendingContactRegion] = useState<CountryCode>(deviceDefaultPhoneRegion());
   const [registrationError, setRegistrationError] = useState('');
   useEffect(() => { setName(contact.displayName); setPhone(contact.phoneNumbers[0]?.value ?? ''); setEmail(contact.emailAddresses[0]?.value ?? ''); setLanguage(contact.preferredLanguage); }, [contact]);
 
@@ -102,7 +111,7 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
     try {
       await onUpdate({
         displayName: name,
-        phoneNumbers: phone ? [{ label: contact.phoneNumbers[0]?.label || 'phone', value: phone }, ...contact.phoneNumbers.slice(1)] : contact.phoneNumbers.slice(1),
+        phoneNumbers: phone ? [{ countryCode: contact.phoneNumbers[0]?.countryCode, label: contact.phoneNumbers[0]?.label || 'phone', value: phone }, ...contact.phoneNumbers.slice(1)] : contact.phoneNumbers.slice(1),
         emailAddresses: email ? [{ label: contact.emailAddresses[0]?.label || 'email', value: email }, ...contact.emailAddresses.slice(1)] : contact.emailAddresses.slice(1),
         preferredLanguage: language,
       });
@@ -115,8 +124,8 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
       message: `Download Interpreter so I can speak to you in your language.\n\n${APP_DOWNLOAD_URL}`,
     });
   };
-  const startContactCall = async (phoneNumber: string) => {
-    try { await CallService.startVoiceCall(phoneNumber); }
+  const startContactCall = async (phoneNumber: string, defaultRegion: CountryCode) => {
+    try { await CallService.startVoiceCall(phoneNumber, defaultRegion); }
     catch (error) {
       const message = error instanceof Error ? error.message : 'Please try again.';
       if (message === 'This person does not have Interpreter yet.') {
@@ -131,17 +140,24 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
   };
   const beginCall = async (type: ContactCallType) => {
     if (type === 'voice') {
-      const phoneNumber = contact.phoneNumbers.find((item) => item.value.trim())?.value ?? '';
-      if (!phoneNumber) {
+      const registeredPhone = await getRegisteredPhoneNumber().catch(() => null);
+      const fallbackRegion = phoneRegionFromE164(registeredPhone) ?? deviceDefaultPhoneRegion();
+      const selectedPhone = contact.phoneNumbers.find((item) => {
+        const region = normalizePhoneRegion(item.countryCode) ?? fallbackRegion;
+        return Boolean(normalizeE164(item.value, region));
+      });
+      if (!selectedPhone) {
         Alert.alert('This contact does not have a valid phone number.');
         return;
       }
-      if (!(await getRegisteredPhoneNumber().catch(() => null))) {
-        setPendingContactPhone(phoneNumber);
+      const selectedRegion = normalizePhoneRegion(selectedPhone.countryCode) ?? fallbackRegion;
+      if (!registeredPhone) {
+        setPendingContactPhone(selectedPhone.value);
+        setPendingContactRegion(selectedRegion);
         setNumberPromptVisible(true);
         return;
       }
-      await startContactCall(phoneNumber);
+      await startContactCall(selectedPhone.value, selectedRegion);
       return;
     }
     Alert.alert('Coming soon', type === 'video' ? 'Video calling is not enabled yet.' : 'Business calling is not enabled yet.');
@@ -153,7 +169,7 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
     try {
       await registerDeviceInstallation(ownPhoneNumber);
       setNumberPromptVisible(false);
-      await startContactCall(pendingContactPhone);
+      await startContactCall(pendingContactPhone, pendingContactRegion);
     } catch (error) {
       setRegistrationError(error instanceof Error ? error.message : 'Unable to register this phone number.');
     } finally {
@@ -179,7 +195,7 @@ function ContactDetails({ contact, onBack, onDelete, onUpdate }: { contact: Inte
         <View accessibilityViewIsModal style={styles.numberCard}>
           <Text style={styles.numberTitle}>Your phone number</Text>
           <Text style={styles.numberBody}>Enter it once so this device can receive Interpreter calls.</Text>
-          <TextInput keyboardType="phone-pad" onChangeText={setOwnPhoneNumber} placeholder="(305) 555-1234" style={styles.input} value={ownPhoneNumber} />
+          <TextInput keyboardType="phone-pad" onChangeText={setOwnPhoneNumber} placeholder="Include country code, e.g. +57" style={styles.input} value={ownPhoneNumber} />
           {registrationError ? <Text style={styles.error}>{registrationError}</Text> : null}
           <PrimaryButton disabled={busy} label={busy ? 'Saving…' : 'Continue'} onPress={() => void registerAndCall()} />
           <SecondaryButton label="Not Now" onPress={() => setNumberPromptVisible(false)} />

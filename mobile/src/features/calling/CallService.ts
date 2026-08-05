@@ -4,6 +4,7 @@ import { AudioPresets, ConnectionState, Room, RoomEvent, Track } from 'livekit-c
 
 import { API_BASE_URL } from '../../config/runtime';
 import { lookupDeviceByPhone } from '../../services/deviceRegistration';
+import type { CountryCode } from 'libphonenumber-js';
 
 export type CallServiceStatus = 'idle' | 'connecting' | 'reconnecting' | 'connected' | 'participant_joined' | 'audio_active' | 'ended';
 export type CallServiceState = { callCode: string | null; status: CallServiceStatus };
@@ -75,7 +76,7 @@ class CentralCallService {
     return true;
   }
 
-  async startVoiceCall(phoneNumber?: string) {
+  async startVoiceCall(phoneNumber?: string, defaultRegion?: CountryCode) {
     await this.resetStaleCallState();
     if (this.hasActiveRoom()) throw new Error('A voice call is already active.');
     this.operationInProgress = true;
@@ -84,7 +85,7 @@ class CentralCallService {
     try {
       let recipientInstallationId = '';
       if (phoneNumber) {
-        const recipient = await lookupDeviceByPhone(phoneNumber);
+        const recipient = await lookupDeviceByPhone(phoneNumber, defaultRegion);
         if (!recipient.available) throw new Error('This person does not have Interpreter yet.');
         recipientInstallationId = recipient.installationId;
       }
@@ -215,10 +216,10 @@ class CentralCallService {
     this.activeCall = null;
     this.operationInProgress = false;
     this.operationVersion += 1;
+    this.setState({ callCode: null, status: 'idle' });
     await this.releaseRoom(room);
     await this.endBackendCall(call);
     console.info('[LiveKitCall] call ended');
-    this.setState({ callCode: null, status: 'idle' });
   }
 }
 

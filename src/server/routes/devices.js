@@ -11,7 +11,7 @@ function cleanText(value, maxLength) {
 router.post("/register", async (req, res) => {
   if (!isSupabaseConfigured()) return res.status(503).json({ error: "Device registration is temporarily unavailable." });
   const deviceId = cleanText(req.body?.deviceId, 120);
-  const phoneNumberE164 = normalizeE164(req.body?.phoneNumber);
+  const phoneNumberE164 = normalizeE164(req.body?.phoneNumber, req.body?.defaultRegion);
   const platform = req.body?.platform === "ios" ? "ios" : req.body?.platform === "android" ? "android" : "";
   const pushToken = cleanText(req.body?.pushToken, 300) || null;
   if (deviceId.length < 16 || !phoneNumberE164 || !platform) {
@@ -39,7 +39,7 @@ router.post("/register", async (req, res) => {
 
 router.post("/lookup", async (req, res) => {
   if (!isSupabaseConfigured()) return res.status(503).json({ error: "Device lookup is temporarily unavailable." });
-  const phoneNumberE164 = normalizeE164(req.body?.phoneNumber);
+  const phoneNumberE164 = normalizeE164(req.body?.phoneNumber, req.body?.defaultRegion);
   if (!phoneNumberE164) return res.status(400).json({ error: "Invalid phone number." });
   const { data, error } = await getSupabaseAdmin()
     .from("device_installations")

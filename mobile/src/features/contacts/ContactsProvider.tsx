@@ -1,7 +1,7 @@
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import * as Contacts from 'expo-contacts';
 
-export type ContactValue = { label: string; value: string };
+export type ContactValue = { countryCode?: string; label: string; value: string };
 export type InterpreterContact = {
   id: string;
   deviceContactId: string | null;
@@ -45,7 +45,7 @@ function toInterpreterContact(contact: Contacts.Contact, index: number): Interpr
     givenName: contact.firstName ?? null,
     familyName: contact.lastName ?? null,
     company: contact.company ?? null,
-    phoneNumbers: (contact.phoneNumbers ?? []).map((phone) => ({ label: phone.label || 'phone', value: phone.number || phone.digits || '' })).filter((phone) => phone.value),
+    phoneNumbers: (contact.phoneNumbers ?? []).map((phone) => ({ countryCode: phone.countryCode ?? undefined, label: phone.label || 'phone', value: phone.number || phone.digits || '' })).filter((phone) => phone.value),
     emailAddresses: (contact.emails ?? []).map((email) => ({ label: email.label || 'email', value: email.email || '' })).filter((email) => email.value),
     preferredLanguage: 'English',
     isFavorite: false,

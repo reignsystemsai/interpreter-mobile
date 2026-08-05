@@ -25,6 +25,7 @@ import { useDemoAudioLevel } from '../src/hooks/useDemoAudioLevel';
 import { useRealtimeInterpreter } from '../src/hooks/useRealtimeInterpreter';
 import { recordAppReady } from '../src/services/performance';
 import { CallingOverlay } from '../src/features/calling/CallingOverlay';
+import { CallService } from '../src/features/calling/CallService';
 import { useAuth } from '../src/features/account/AuthProvider';
 import { AppMenu, type MenuDestination } from '../src/features/menu/AppMenu';
 import { DestinationSheet } from '../src/features/menu/DestinationSheet';
@@ -137,6 +138,10 @@ export default function InterpreterScreen() {
   useEffect(() => {
     if (recoveryMode) setOverlay('account');
   }, [recoveryMode]);
+
+  useEffect(() => {
+    if (overlay === null) void CallService.resetStaleCallState();
+  }, [overlay]);
 
   const statusText = useMemo(() => {
     if (['requesting_permission', 'creating_session', 'connecting', 'connected'].includes(status)) return 'Connecting...';
