@@ -1,4 +1,5 @@
 import { AndroidAudioTypePresets, AudioSession } from '@livekit/react-native';
+import { permissions as mediaPermissions } from '@livekit/react-native-webrtc';
 import type { CountryCode } from 'libphonenumber-js';
 import { AudioPresets, ConnectionState, Room, RoomEvent, Track, type VideoTrack } from 'livekit-client';
 import { PermissionsAndroid, Platform } from 'react-native';
@@ -251,6 +252,15 @@ class CleanVoiceCallService {
   }
 
   private async requestMediaPermissions(callType: InterpreterCallType) {
+    if (Platform.OS === 'ios') {
+      const microphoneGranted = await mediaPermissions.request({ name: 'microphone' });
+      if (!microphoneGranted) throw new VoiceCallError('microphone_denied', 'Microphone access is required for calls.');
+      if (callType === 'video') {
+        const cameraGranted = await mediaPermissions.request({ name: 'camera' });
+        if (!cameraGranted) throw new VoiceCallError('camera_denied', 'Camera access is required for video calls.');
+      }
+      return;
+    }
     if (Platform.OS !== 'android') return;
     const permissions = [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO];
     if (callType === 'video') permissions.push(PermissionsAndroid.PERMISSIONS.CAMERA);
