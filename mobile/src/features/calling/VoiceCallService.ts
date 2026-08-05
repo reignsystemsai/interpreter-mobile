@@ -102,6 +102,7 @@ class CleanVoiceCallService {
 
   private async startCall(options: { contactName: string; defaultRegion?: CountryCode; phoneNumber: string }, callType: InterpreterCallType) {
     if (this.state.status !== 'idle') throw new VoiceCallError('call_active', 'A call is already active.');
+    await this.requestMediaPermissions(callType);
     const callerDeviceId = await getDeviceId();
     this.setState({ ...INITIAL_STATE, callType, remoteLabel: options.contactName, role: 'caller', status: 'preparing' });
     InCallManager.startRingback('_DEFAULT_');
@@ -160,8 +161,11 @@ class CleanVoiceCallService {
     const call = this.callContext;
     if (!call || call.role !== 'recipient' || this.state.status !== 'ringing') return;
     InCallManager.stopRingtone();
-    this.updateState({ status: 'connecting' });
+    if (this.callTimer) clearTimeout(this.callTimer);
+    this.callTimer = null;
     try {
+      await this.requestMediaPermissions(call.callType);
+      this.updateState({ status: 'connecting' });
       const recipientDeviceId = await getDeviceId();
       const response = await this.request<{ callId: string; livekitUrl: string; recipientToken: string; roomName: string }>(
         `/api/v1/calls/${encodeURIComponent(call.callId)}/accept`,
@@ -272,7 +276,6 @@ class CleanVoiceCallService {
 
   private async connect(call: ActiveCall) {
     if (!call.livekitUrl || !call.token) throw new VoiceCallError('missing_token', 'Unable to connect. Please try again.');
-    await this.requestMediaPermissions(call.callType);
     await AudioSession.configureAudio({
       android: {
         audioTypeOptions: { ...AndroidAudioTypePresets.communication, forceHandleAudioRouting: true },
