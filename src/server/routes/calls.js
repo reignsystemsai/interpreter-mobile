@@ -28,6 +28,23 @@ async function finishCall(admin, row, status) {
   await deleteVoiceRoom(row.room_name);
 }
 
+router.get("/incoming", async (req, res) => {
+  if (!isSupabaseConfigured()) return callError(res, 503, "calling_unavailable", "Calling is temporarily unavailable.");
+  const deviceId = cleanText(req.query?.deviceId, 120);
+  if (deviceId.length < 16) return callError(res, 400, "invalid_device", "Unable to check incoming calls.");
+  const { data, error } = await getSupabaseAdmin()
+    .from("active_calls")
+    .select("id,caller_phone_e164")
+    .eq("recipient_device_id", deviceId)
+    .eq("status", "ringing")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return callError(res, 502, "call_state_unavailable", "Unable to check incoming calls.");
+  if (!data) return res.status(200).json({ incoming: false });
+  return res.status(200).json({ incoming: true, callId: data.id, callerPhoneNumber: data.caller_phone_e164 });
+});
+
 router.post("/start", async (req, res) => {
   console.info("[VoiceCall] start request received");
   if (!isSupabaseConfigured() || !isLiveKitConfigured()) {
@@ -82,9 +99,8 @@ router.post("/start", async (req, res) => {
       callId: row.id,
       callerPhoneNumber: callerResult.data.phone_number_e164,
       installationId: recipientResult.data.id
-    });
+    }).catch(() => ({ accepted: false }));
     console.info("[VoiceCall] incoming push delivery", { accepted: push.accepted, callId: row.id });
-    if (!push.accepted) throw new Error("recipient_push_unavailable");
     return res.status(201).json({
       callId: row.id,
       roomName,

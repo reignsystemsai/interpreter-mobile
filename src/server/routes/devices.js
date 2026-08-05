@@ -20,18 +20,19 @@ router.post("/register", async (req, res) => {
   }
 
   const now = new Date().toISOString();
+  const registration = {
+    device_id: deviceId,
+    enabled: true,
+    last_seen_at: now,
+    phone_number_e164: phoneNumberE164,
+    platform,
+    app_version: appVersion,
+    updated_at: now
+  };
+  if (pushToken) registration.push_token = pushToken;
   const { data, error } = await getSupabaseAdmin()
     .from("device_installations")
-    .upsert({
-      device_id: deviceId,
-      enabled: true,
-      last_seen_at: now,
-      phone_number_e164: phoneNumberE164,
-      platform,
-      push_token: pushToken,
-      app_version: appVersion,
-      updated_at: now
-    }, { onConflict: "device_id" })
+    .upsert(registration, { onConflict: "device_id" })
     .select("id,device_id,phone_number_e164,platform,enabled")
     .single();
   if (error) {

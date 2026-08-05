@@ -65,7 +65,7 @@ export function CallingOverlay({ onClose, visible }: {
             {view === 'contacts' ? <ContactsPermissionPanel autoRequest={autoRequestContacts} onBack={close} /> : (
               <View style={styles.content}>
                 <Text style={styles.eyebrow}>INTERPRETER CALLING</Text>
-                <Text style={styles.title}>Speak in any language</Text>
+                <Text style={styles.title}>Speak any language</Text>
                 <Text style={styles.subtitle}>Choose a contact, then start a secure voice or video call.</Text>
                 <View style={styles.actions}>
                   {ACTIONS.map((action) => (

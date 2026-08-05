@@ -57,8 +57,6 @@ async function getPushToken() {
       vibrationPattern: [0, 250, 250, 250],
     });
   }
-  const current = await Notifications.getPermissionsAsync();
-  if (current.status !== 'granted') return null;
   const projectId = Constants.expoConfig?.extra?.eas?.projectId;
   if (typeof projectId !== 'string' || !projectId) return null;
   return (await Notifications.getExpoPushTokenAsync({ projectId })).data;

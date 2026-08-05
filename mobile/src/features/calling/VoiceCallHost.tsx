@@ -2,7 +2,8 @@ import { useEffect } from 'react';
 import * as Notifications from 'expo-notifications';
 import { AppState } from 'react-native';
 
-import { restoreAndRefreshDeviceRegistration } from '../../services/deviceRegistration';
+import { API_BASE_URL } from '../../config/runtime';
+import { getDeviceId, restoreAndRefreshDeviceRegistration } from '../../services/deviceRegistration';
 import { VoiceCallService } from './VoiceCallService';
 import { VoiceCallSurface } from './VoiceCallSurface';
 
@@ -20,17 +21,32 @@ Notifications.setNotificationHandler({
 function handleIncoming(notification?: Notifications.Notification) {
   const data = notification?.request.content.data;
   if (data?.type !== 'incoming_voice_call' || typeof data.callId !== 'string') return;
-  if (handledIncomingCallIds.has(data.callId)) return;
-  handledIncomingCallIds.add(data.callId);
+  presentIncoming(data.callId, typeof data.callerPhoneNumber === 'string' ? data.callerPhoneNumber : 'Interpreter caller');
+}
+
+function presentIncoming(callId: string, callerPhoneNumber: string) {
+  if (handledIncomingCallIds.has(callId)) return;
+  handledIncomingCallIds.add(callId);
   VoiceCallService.presentIncomingCall({
-    callId: data.callId,
-    callerPhoneNumber: typeof data.callerPhoneNumber === 'string' ? data.callerPhoneNumber : 'Interpreter caller',
+    callId,
+    callerPhoneNumber,
   });
+}
+
+async function pollIncomingCall() {
+  if (AppState.currentState !== 'active' || VoiceCallService.getState().status !== 'idle') return;
+  const deviceId = await getDeviceId();
+  const response = await fetch(`${API_BASE_URL}/api/v1/calls/incoming?deviceId=${encodeURIComponent(deviceId)}`);
+  if (!response.ok) return;
+  const payload = (await response.json()) as { incoming?: boolean; callId?: string; callerPhoneNumber?: string };
+  if (payload.incoming && payload.callId) presentIncoming(payload.callId, payload.callerPhoneNumber || 'Interpreter caller');
 }
 
 export function VoiceCallHost() {
   useEffect(() => {
     void restoreAndRefreshDeviceRegistration().catch(() => false);
+    void pollIncomingCall().catch(() => undefined);
+    const incomingPoll = setInterval(() => void pollIncomingCall().catch(() => undefined), 2_000);
     const foregroundListener = Notifications.addNotificationReceivedListener(handleIncoming);
     const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
       handleIncoming(response.notification);
@@ -47,6 +63,7 @@ export function VoiceCallHost() {
       foregroundListener.remove();
       responseListener.remove();
       appStateListener.remove();
+      clearInterval(incomingPoll);
       void VoiceCallService.resetVoiceCall({ notifyBackend: true });
     };
   }, []);
