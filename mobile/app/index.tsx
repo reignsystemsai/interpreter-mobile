@@ -25,6 +25,7 @@ import { useDemoAudioLevel } from '../src/hooks/useDemoAudioLevel';
 import { useRealtimeInterpreter } from '../src/hooks/useRealtimeInterpreter';
 import { recordAppReady } from '../src/services/performance';
 import { CallingOverlay } from '../src/features/calling/CallingOverlay';
+import { VoiceCallService } from '../src/features/calling/VoiceCallService';
 import { useAuth } from '../src/features/account/AuthProvider';
 import { AppMenu, type MenuDestination } from '../src/features/menu/AppMenu';
 import { DestinationSheet } from '../src/features/menu/DestinationSheet';
@@ -149,6 +150,11 @@ export default function InterpreterScreen() {
   }, [isActive, status]);
 
   const conversationRunning = isActive || ['requesting_permission', 'creating_session', 'connecting', 'connected', 'reconnecting'].includes(status);
+  useEffect(() => VoiceCallService.subscribe((callState) => {
+    if (callState.role !== 'recipient' || callState.status !== 'ringing') return;
+    setOverlay(null);
+    if (status === 'failed' || conversationRunning) stop();
+  }), [conversationRunning, status, stop]);
   const openLanguage = (side: LanguageSide) => {
     if (conversationRunning) return;
     setLanguageSide(side);

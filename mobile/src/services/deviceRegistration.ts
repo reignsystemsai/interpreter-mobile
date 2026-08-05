@@ -10,6 +10,7 @@ import { API_BASE_URL } from '../config/runtime';
 const DEVICE_ID_KEY = 'interpreter.device_id';
 const PHONE_KEY = 'interpreter.phone_e164';
 const PHONE_PROMPTED_KEY = 'interpreter.phone_prompted';
+const CALL_NOTIFICATIONS_OFFERED_KEY = 'interpreter.call_notifications_offered';
 
 export function normalizePhoneRegion(value?: string | null): CountryCode | undefined {
   const normalized = value?.trim().toUpperCase() ?? '';
@@ -60,6 +61,27 @@ async function getPushToken() {
   const projectId = Constants.expoConfig?.extra?.eas?.projectId;
   if (typeof projectId !== 'string' || !projectId) return null;
   return (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+}
+
+export async function enableCallNotifications() {
+  if (!Device.isDevice) throw new Error('Call notifications require a physical device.');
+  const current = await Notifications.getPermissionsAsync();
+  const status = current.status === 'granted'
+    ? current.status
+    : (await Notifications.requestPermissionsAsync()).status;
+  if (status !== 'granted') return false;
+  const phoneNumber = await getRegisteredPhoneNumber();
+  if (!phoneNumber) throw new Error('Confirm your phone number before enabling call notifications.');
+  await registerDeviceInstallation(phoneNumber);
+  return true;
+}
+
+export async function wasCallNotificationOfferShown() {
+  return (await SecureStore.getItemAsync(CALL_NOTIFICATIONS_OFFERED_KEY)) === '1';
+}
+
+export async function markCallNotificationOfferShown() {
+  await SecureStore.setItemAsync(CALL_NOTIFICATIONS_OFFERED_KEY, '1');
 }
 
 export async function registerDeviceInstallation(phoneNumber: string, defaultRegion = deviceDefaultPhoneRegion()) {

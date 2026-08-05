@@ -57,6 +57,7 @@ test("contact routing, incoming calls, and cleanup use the new service only", ()
   assert.match(callRoutes, /router\.post\("\/:callId\/accept"/);
   assert.match(callRoutes, /router\.post\("\/:callId\/decline"/);
   assert.match(callRoutes, /router\.post\("\/:callId\/end"/);
+  assert.match(callRoutes, /router\.get\("\/:callId"/);
   assert.match(host, /addNotificationReceivedListener/);
   assert.match(host, /addNotificationResponseReceivedListener/);
   assert.match(surface, /Answer/);
@@ -64,6 +65,9 @@ test("contact routing, incoming calls, and cleanup use the new service only", ()
   assert.match(surface, /End Call/);
   assert.match(service, /async resetVoiceCall/);
   assert.match(host, /if \(presented\) handledIncomingCallIds\.add\(callId\)/);
+  assert.match(host, /offerCallNotificationsAfterFirstCall/);
+  assert.match(host, /Never miss a call/);
+  assert.match(service, /startCallStatusPolling/);
   assert.ok(service.indexOf("this.setState(INITIAL_STATE)") < service.indexOf("await Promise.all([this.releaseRoom(room), backendCleanup()])"));
   for (const cleanup of ["setMicrophoneEnabled(false)", "unpublishTrack", "track?.detach()", "stopAudioSession", "removeAllListeners", "setState(INITIAL_STATE)"]) {
     assert.ok(service.includes(cleanup), `missing cleanup: ${cleanup}`);

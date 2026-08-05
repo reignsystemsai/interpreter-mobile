@@ -45,6 +45,20 @@ router.get("/incoming", async (req, res) => {
   return res.status(200).json({ incoming: true, callId: data.id, callerPhoneNumber: data.caller_phone_e164 });
 });
 
+router.get("/:callId", async (req, res) => {
+  if (!isSupabaseConfigured()) return callError(res, 503, "calling_unavailable", "Calling is temporarily unavailable.");
+  const callId = cleanText(req.params.callId, 80);
+  const deviceId = cleanText(req.query?.deviceId, 120);
+  if (!callId || deviceId.length < 16) return callError(res, 400, "invalid_call_request", "Unable to check this call.");
+  const result = await loadCall(getSupabaseAdmin(), callId);
+  if (result.error) return callError(res, 502, "call_state_unavailable", "Unable to check this call.");
+  if (!result.data) return res.status(200).json({ active: false, status: "ended" });
+  if (![result.data.caller_device_id, result.data.recipient_device_id].includes(deviceId)) {
+    return callError(res, 403, "not_call_participant", "Unable to check this call.");
+  }
+  return res.status(200).json({ active: OPEN_STATUSES.includes(result.data.status), status: result.data.status });
+});
+
 router.post("/start", async (req, res) => {
   console.info("[VoiceCall] start request received");
   if (!isSupabaseConfigured() || !isLiveKitConfigured()) {

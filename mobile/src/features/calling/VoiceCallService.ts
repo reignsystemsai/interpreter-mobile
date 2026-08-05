@@ -47,6 +47,7 @@ const CALL_TIMEOUT_MS = 45_000;
 
 class CleanVoiceCallService {
   private callContext: ActiveCall | null = null;
+  private callStatusTimer: ReturnType<typeof setInterval> | null = null;
   private callTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<(state: VoiceCallState) => void>();
   private resetPromise: Promise<void> | null = null;
@@ -109,6 +110,7 @@ class CleanVoiceCallService {
         token: response.callerToken,
       };
       this.updateState({ callId: response.callId, status: 'ringing' });
+      this.startCallStatusPolling(response.callId);
       this.startTimeout();
       await this.connect(this.callContext);
     } catch (error) {
@@ -130,6 +132,7 @@ class CleanVoiceCallService {
       token: null,
     };
     this.setState({ callId: incoming.callId, error: '', muted: false, remoteLabel: this.callContext.remoteLabel, role: 'recipient', status: 'ringing' });
+    this.startCallStatusPolling(incoming.callId);
     InCallManager.turnScreenOn();
     InCallManager.setKeepScreenOn(true);
     InCallManager.startRingtone('_DEFAULT_', [0, 900, 700], 'playback', Math.ceil(CALL_TIMEOUT_MS / 1000));
@@ -196,6 +199,8 @@ class CleanVoiceCallService {
     const room = this.room;
     if (this.callTimer) clearTimeout(this.callTimer);
     this.callTimer = null;
+    if (this.callStatusTimer) clearInterval(this.callStatusTimer);
+    this.callStatusTimer = null;
     InCallManager.stopRingback();
     InCallManager.stopRingtone();
     InCallManager.setKeepScreenOn(false);
@@ -224,6 +229,23 @@ class CleanVoiceCallService {
   private startTimeout() {
     if (this.callTimer) clearTimeout(this.callTimer);
     this.callTimer = setTimeout(() => { void this.failAndCleanUp('The call was not answered.'); }, CALL_TIMEOUT_MS);
+  }
+
+  private startCallStatusPolling(callId: string) {
+    if (this.callStatusTimer) clearInterval(this.callStatusTimer);
+    this.callStatusTimer = setInterval(() => {
+      void this.pollCallStatus(callId);
+    }, 1_000);
+  }
+
+  private async pollCallStatus(callId: string) {
+    if (this.callContext?.callId !== callId) return;
+    const deviceId = await getDeviceId().catch(() => '');
+    if (!deviceId) return;
+    const response = await fetch(`${API_BASE_URL}/api/v1/calls/${encodeURIComponent(callId)}?deviceId=${encodeURIComponent(deviceId)}`).catch(() => null);
+    if (!response?.ok) return;
+    const payload = (await response.json().catch(() => ({}))) as { active?: boolean };
+    if (payload.active === false) await this.resetVoiceCall({ notifyBackend: false });
   }
 
   private async requestMicrophone() {
