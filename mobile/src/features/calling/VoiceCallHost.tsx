@@ -21,15 +21,14 @@ Notifications.setNotificationHandler({
 function handleIncoming(notification?: Notifications.Notification) {
   const data = notification?.request.content.data;
   if (data?.type !== 'incoming_voice_call' || typeof data.callId !== 'string') return;
-  presentIncoming(data.callId, typeof data.callerPhoneNumber === 'string' ? data.callerPhoneNumber : 'Interpreter caller', data.callType === 'video' ? 'video' : 'voice');
+  presentIncoming(data.callId, typeof data.callerPhoneNumber === 'string' ? data.callerPhoneNumber : 'Interpreter caller');
 }
 
-function presentIncoming(callId: string, callerPhoneNumber: string, callType: 'voice' | 'video') {
+function presentIncoming(callId: string, callerPhoneNumber: string) {
   if (handledIncomingCallIds.has(callId)) return;
   handledIncomingCallIds.add(callId);
   VoiceCallService.presentIncomingCall({
     callId,
-    callType,
     callerPhoneNumber,
   });
 }
@@ -39,8 +38,8 @@ async function pollIncomingCall() {
   const deviceId = await getDeviceId();
   const response = await fetch(`${API_BASE_URL}/api/v1/calls/incoming?deviceId=${encodeURIComponent(deviceId)}`);
   if (!response.ok) return;
-  const payload = (await response.json()) as { incoming?: boolean; callId?: string; callerPhoneNumber?: string; callType?: string };
-  if (payload.incoming && payload.callId) presentIncoming(payload.callId, payload.callerPhoneNumber || 'Interpreter caller', payload.callType === 'video' ? 'video' : 'voice');
+  const payload = (await response.json()) as { incoming?: boolean; callId?: string; callerPhoneNumber?: string };
+  if (payload.incoming && payload.callId) presentIncoming(payload.callId, payload.callerPhoneNumber || 'Interpreter caller');
 }
 
 export function VoiceCallHost() {

@@ -1,7 +1,6 @@
 import { AndroidAudioTypePresets, AudioSession } from '@livekit/react-native';
-import { permissions as mediaPermissions } from '@livekit/react-native-webrtc';
 import type { CountryCode } from 'libphonenumber-js';
-import { AudioPresets, ConnectionState, Room, RoomEvent, Track, type VideoTrack } from 'livekit-client';
+import { AudioPresets, ConnectionState, Room, RoomEvent, Track } from 'livekit-client';
 import { PermissionsAndroid, Platform } from 'react-native';
 import InCallManager from 'react-native-incall-manager';
 
@@ -10,22 +9,16 @@ import { getDeviceId } from '../../services/deviceRegistration';
 
 export type VoiceCallStatus = 'idle' | 'preparing' | 'ringing' | 'connecting' | 'connected' | 'reconnecting' | 'ending' | 'ended' | 'failed';
 export type VoiceCallRole = 'caller' | 'recipient' | null;
-export type InterpreterCallType = 'voice' | 'video';
 export type VoiceCallState = {
-  callType: InterpreterCallType;
   callId: string | null;
-  cameraEnabled: boolean;
   error: string;
-  localVideoTrack: VideoTrack | null;
   muted: boolean;
-  remoteVideoTrack: VideoTrack | null;
   remoteLabel: string;
   role: VoiceCallRole;
   status: VoiceCallStatus;
 };
 
 type ActiveCall = {
-  callType: InterpreterCallType;
   callId: string;
   roomName: string | null;
   livekitUrl: string | null;
@@ -36,7 +29,6 @@ type ActiveCall = {
 
 export type IncomingVoiceCall = {
   callId: string;
-  callType?: InterpreterCallType;
   callerPhoneNumber: string;
 };
 
@@ -49,9 +41,8 @@ export class VoiceCallError extends Error {
   }
 }
 
-const INITIAL_STATE: VoiceCallState = { callId: null, callType: 'voice', cameraEnabled: false, error: '', localVideoTrack: null, muted: false, remoteLabel: '', remoteVideoTrack: null, role: null, status: 'idle' };
+const INITIAL_STATE: VoiceCallState = { callId: null, error: '', muted: false, remoteLabel: '', role: null, status: 'idle' };
 const AUDIO_CAPTURE = { autoGainControl: true, channelCount: 1, echoCancellation: true, noiseSuppression: true } as const;
-const FRONT_CAMERA_CAPTURE = { facingMode: 'user' } as const;
 const CALL_TIMEOUT_MS = 45_000;
 
 class CleanVoiceCallService {
@@ -93,18 +84,9 @@ class CleanVoiceCallService {
   }
 
   async startVoiceCall(options: { contactName: string; defaultRegion?: CountryCode; phoneNumber: string }) {
-    return this.startCall(options, 'voice');
-  }
-
-  async startVideoCall(options: { contactName: string; defaultRegion?: CountryCode; phoneNumber: string }) {
-    return this.startCall(options, 'video');
-  }
-
-  private async startCall(options: { contactName: string; defaultRegion?: CountryCode; phoneNumber: string }, callType: InterpreterCallType) {
-    if (this.state.status !== 'idle') throw new VoiceCallError('call_active', 'A call is already active.');
-    await this.requestMediaPermissions(callType);
+    if (this.state.status !== 'idle') throw new VoiceCallError('call_active', 'A voice call is already active.');
     const callerDeviceId = await getDeviceId();
-    this.setState({ ...INITIAL_STATE, callType, remoteLabel: options.contactName, role: 'caller', status: 'preparing' });
+    this.setState({ ...INITIAL_STATE, remoteLabel: options.contactName, role: 'caller', status: 'preparing' });
     InCallManager.startRingback('_DEFAULT_');
     try {
       const response = await this.request<{
@@ -114,13 +96,11 @@ class CleanVoiceCallService {
         roomName: string;
       }>('/api/v1/calls/start', {
         callerDeviceId,
-        callType,
         defaultRegion: options.defaultRegion,
         recipientPhoneNumber: options.phoneNumber,
       });
       this.callContext = {
         callId: response.callId,
-        callType,
         livekitUrl: response.livekitUrl,
         remoteLabel: options.contactName,
         role: 'caller',
@@ -142,14 +122,13 @@ class CleanVoiceCallService {
     if (!incoming.callId || this.state.status !== 'idle') return false;
     this.callContext = {
       callId: incoming.callId,
-      callType: incoming.callType === 'video' ? 'video' : 'voice',
       livekitUrl: null,
       remoteLabel: incoming.callerPhoneNumber || 'Interpreter caller',
       role: 'recipient',
       roomName: null,
       token: null,
     };
-    this.setState({ ...INITIAL_STATE, callId: incoming.callId, callType: this.callContext.callType, remoteLabel: this.callContext.remoteLabel, role: 'recipient', status: 'ringing' });
+    this.setState({ callId: incoming.callId, error: '', muted: false, remoteLabel: this.callContext.remoteLabel, role: 'recipient', status: 'ringing' });
     InCallManager.turnScreenOn();
     InCallManager.setKeepScreenOn(true);
     InCallManager.startRingtone('_DEFAULT_', [0, 900, 700], 'playback', Math.ceil(CALL_TIMEOUT_MS / 1000));
@@ -161,11 +140,8 @@ class CleanVoiceCallService {
     const call = this.callContext;
     if (!call || call.role !== 'recipient' || this.state.status !== 'ringing') return;
     InCallManager.stopRingtone();
-    if (this.callTimer) clearTimeout(this.callTimer);
-    this.callTimer = null;
+    this.updateState({ status: 'connecting' });
     try {
-      await this.requestMediaPermissions(call.callType);
-      this.updateState({ status: 'connecting' });
       const recipientDeviceId = await getDeviceId();
       const response = await this.request<{ callId: string; livekitUrl: string; recipientToken: string; roomName: string }>(
         `/api/v1/calls/${encodeURIComponent(call.callId)}/accept`,
@@ -194,14 +170,6 @@ class CleanVoiceCallService {
     const nextMuted = !this.state.muted;
     await room.localParticipant.setMicrophoneEnabled(!nextMuted, AUDIO_CAPTURE);
     this.updateState({ muted: nextMuted });
-  }
-
-  async toggleCamera() {
-    const room = this.room;
-    if (!room || this.state.callType !== 'video' || room.state !== ConnectionState.Connected) return;
-    const nextEnabled = !this.state.cameraEnabled;
-    const publication = await room.localParticipant.setCameraEnabled(nextEnabled, nextEnabled ? FRONT_CAMERA_CAPTURE : undefined);
-    this.updateState({ cameraEnabled: nextEnabled, localVideoTrack: nextEnabled ? publication?.videoTrack ?? null : null });
   }
 
   async endCall() {
@@ -244,11 +212,10 @@ class CleanVoiceCallService {
   }
 
   private async failAndCleanUp(message: string) {
-    const callType = this.state.callType;
     const label = this.state.remoteLabel;
     const role = this.state.role;
     await this.resetVoiceCall({ notifyBackend: true });
-    this.setState({ ...INITIAL_STATE, callType, error: message, remoteLabel: label, role, status: 'failed' });
+    this.setState({ callId: null, error: message, muted: false, remoteLabel: label, role, status: 'failed' });
   }
 
   private startTimeout() {
@@ -256,26 +223,15 @@ class CleanVoiceCallService {
     this.callTimer = setTimeout(() => { void this.failAndCleanUp('The call was not answered.'); }, CALL_TIMEOUT_MS);
   }
 
-  private async requestMediaPermissions(callType: InterpreterCallType) {
-    if (Platform.OS === 'ios') {
-      const microphoneGranted = await mediaPermissions.request({ name: 'microphone' });
-      if (!microphoneGranted) throw new VoiceCallError('microphone_denied', 'Microphone access is required for calls.');
-      if (callType === 'video') {
-        const cameraGranted = await mediaPermissions.request({ name: 'camera' });
-        if (!cameraGranted) throw new VoiceCallError('camera_denied', 'Camera access is required for video calls.');
-      }
-      return;
-    }
+  private async requestMicrophone() {
     if (Platform.OS !== 'android') return;
-    const permissions = [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO];
-    if (callType === 'video') permissions.push(PermissionsAndroid.PERMISSIONS.CAMERA);
-    const results = await PermissionsAndroid.requestMultiple(permissions);
-    if (results[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] !== PermissionsAndroid.RESULTS.GRANTED) throw new VoiceCallError('microphone_denied', 'Microphone access is required for calls.');
-    if (callType === 'video' && results[PermissionsAndroid.PERMISSIONS.CAMERA] !== PermissionsAndroid.RESULTS.GRANTED) throw new VoiceCallError('camera_denied', 'Camera access is required for video calls.');
+    const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
+    if (result !== PermissionsAndroid.RESULTS.GRANTED) throw new VoiceCallError('microphone_denied', 'Microphone access is required for voice calls.');
   }
 
   private async connect(call: ActiveCall) {
     if (!call.livekitUrl || !call.token) throw new VoiceCallError('missing_token', 'Unable to connect. Please try again.');
+    await this.requestMicrophone();
     await AudioSession.configureAudio({
       android: {
         audioTypeOptions: { ...AndroidAudioTypePresets.communication, forceHandleAudioRouting: true },
@@ -288,7 +244,6 @@ class CleanVoiceCallService {
     const room = new Room({
       adaptiveStream: true,
       audioCaptureDefaults: AUDIO_CAPTURE,
-      videoCaptureDefaults: FRONT_CAMERA_CAPTURE,
       publishDefaults: { audioPreset: AudioPresets.speech, dtx: true, forceStereo: false, red: true },
     });
     this.room = room;
@@ -304,18 +259,9 @@ class CleanVoiceCallService {
       if (this.room === room) void this.resetVoiceCall({ notifyBackend: true });
     });
     room.on(RoomEvent.TrackSubscribed, (track) => {
-      if (this.room !== room) return;
-      if (track.kind === Track.Kind.Video) {
-        this.updateState({ remoteVideoTrack: track as VideoTrack });
-        return;
-      }
-      if (track.kind === Track.Kind.Audio) {
-        console.info('[VoiceCall] remote audio subscribed');
-        this.updateState({ status: 'connected' });
-      }
-    });
-    room.on(RoomEvent.TrackUnsubscribed, (track) => {
-      if (this.room === room && track.kind === Track.Kind.Video) this.updateState({ remoteVideoTrack: null });
+      if (track.kind !== Track.Kind.Audio || this.room !== room) return;
+      console.info('[VoiceCall] remote audio subscribed');
+      this.updateState({ status: 'connected' });
     });
     room.on(RoomEvent.Reconnecting, () => {
       if (this.room === room) this.updateState({ status: 'reconnecting' });
@@ -329,11 +275,6 @@ class CleanVoiceCallService {
     console.info(`[VoiceCall] ${call.role} connected`);
     await room.localParticipant.setMicrophoneEnabled(true, AUDIO_CAPTURE);
     console.info('[VoiceCall] microphone published');
-    if (call.callType === 'video') {
-      const cameraPublication = await room.localParticipant.setCameraEnabled(true, FRONT_CAMERA_CAPTURE);
-      this.updateState({ cameraEnabled: true, localVideoTrack: cameraPublication?.videoTrack ?? null });
-      console.info('[VideoCall] camera published');
-    }
     if (this.callTimer && room.remoteParticipants.size > 0) {
       clearTimeout(this.callTimer);
       this.callTimer = null;
@@ -346,19 +287,11 @@ class CleanVoiceCallService {
   private async releaseRoom(room: Room | null) {
     if (room) {
       await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
-      await room.localParticipant.setCameraEnabled(false).catch(() => undefined);
       for (const publication of room.localParticipant.audioTrackPublications.values()) {
-        if (publication.track) await room.localParticipant.unpublishTrack(publication.track).catch(() => undefined);
-      }
-      for (const publication of room.localParticipant.videoTrackPublications.values()) {
         if (publication.track) await room.localParticipant.unpublishTrack(publication.track).catch(() => undefined);
       }
       for (const participant of room.remoteParticipants.values()) {
         for (const publication of participant.audioTrackPublications.values()) {
-          publication.track?.detach();
-          if (publication.isSubscribed) publication.setSubscribed(false);
-        }
-        for (const publication of participant.videoTrackPublications.values()) {
           publication.track?.detach();
           if (publication.isSubscribed) publication.setSubscribed(false);
         }

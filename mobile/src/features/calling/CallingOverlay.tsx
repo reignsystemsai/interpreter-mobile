@@ -52,7 +52,7 @@ export function CallingOverlay({ onClose, visible }: {
   });
 
   const openCall = (type: typeof ACTIONS[number]['type']) => {
-    setAutoRequestContacts(true);
+    setAutoRequestContacts(type === 'voice');
     setView('contacts');
   };
 

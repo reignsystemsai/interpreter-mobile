@@ -4,7 +4,7 @@ function validExpoPushToken(token) {
   return typeof token === "string" && (token.startsWith("ExponentPushToken[") || token.startsWith("ExpoPushToken["));
 }
 
-async function sendIncomingVoiceCallPush(admin, { callId, callerPhoneNumber, callType = "voice", installationId }) {
+async function sendIncomingVoiceCallPush(admin, { callId, callerPhoneNumber, installationId }) {
   const { data, error } = await admin
     .from("device_installations")
     .select("push_token")
@@ -22,9 +22,9 @@ async function sendIncomingVoiceCallPush(admin, { callId, callerPhoneNumber, cal
       priority: "high",
       channelId: "incoming-calls",
       categoryId: "incoming-call",
-      title: `Incoming Interpreter ${callType === "video" ? "video " : ""}call`,
+      title: "Incoming Interpreter call",
       body: `${callerPhoneNumber} is calling.`,
-      data: { type: "incoming_voice_call", callId, callerPhoneNumber, callType }
+      data: { type: "incoming_voice_call", callId, callerPhoneNumber, callType: "voice" }
     })
   });
   if (!response.ok) throw new Error(`Expo push returned ${response.status}`);

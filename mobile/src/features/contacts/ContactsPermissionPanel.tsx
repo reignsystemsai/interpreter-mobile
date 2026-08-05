@@ -5,7 +5,7 @@ import { Alert, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Text, 
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import { type InterpreterContact, useContacts } from './ContactsProvider';
-import { VoiceCallService, type InterpreterCallType } from '../calling/VoiceCallService';
+import { VoiceCallService } from '../calling/VoiceCallService';
 import {
   deviceDefaultPhoneRegion,
   getRegisteredPhoneNumber,
@@ -91,7 +91,6 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
   const [ownPhoneNumber, setOwnPhoneNumber] = useState('');
   const [pendingContactPhone, setPendingContactPhone] = useState('');
   const [pendingContactRegion, setPendingContactRegion] = useState<CountryCode>(deviceDefaultPhoneRegion());
-  const [pendingCallType, setPendingCallType] = useState<InterpreterCallType>('voice');
   const [registrationError, setRegistrationError] = useState('');
 
   const invite = async () => {
@@ -109,13 +108,11 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     }
   };
 
-  const startContactCall = async (phoneNumberE164: string, defaultRegion: CountryCode, callType: InterpreterCallType) => {
+  const startContactCall = async (phoneNumberE164: string, defaultRegion: CountryCode) => {
     try {
       const recipient = await lookupDeviceByPhone(phoneNumberE164, defaultRegion);
       if (!recipient.found) throw new Error('This person does not have Interpreter yet.');
-      const options = { contactName: contact.displayName, defaultRegion, phoneNumber: phoneNumberE164 };
-      if (callType === 'video') await VoiceCallService.startVideoCall(options);
-      else await VoiceCallService.startVoiceCall(options);
+      await VoiceCallService.startVoiceCall({ contactName: contact.displayName, defaultRegion, phoneNumber: phoneNumberE164 });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Please try again.';
       if (message === 'This person does not have Interpreter yet.') {
@@ -129,19 +126,18 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     }
   };
 
-  const choosePhoneForCall = async (phoneNumberE164: string, region: CountryCode, callType: InterpreterCallType) => {
+  const choosePhoneForCall = async (phoneNumberE164: string, region: CountryCode) => {
     const registeredPhone = await getRegisteredPhoneNumber().catch(() => null);
     if (!registeredPhone) {
       setPendingContactPhone(phoneNumberE164);
       setPendingContactRegion(region);
-      setPendingCallType(callType);
       setNumberPromptVisible(true);
       return;
     }
-    await startContactCall(phoneNumberE164, region, callType);
+    await startContactCall(phoneNumberE164, region);
   };
 
-  const beginCall = async (callType: InterpreterCallType) => {
+  const beginVoiceCall = async () => {
     const registeredPhone = await getRegisteredPhoneNumber().catch(() => null);
     const fallbackRegion = phoneRegionFromE164(registeredPhone) ?? deviceDefaultPhoneRegion();
     const firstValidPhone = contact.phoneNumbers.find((item) => {
@@ -158,7 +154,7 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     const region = normalizePhoneRegion(firstValidPhone.countryCode) ?? fallbackRegion;
     const phoneNumberE164 = normalizeE164(firstValidPhone.value, region);
     if (!phoneNumberE164) return;
-    await choosePhoneForCall(phoneNumberE164, region, callType);
+    await choosePhoneForCall(phoneNumberE164, region);
   };
 
   const registerAndCall = async () => {
@@ -167,7 +163,7 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     try {
       await registerDeviceInstallation(ownPhoneNumber);
       setNumberPromptVisible(false);
-      await startContactCall(pendingContactPhone, pendingContactRegion, pendingCallType);
+      await startContactCall(pendingContactPhone, pendingContactRegion);
     } catch (error) {
       setRegistrationError(error instanceof Error ? error.message : 'Unable to register this phone number.');
     } finally {
@@ -182,8 +178,8 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
       <Text style={styles.detailName}>{contact.displayName}</Text>
       <Text style={styles.userStatus}>iPhone contact</Text>
       <View style={styles.callGrid}>
-        <Pressable onPress={() => void beginCall('voice')} style={styles.callButton}><CallIcon name="phone" /><Text style={styles.callLabel}>Voice Call</Text></Pressable>
-        <Pressable onPress={() => void beginCall('video')} style={styles.callButton}><CallIcon name="video" /><Text style={styles.callLabel}>Video Call</Text></Pressable>
+        <Pressable onPress={() => void beginVoiceCall()} style={styles.callButton}><CallIcon name="phone" /><Text style={styles.callLabel}>Voice Call</Text></Pressable>
+        <Pressable onPress={() => Alert.alert('Coming soon', 'Video calling is not enabled yet.')} style={styles.callButton}><CallIcon name="video" /><Text style={styles.callLabel}>Video Call</Text><Text style={styles.comingSoon}>Coming Soon</Text></Pressable>
       </View>
       <PrimaryButton label="Invite to Interpreter" onPress={() => void invite().catch(() => Alert.alert('Unable to open invite'))} />
       <Text style={styles.sectionTitle}>Contact details</Text>

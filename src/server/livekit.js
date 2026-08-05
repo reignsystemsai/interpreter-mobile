@@ -18,7 +18,7 @@ async function createVoiceRoom(roomName) {
 }
 
 async function deleteVoiceRoom(roomName) {
-  if (typeof roomName !== "string" || !/^(voice|video)-/.test(roomName)) return false;
+  if (typeof roomName !== "string" || !roomName.startsWith("voice-")) return false;
   try {
     await roomService().deleteRoom(roomName);
     return true;
@@ -28,7 +28,7 @@ async function deleteVoiceRoom(roomName) {
   }
 }
 
-async function createVoiceToken({ identity, roomName, callType = "voice" }) {
+async function createVoiceToken({ identity, roomName }) {
   if (!isLiveKitConfigured()) throw new Error("LiveKit is not configured");
   const token = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, {
     identity,
@@ -40,9 +40,7 @@ async function createVoiceToken({ identity, roomName, callType = "voice" }) {
     roomJoin: true,
     canPublish: true,
     canPublishData: false,
-    canPublishSources: callType === "video"
-      ? [TrackSource.MICROPHONE, TrackSource.CAMERA]
-      : [TrackSource.MICROPHONE],
+    canPublishSources: [TrackSource.MICROPHONE],
     canSubscribe: true
   });
   return token.toJwt();

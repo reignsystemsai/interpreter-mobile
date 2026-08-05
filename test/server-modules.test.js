@@ -24,9 +24,6 @@ test("LiveKit voice tokens use canonical configuration and microphone-only grant
   assert.equal(payload.sub, "device-1:call-1:caller");
   assert.equal(payload.video.room, "voice-room-1");
   assert.deepEqual(payload.video.canPublishSources, ["microphone"]);
-  const videoJwt = await createVoiceToken({ identity: "device-1:call-2:caller", roomName: "video-room-1", callType: "video" });
-  const videoPayload = JSON.parse(Buffer.from(videoJwt.split(".")[1], "base64url").toString("utf8"));
-  assert.deepEqual(videoPayload.video.canPublishSources, ["microphone", "camera"]);
   assert.ok(payload.exp - payload.nbf <= 600);
   assert.equal(validExpoPushToken("ExpoPushToken[test]"), true);
   for (const [name, value] of [["LIVEKIT_URL", previous.url], ["LIVEKIT_API_KEY", previous.key], ["LIVEKIT_API_SECRET", previous.secret]]) {
