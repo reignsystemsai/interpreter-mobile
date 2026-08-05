@@ -52,7 +52,7 @@ export function VoiceCallSurface() {
           {connectedAt.current ? <Text style={styles.duration}>{formatDuration(duration)}</Text> : null}
           {isIncoming ? <View style={styles.incomingActions}>
             <Pressable accessibilityRole="button" onPress={() => void VoiceCallService.declineIncomingCall()} style={styles.decline}><Text style={styles.actionText}>Decline</Text></Pressable>
-            <Pressable accessibilityRole="button" onPress={() => void VoiceCallService.acceptIncomingCall()} style={styles.accept}><Text style={styles.actionText}>Accept</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={() => void VoiceCallService.acceptIncomingCall()} style={styles.accept}><Text style={styles.actionText}>Answer</Text></Pressable>
           </View> : <Pressable accessibilityRole="button" onPress={() => void VoiceCallService.endCall()} style={styles.end}><Text style={styles.endText}>End Call</Text></Pressable>}
         </View></SafeAreaView>
       </BlurView>

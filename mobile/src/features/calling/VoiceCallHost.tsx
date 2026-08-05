@@ -26,11 +26,11 @@ function handleIncoming(notification?: Notifications.Notification) {
 
 function presentIncoming(callId: string, callerPhoneNumber: string) {
   if (handledIncomingCallIds.has(callId)) return;
-  handledIncomingCallIds.add(callId);
-  VoiceCallService.presentIncomingCall({
+  const presented = VoiceCallService.presentIncomingCall({
     callId,
     callerPhoneNumber,
   });
+  if (presented) handledIncomingCallIds.add(callId);
 }
 
 async function pollIncomingCall() {

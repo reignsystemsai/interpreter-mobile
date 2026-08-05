@@ -84,6 +84,7 @@ class CleanVoiceCallService {
   }
 
   async startVoiceCall(options: { contactName: string; defaultRegion?: CountryCode; phoneNumber: string }) {
+    if (this.resetPromise) await this.resetPromise;
     if (this.state.status !== 'idle') throw new VoiceCallError('call_active', 'A voice call is already active.');
     const callerDeviceId = await getDeviceId();
     this.setState({ ...INITIAL_STATE, remoteLabel: options.contactName, role: 'caller', status: 'preparing' });
@@ -200,15 +201,17 @@ class CleanVoiceCallService {
     InCallManager.setKeepScreenOn(false);
     this.callContext = null;
     this.room = null;
-    if (this.state.status !== 'idle') this.updateState({ status: 'ending' });
-    await this.releaseRoom(room);
-    if (notifyBackend && call?.callId) {
+    this.setState(INITIAL_STATE);
+
+    const backendCleanup = async () => {
+      if (!notifyBackend || !call?.callId) return;
       const deviceId = await getDeviceId().catch(() => '');
       if (deviceId) {
         await this.request<void>(`/api/v1/calls/${encodeURIComponent(call.callId)}/end`, { deviceId }).catch(() => undefined);
       }
-    }
-    this.setState(INITIAL_STATE);
+    };
+
+    await Promise.all([this.releaseRoom(room), backendCleanup()]);
   }
 
   private async failAndCleanUp(message: string) {
@@ -286,7 +289,12 @@ class CleanVoiceCallService {
 
   private async releaseRoom(room: Room | null) {
     if (room) {
-      await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
+      room.removeAllListeners();
+      const disconnect = room.disconnect().catch(() => undefined);
+      await Promise.all([
+        room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined),
+        disconnect,
+      ]);
       for (const publication of room.localParticipant.audioTrackPublications.values()) {
         if (publication.track) await room.localParticipant.unpublishTrack(publication.track).catch(() => undefined);
       }
@@ -296,8 +304,6 @@ class CleanVoiceCallService {
           if (publication.isSubscribed) publication.setSubscribed(false);
         }
       }
-      room.removeAllListeners();
-      await room.disconnect().catch(() => undefined);
     }
     await AudioSession.stopAudioSession().catch(() => undefined);
   }
