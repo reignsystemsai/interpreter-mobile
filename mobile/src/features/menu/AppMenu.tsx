@@ -54,7 +54,7 @@ export function AppMenu({ onClose, onNavigate, visible }: {
       <BlurView experimentalBlurMethod="dimezisBlurView" intensity={48} style={styles.backdrop} tint="light">
       <Pressable accessibilityLabel="Close menu" onPress={onClose} style={StyleSheet.absoluteFill} />
       <View style={styles.page}>
-        <Pressable accessibilityLabel="Close menu" onPress={onClose} style={styles.close}>
+        <Pressable accessibilityLabel="Close menu" accessibilityRole="button" hitSlop={12} onPress={onClose} style={styles.close}>
           <Text style={styles.closeText}>×</Text>
         </Pressable>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -94,7 +94,7 @@ const BLUE = '#075BFF';
 const styles = StyleSheet.create({
   backdrop: { alignItems: 'flex-end', backgroundColor: 'rgba(9,28,64,0.14)', flex: 1, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 26 },
   page: { backgroundColor: 'rgba(248,251,255,0.68)', borderColor: 'rgba(255,255,255,0.94)', borderRadius: 32, borderWidth: 1, maxHeight: '94%', shadowColor: '#164995', shadowOffset: { height: 10, width: 0 }, shadowOpacity: 0.20, shadowRadius: 30, width: '92%' },
-  close: { alignItems: 'center', height: 54, justifyContent: 'center', position: 'absolute', right: 12, top: 10, width: 54, zIndex: 2 },
+  close: { alignItems: 'center', elevation: 10, height: 54, justifyContent: 'center', position: 'absolute', right: 12, top: 10, width: 54, zIndex: 20 },
   closeText: { color: BLUE, fontSize: 42, fontWeight: '300', lineHeight: 45 },
   content: { paddingBottom: 30, paddingHorizontal: 28, paddingTop: 76 },
   section: { borderBottomColor: '#E5EAF2', borderBottomWidth: 1, marginBottom: 25, paddingBottom: 12 },

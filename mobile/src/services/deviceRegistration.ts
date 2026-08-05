@@ -58,10 +58,7 @@ async function getPushToken() {
     });
   }
   const current = await Notifications.getPermissionsAsync();
-  const status = current.status === 'undetermined'
-    ? (await Notifications.requestPermissionsAsync()).status
-    : current.status;
-  if (status !== 'granted') return null;
+  if (current.status !== 'granted') return null;
   const projectId = Constants.expoConfig?.extra?.eas?.projectId;
   if (typeof projectId !== 'string' || !projectId) return null;
   return (await Notifications.getExpoPushTokenAsync({ projectId })).data;

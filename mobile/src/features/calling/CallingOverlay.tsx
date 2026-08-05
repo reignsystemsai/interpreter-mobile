@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 import { ContactsPermissionPanel } from '../contacts/ContactsPermissionPanel';
@@ -26,6 +27,7 @@ export function CallingOverlay({ onClose, visible }: {
   onClose: () => void;
   visible: boolean;
 }) {
+  const insets = useSafeAreaInsets();
   const [view, setView] = useState<CallingView>('actions');
   const [autoRequestContacts, setAutoRequestContacts] = useState(false);
   const close = () => {
@@ -58,12 +60,12 @@ export function CallingOverlay({ onClose, visible }: {
     <Modal animationType="slide" onRequestClose={close} transparent visible={visible}>
       <BlurView experimentalBlurMethod="dimezisBlurView" intensity={18} style={styles.backdrop} tint="light">
           <Pressable accessibilityLabel="Close calling" onPress={close} style={StyleSheet.absoluteFill} />
-          <View accessibilityViewIsModal {...panResponder.panHandlers} style={styles.sheet}>
-            <Pressable accessibilityLabel="Close calling" accessibilityRole="button" onPress={close} style={styles.close}><Text style={styles.closeText}>×</Text></Pressable>
+          <View accessibilityViewIsModal {...panResponder.panHandlers} style={[styles.sheet, { paddingTop: insets.top + 58 }]}>
+            <Pressable accessibilityLabel="Close calling" accessibilityRole="button" hitSlop={12} onPress={close} style={[styles.close, { top: insets.top + 6 }]}><Text style={styles.closeText}>×</Text></Pressable>
             {view === 'contacts' ? <ContactsPermissionPanel autoRequest={autoRequestContacts} onBack={close} /> : (
               <View style={styles.content}>
                 <Text style={styles.eyebrow}>INTERPRETER CALLING</Text>
-                <Text style={styles.title}>Connect in any language</Text>
+                <Text style={styles.title}>Speak in any language</Text>
                 <Text style={styles.subtitle}>Choose a contact, then start a secure voice or video call.</Text>
                 <View style={styles.actions}>
                   {ACTIONS.map((action) => (
@@ -84,7 +86,7 @@ export function CallingOverlay({ onClose, visible }: {
                   <Text style={styles.noAccount}>No account required.</Text>
                 </View>
                 <Pressable accessibilityRole="button" onPress={() => { setAutoRequestContacts(true); setView('contacts'); }} style={({ pressed }) => [styles.cta, pressed && styles.pressed]}>
-                  <Text style={styles.ctaText}>Get Started</Text>
+                  <Text style={styles.ctaText}>Speak Now</Text>
                 </Pressable>
               </View>
             )}
@@ -98,7 +100,7 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1 },
   sheet: { backgroundColor: 'rgba(255,255,255,0.12)', flex: 1, paddingBottom: 28, paddingHorizontal: 22, paddingTop: 68 },
   content: { flex: 1 },
-  close: { alignItems: 'center', height: 44, justifyContent: 'center', position: 'absolute', right: 16, top: 20, width: 44, zIndex: 2 },
+  close: { alignItems: 'center', elevation: 10, height: 44, justifyContent: 'center', position: 'absolute', right: 16, width: 44, zIndex: 20 },
   closeText: { color: BLUE, fontSize: 34, fontWeight: '300' },
   eyebrow: { color: BLUE, fontSize: 12, fontWeight: '800', letterSpacing: 1.1 },
   title: { color: '#101828', fontSize: 28, fontWeight: '800', marginTop: 5 },
@@ -112,6 +114,6 @@ const styles = StyleSheet.create({
   footerCopy: { alignItems: 'center', marginTop: 18 },
   allowance: { color: '#667085', fontSize: 12, textAlign: 'center' },
   noAccount: { color: BLUE, fontSize: 12, fontWeight: '600', marginTop: 3, textAlign: 'center' },
-  cta: { alignItems: 'center', backgroundColor: BLUE, borderRadius: 30, justifyContent: 'center', marginTop: 'auto', minHeight: 58 },
+  cta: { alignItems: 'center', backgroundColor: BLUE, borderRadius: 30, justifyContent: 'center', marginTop: 26, minHeight: 58 },
   ctaText: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
 });
