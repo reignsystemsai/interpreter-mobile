@@ -50,6 +50,19 @@ test("mobile subscribes only to its translated track and never carries an OpenAI
   assert.doesNotMatch(mobile, /OPENAI_API_KEY|api\.openai\.com/);
 });
 
+test("call languages are selected after the contact and passed explicitly to the call", () => {
+  const home = read("mobile", "app", "index.tsx");
+  const overlay = read("mobile", "src", "features", "calling", "CallingOverlay.tsx");
+  const selector = read("mobile", "src", "features", "calling", "CallLanguageSelection.tsx");
+  const contacts = read("mobile", "src", "features", "contacts", "ContactsPermissionPanel.tsx");
+  assert.match(home, /<CallingOverlay onClose=/);
+  assert.doesNotMatch(overlay, /languageOne|languageTwo/);
+  assert.match(selector, /I speak/);
+  assert.match(selector, /They speak/);
+  assert.match(selector, /Start Voice Call/);
+  assert.match(contacts, /startVoiceCall\(\{ callerLanguage,[\s\S]*recipientLanguage \}\)/);
+});
+
 test("server creates exactly two translation directions and stops them with the call", () => {
   const bridge = read("src", "server", "translation", "translation-bridge.js");
   const calls = read("src", "server", "routes", "calls.js");

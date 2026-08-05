@@ -5,6 +5,7 @@ import { Alert, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Text, 
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import { type InterpreterContact, useContacts } from './ContactsProvider';
+import { CallLanguageSelection, type CallLanguage } from '../calling/CallLanguageSelection';
 import { VoiceCallService } from '../calling/VoiceCallService';
 import {
   deviceDefaultPhoneRegion,
@@ -19,7 +20,7 @@ import {
 const APP_DOWNLOAD_URL = 'https://interpreter.ai/download';
 const BLUE = '#075BFF';
 
-export function ContactsPermissionPanel({ autoRequest = false, languageOne, languageTwo, onBack }: { autoRequest?: boolean; languageOne: string; languageTwo: string; onBack: () => void }) {
+export function ContactsPermissionPanel({ autoRequest = false, onBack }: { autoRequest?: boolean; onBack: () => void }) {
   const { contacts, error, loading, permission, refresh, requestAndImport } = useContacts();
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -41,7 +42,7 @@ export function ContactsPermissionPanel({ autoRequest = false, languageOne, lang
     }).sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [contacts, query]);
 
-  if (selected) return <ContactDetails contact={selected} languageOne={languageOne} languageTwo={languageTwo} onBack={() => setSelectedId(null)} onRefresh={refresh} />;
+  if (selected) return <ContactDetails contact={selected} onBack={() => setSelectedId(null)} onRefresh={refresh} />;
 
   if (permission !== 'granted' && !contacts.length) return (
     <View>
@@ -85,12 +86,15 @@ function permissionLabel(permission: ReturnType<typeof useContacts>['permission'
   return 'Not requested';
 }
 
-function ContactDetails({ contact, languageOne, languageTwo, onBack, onRefresh }: { contact: InterpreterContact; languageOne: string; languageTwo: string; onBack: () => void; onRefresh: () => Promise<void> }) {
+function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterContact; onBack: () => void; onRefresh: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);
+  const [showLanguageSelection, setShowLanguageSelection] = useState(true);
   const [numberPromptVisible, setNumberPromptVisible] = useState(false);
   const [ownPhoneNumber, setOwnPhoneNumber] = useState('');
   const [pendingContactPhone, setPendingContactPhone] = useState('');
   const [pendingContactRegion, setPendingContactRegion] = useState<CountryCode>(deviceDefaultPhoneRegion());
+  const [pendingCallerLanguage, setPendingCallerLanguage] = useState<CallLanguage>('English');
+  const [pendingRecipientLanguage, setPendingRecipientLanguage] = useState<CallLanguage>('Spanish');
   const [registrationError, setRegistrationError] = useState('');
 
   const invite = async () => {
@@ -108,11 +112,11 @@ function ContactDetails({ contact, languageOne, languageTwo, onBack, onRefresh }
     }
   };
 
-  const startContactCall = async (phoneNumberE164: string, defaultRegion: CountryCode) => {
+  const startContactCall = async (phoneNumberE164: string, defaultRegion: CountryCode, callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => {
     try {
       const recipient = await lookupDeviceByPhone(phoneNumberE164, defaultRegion);
       if (!recipient.found) throw new Error('This person does not have Interpreter yet.');
-      await VoiceCallService.startVoiceCall({ callerLanguage: languageOne, contactName: contact.displayName, defaultRegion, phoneNumber: phoneNumberE164, recipientLanguage: languageTwo });
+      await VoiceCallService.startVoiceCall({ callerLanguage, contactName: contact.displayName, defaultRegion, phoneNumber: phoneNumberE164, recipientLanguage });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Please try again.';
       if (message === 'This person does not have Interpreter yet.') {
@@ -126,18 +130,20 @@ function ContactDetails({ contact, languageOne, languageTwo, onBack, onRefresh }
     }
   };
 
-  const choosePhoneForCall = async (phoneNumberE164: string, region: CountryCode) => {
+  const choosePhoneForCall = async (phoneNumberE164: string, region: CountryCode, callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => {
     const registeredPhone = await getRegisteredPhoneNumber().catch(() => null);
     if (!registeredPhone) {
       setPendingContactPhone(phoneNumberE164);
       setPendingContactRegion(region);
+      setPendingCallerLanguage(callerLanguage);
+      setPendingRecipientLanguage(recipientLanguage);
       setNumberPromptVisible(true);
       return;
     }
-    await startContactCall(phoneNumberE164, region);
+    await startContactCall(phoneNumberE164, region, callerLanguage, recipientLanguage);
   };
 
-  const beginVoiceCall = async () => {
+  const beginVoiceCall = async (callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => {
     const registeredPhone = await getRegisteredPhoneNumber().catch(() => null);
     const fallbackRegion = phoneRegionFromE164(registeredPhone) ?? deviceDefaultPhoneRegion();
     const firstValidPhone = contact.phoneNumbers.find((item) => {
@@ -154,7 +160,7 @@ function ContactDetails({ contact, languageOne, languageTwo, onBack, onRefresh }
     const region = normalizePhoneRegion(firstValidPhone.countryCode) ?? fallbackRegion;
     const phoneNumberE164 = normalizeE164(firstValidPhone.value, region);
     if (!phoneNumberE164) return;
-    await choosePhoneForCall(phoneNumberE164, region);
+    await choosePhoneForCall(phoneNumberE164, region, callerLanguage, recipientLanguage);
   };
 
   const registerAndCall = async () => {
@@ -163,13 +169,34 @@ function ContactDetails({ contact, languageOne, languageTwo, onBack, onRefresh }
     try {
       await registerDeviceInstallation(ownPhoneNumber);
       setNumberPromptVisible(false);
-      await startContactCall(pendingContactPhone, pendingContactRegion);
+      await startContactCall(pendingContactPhone, pendingContactRegion, pendingCallerLanguage, pendingRecipientLanguage);
     } catch (error) {
       setRegistrationError(error instanceof Error ? error.message : 'Unable to register this phone number.');
     } finally {
       setBusy(false);
     }
   };
+
+  if (showLanguageSelection) return <>
+    <CallLanguageSelection
+      contact={contact}
+      onBack={onBack}
+      onContactPress={() => setShowLanguageSelection(false)}
+      onStart={(callerLanguage, recipientLanguage) => void beginVoiceCall(callerLanguage, recipientLanguage)}
+    />
+    <Modal animationType="fade" onRequestClose={() => setNumberPromptVisible(false)} transparent visible={numberPromptVisible}>
+      <View style={styles.numberBackdrop}>
+        <View accessibilityViewIsModal style={styles.numberCard}>
+          <Text style={styles.numberTitle}>Your phone number</Text>
+          <Text style={styles.numberBody}>Enter it once so this device can receive Interpreter calls.</Text>
+          <TextInput keyboardType="phone-pad" onChangeText={setOwnPhoneNumber} placeholder="Include country code, e.g. +57" style={styles.input} value={ownPhoneNumber} />
+          {registrationError ? <Text style={styles.error}>{registrationError}</Text> : null}
+          <PrimaryButton disabled={busy} label={busy ? 'Saving…' : 'Continue'} onPress={() => void registerAndCall()} />
+          <SecondaryButton label="Not Now" onPress={() => setNumberPromptVisible(false)} />
+        </View>
+      </View>
+    </Modal>
+  </>;
 
   return <>
     <ScrollView contentContainerStyle={styles.details} showsVerticalScrollIndicator={false}>
@@ -178,7 +205,7 @@ function ContactDetails({ contact, languageOne, languageTwo, onBack, onRefresh }
       <Text style={styles.detailName}>{contact.displayName}</Text>
       <Text style={styles.userStatus}>iPhone contact</Text>
       <View style={styles.callGrid}>
-        <Pressable onPress={() => void beginVoiceCall()} style={styles.callButton}><CallIcon name="phone" /><Text style={styles.callLabel}>Voice Call</Text></Pressable>
+        <Pressable onPress={() => setShowLanguageSelection(true)} style={styles.callButton}><CallIcon name="phone" /><Text style={styles.callLabel}>Voice Call</Text></Pressable>
         <Pressable onPress={() => Alert.alert('Coming soon', 'Video calling is not enabled yet.')} style={styles.callButton}><CallIcon name="video" /><Text style={styles.callLabel}>Video Call</Text><Text style={styles.comingSoon}>Coming Soon</Text></Pressable>
       </View>
       <PrimaryButton label="Invite to Interpreter" onPress={() => void invite().catch(() => Alert.alert('Unable to open invite'))} />
