@@ -24,6 +24,7 @@ export const CALL_LANGUAGES = [
 ] as const;
 
 export type CallLanguage = typeof CALL_LANGUAGES[number];
+export type TranslatorVoicePreference = 'male' | 'female';
 
 function GlobeIcon() {
   return <Svg height={31} viewBox="0 0 32 32" width={31}>
@@ -52,10 +53,11 @@ export function CallLanguageSelection({ contact, onBack, onContactPress, onStart
   contact: InterpreterContact;
   onBack: () => void;
   onContactPress: () => void;
-  onStart: (callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => void;
+  onStart: (callerLanguage: CallLanguage, recipientLanguage: CallLanguage, translatorVoicePreference: TranslatorVoicePreference) => void;
 }) {
   const [callerLanguage, setCallerLanguage] = useState<CallLanguage>('English');
   const [recipientLanguage, setRecipientLanguage] = useState<CallLanguage>('Spanish');
+  const [translatorVoicePreference, setTranslatorVoicePreference] = useState<TranslatorVoicePreference>('female');
   const [editing, setEditing] = useState<'caller' | 'recipient' | null>(null);
   const sameLanguage = callerLanguage === recipientLanguage;
 
@@ -78,10 +80,27 @@ export function CallLanguageSelection({ contact, onBack, onContactPress, onStart
       <Text accessibilityElementsHidden style={styles.directionArrow}>⇅</Text>
       <LanguageControl label="They speak" onPress={() => setEditing('recipient')} value={recipientLanguage} />
     </View>
+    <View style={styles.voiceSection}>
+      <Text style={styles.voiceLabel}>Translator voice</Text>
+      <View style={styles.voiceOptions}>
+        {(['male', 'female'] as const).map((preference) => {
+          const selected = translatorVoicePreference === preference;
+          return <Pressable
+            key={preference}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: selected }}
+            onPress={() => setTranslatorVoicePreference(preference)}
+            style={({ pressed }) => [styles.voiceOption, selected && styles.voiceOptionSelected, pressed && styles.pressed]}
+          >
+            <Text style={[styles.voiceOptionText, selected && styles.voiceOptionTextSelected]}>{preference === 'male' ? 'Male' : 'Female'}</Text>
+          </Pressable>;
+        })}
+      </View>
+    </View>
     <Text style={[styles.summary, sameLanguage && styles.warning]}>
       {sameLanguage ? 'Choose two different languages.' : <>You hear <Text style={styles.summaryStrong}>{callerLanguage}</Text>. {contact.givenName || contact.displayName} hears <Text style={styles.summaryStrong}>{recipientLanguage}</Text>.</>}
     </Text>
-    <Pressable accessibilityRole="button" disabled={sameLanguage} onPress={() => onStart(callerLanguage, recipientLanguage)} style={({ pressed }) => [styles.start, sameLanguage && styles.disabled, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" disabled={sameLanguage} onPress={() => onStart(callerLanguage, recipientLanguage, translatorVoicePreference)} style={({ pressed }) => [styles.start, sameLanguage && styles.disabled, pressed && styles.pressed]}>
       <PhoneIcon /><Text style={styles.startText}>Start Voice Call</Text>
     </Pressable>
 
@@ -123,6 +142,13 @@ const styles = StyleSheet.create({
   languageLabel: { color: '#667085', fontSize: 14 },
   languageValue: { color: '#101828', fontSize: 21, fontWeight: '700', marginTop: 2 },
   directionArrow: { color: BLUE, fontSize: 30, lineHeight: 40, textAlign: 'center' },
+  voiceSection: { marginTop: 22 },
+  voiceLabel: { color: '#667085', fontSize: 14, marginBottom: 9 },
+  voiceOptions: { backgroundColor: 'rgba(255,255,255,0.28)', borderRadius: 23, flexDirection: 'row', padding: 4 },
+  voiceOption: { alignItems: 'center', borderRadius: 19, flex: 1, justifyContent: 'center', minHeight: 42 },
+  voiceOptionSelected: { backgroundColor: '#FFFFFF' },
+  voiceOptionText: { color: '#667085', fontSize: 15, fontWeight: '600' },
+  voiceOptionTextSelected: { color: BLUE, fontWeight: '800' },
   summary: { color: '#344054', fontSize: 14, lineHeight: 21, marginTop: 25, textAlign: 'center' },
   summaryStrong: { color: BLUE, fontWeight: '700' },
   warning: { color: '#B42318', fontWeight: '600' },

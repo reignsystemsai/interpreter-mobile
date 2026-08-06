@@ -10,6 +10,19 @@ const { startCallTranslation, stopCallTranslation } = require("../translation/tr
 
 const router = express.Router();
 const OPEN_STATUSES = ["calling", "ringing", "accepted"];
+const TRANSLATOR_VOICE_SUFFIX = /-translator-voice-(male|female)$/;
+
+function roomNameWithVoicePreference(preference, id = crypto.randomUUID()) {
+  return `voice-${id}-translator-voice-${preference === "male" ? "male" : "female"}`;
+}
+
+function translatorVoicePreferenceFromRoomName(roomName) {
+  return typeof roomName === "string" && roomName.match(TRANSLATOR_VOICE_SUFFIX)?.[1] === "male" ? "male" : "female";
+}
+
+function roomNameWithoutVoicePreference(roomName) {
+  return typeof roomName === "string" ? roomName.replace(TRANSLATOR_VOICE_SUFFIX, "") : roomName;
+}
 
 function cleanText(value, maxLength = 160) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
@@ -25,7 +38,11 @@ async function loadCall(admin, callId) {
 
 async function finishCall(admin, row, status) {
   const endedAt = new Date().toISOString();
-  const result = await admin.from("active_calls").update({ status, ended_at: endedAt }).eq("id", row.id);
+  const result = await admin.from("active_calls").update({
+    status,
+    ended_at: endedAt,
+    room_name: roomNameWithoutVoicePreference(row.room_name)
+  }).eq("id", row.id);
   if (result.error) throw result.error;
   await stopCallTranslation(row.id).catch(() => undefined);
   await deleteVoiceRoom(row.room_name);
@@ -70,6 +87,7 @@ router.post("/start", async (req, res) => {
   const callerDeviceId = cleanText(req.body?.callerDeviceId, 120);
   const recipientPhoneNumber = normalizeE164(req.body?.recipientPhoneNumber, req.body?.defaultRegion);
   const translationEnabled = req.body?.translationMode === "realtime-translate";
+  const translatorVoicePreference = req.body?.translatorVoicePreference === "male" ? "male" : "female";
   const callerLanguageCode = outputLanguageCode(req.body?.callerLanguage) ?? "en";
   const recipientLanguageCode = outputLanguageCode(req.body?.recipientLanguage) ?? "es";
   if (callerDeviceId.length < 16 || !recipientPhoneNumber) {
@@ -104,7 +122,9 @@ router.post("/start", async (req, res) => {
   if (callerOpen.error || recipientOpen.error) return callError(res, 502, "call_state_unavailable", "Unable to start the call.");
   if (callerOpen.data || recipientOpen.data) return callError(res, 409, "device_busy", "One of the devices is already in a call.");
 
-  const roomName = `voice-${crypto.randomUUID()}`;
+  const roomName = translationEnabled
+    ? roomNameWithVoicePreference(translatorVoicePreference)
+    : `voice-${crypto.randomUUID()}`;
   let row;
   try {
     await createVoiceRoom(roomName);
@@ -140,7 +160,11 @@ router.post("/start", async (req, res) => {
     });
   } catch (error) {
     console.error("[VoiceCall] start failed", { reason: error instanceof Error ? error.message : "unknown" });
-    if (row) await admin.from("active_calls").update({ status: "failed", ended_at: new Date().toISOString() }).eq("id", row.id);
+    if (row) await admin.from("active_calls").update({
+      status: "failed",
+      ended_at: new Date().toISOString(),
+      room_name: roomNameWithoutVoicePreference(row.room_name)
+    }).eq("id", row.id);
     await deleteVoiceRoom(roomName).catch(() => undefined);
     return callError(res, 502, "call_start_failed", "Unable to reach this Interpreter device.");
   }
@@ -170,7 +194,8 @@ router.post("/:callId/accept", async (req, res) => {
         callId,
         callerLanguage: row.caller_language_code,
         recipientLanguage: row.recipient_language_code,
-        roomName: row.room_name
+        roomName: row.room_name,
+        translatorVoicePreference: translatorVoicePreferenceFromRoomName(row.room_name)
       });
     }
     return res.status(200).json({
@@ -224,5 +249,9 @@ router.post("/:callId/end", async (req, res) => {
   console.info("[VoiceCall] call ended", { callId });
   return res.status(204).end();
 });
+
+router.roomNameWithVoicePreference = roomNameWithVoicePreference;
+router.roomNameWithoutVoicePreference = roomNameWithoutVoicePreference;
+router.translatorVoicePreferenceFromRoomName = translatorVoicePreferenceFromRoomName;
 
 module.exports = router;

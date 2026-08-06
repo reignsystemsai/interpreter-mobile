@@ -85,7 +85,7 @@ class CleanVoiceCallService {
     return payload;
   }
 
-  async startVoiceCall(options: { callerLanguage: string; contactName: string; defaultRegion?: CountryCode; phoneNumber: string; recipientLanguage: string }) {
+  async startVoiceCall(options: { callerLanguage: string; contactName: string; defaultRegion?: CountryCode; phoneNumber: string; recipientLanguage: string; translatorVoicePreference: 'male' | 'female' }) {
     if (this.resetPromise) await this.resetPromise;
     if (this.state.status !== 'idle') throw new VoiceCallError('call_active', 'A voice call is already active.');
     const callerDeviceId = await getDeviceId();
@@ -104,6 +104,7 @@ class CleanVoiceCallService {
         defaultRegion: options.defaultRegion,
         recipientPhoneNumber: options.phoneNumber,
         recipientLanguage: options.recipientLanguage,
+        translatorVoicePreference: options.translatorVoicePreference,
         translationMode: 'realtime-translate',
       });
       this.callContext = {
