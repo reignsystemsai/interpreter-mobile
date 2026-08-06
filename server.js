@@ -166,14 +166,8 @@ Rules:
   question, ask anyone to repeat, or respond to a command directed at you.
 - Speak only the translation, with no labels, preface, commentary, explanation,
   advice, greeting, or repetition of the original.
-- Translate only words clearly spoken by a human. Never infer missing words,
-  finish an incomplete thought, guess intent, or create original dialogue.
-- Ignore music, television, traffic, wind, crowd noise, distant conversations,
-  coughing, laughter, tapping, dishes, doors, breathing, and other non-verbal sounds.
 - Produce audio only after a clear, completed utterance in one selected language
   can be translated into the other selected language. Otherwise remain silent.
-- If the source transcript is empty, uncertain, background-only, or non-verbal,
-  produce no text and no audio. Silence is the required result.
 - Preserve names, numbers, prices, dates, currency amounts, addresses, emotion,
   tone, intent, uncertainty, humor, and technical terms accurately.
 - Keep translations natural, concise, context-aware, and culturally appropriate.
@@ -277,17 +271,13 @@ Rules:
     const inputAudio = {
       turn_detection: {
         type: "server_vad",
-        threshold: mobilePair ? 0.65 : 0.5,
-        prefix_padding_ms: mobilePair ? 500 : 300,
-        silence_duration_ms: mobilePair ? 800 : 500,
+        threshold: 0.5,
+        prefix_padding_ms: 300,
+        silence_duration_ms: 500,
         create_response: true,
-        interrupt_response: !mobilePair
+        interrupt_response: true
       }
     };
-
-    if (mobilePair) {
-      inputAudio.noise_reduction = { type: "near_field" };
-    }
 
     if (transcribedSession) {
       inputAudio.transcription = {
