@@ -78,7 +78,13 @@ class TranslationDirection {
             audio: {
               input: {
                 transcription: { model: "gpt-realtime-whisper" },
-                noise_reduction: { type: "near_field" }
+                noise_reduction: { type: "near_field" },
+                turn_detection: {
+                  type: "server_vad",
+                  threshold: 0.65,
+                  prefix_padding_ms: 300,
+                  silence_duration_ms: 500
+                }
               },
               output: { language: this.targetLanguage }
             }
