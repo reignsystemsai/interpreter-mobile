@@ -8,7 +8,9 @@
       "distribution": "internal"
     },
     "preview": {
+      "channel": "preview",
       "distribution": "internal",
+      "environment": "preview",
       "env": {
         "EXPO_PUBLIC_MVP_DEVICE_PHONE_NUMBER": "+16892828783"
       },

@@ -15,6 +15,7 @@ const {
   pcm16Frame,
   resolveTranslationPipeline,
   resolveTranslatorVoice,
+  resolveTranslatorVoiceId,
   TranslationDirection
 } = require("../src/server/translation/translation-bridge");
 const callsRouter = require("../src/server/routes/calls");
@@ -56,6 +57,8 @@ test("fixed translator voice maps once to supported Realtime voices", () => {
   assert.equal(FEMALE_TRANSLATOR_VOICE_ID, "marin");
   assert.equal(resolveTranslatorVoice("male"), "cedar");
   assert.equal(resolveTranslatorVoice("female"), "marin");
+  assert.equal(resolveTranslatorVoiceId("cedar", "marin"), "cedar");
+  assert.equal(resolveTranslatorVoiceId("unsupported", "marin"), "marin");
   assert.equal(resolveTranslationPipeline(), "general-realtime");
   assert.equal(resolveTranslationPipeline("realtime-translate"), "realtime-translate");
 });
@@ -196,6 +199,31 @@ test("ringing call recovers its voice preference from the durable room record", 
   assert.equal(restartedRouter.roomNameWithoutVoicePreference(maleRoom), "voice-restart-test");
 });
 
+test("ringing calls persist and restore independent caller and recipient voices", () => {
+  for (const callerHearsVoiceId of ["cedar", "marin"]) {
+    for (const recipientHearsVoiceId of ["cedar", "marin"]) {
+      const roomName = callsRouter.roomNameWithCallVoiceIds({ callerHearsVoiceId, recipientHearsVoiceId }, `pair-${callerHearsVoiceId}-${recipientHearsVoiceId}`);
+      assert.deepEqual(callsRouter.callVoiceIdsFromRoomName(roomName), { callerHearsVoiceId, recipientHearsVoiceId });
+      assert.equal(callsRouter.roomNameWithoutVoicePreference(roomName), `voice-pair-${callerHearsVoiceId}-${recipientHearsVoiceId}`);
+    }
+  }
+});
+
+test("new and legacy call requests resolve safe voice IDs", () => {
+  assert.deepEqual(callsRouter.callVoiceIdsFromRequest({ callerHearsVoiceId: "marin", recipientHearsVoiceId: "cedar" }), {
+    callerHearsVoiceId: "marin",
+    recipientHearsVoiceId: "cedar"
+  });
+  assert.deepEqual(callsRouter.callVoiceIdsFromRequest({ translatorVoicePreference: "male" }), {
+    callerHearsVoiceId: "cedar",
+    recipientHearsVoiceId: "cedar"
+  });
+  assert.deepEqual(callsRouter.callVoiceIdsFromRequest({}), {
+    callerHearsVoiceId: "cedar",
+    recipientHearsVoiceId: "marin"
+  });
+});
+
 test("dedicated realtime-translate fallback processes its original audio event", async () => {
   const { direction, outputSource, socket } = testDirection({ pipeline: "realtime-translate", voice: "marin" });
   direction.handleOpenAIEvent({ type: "session.output_audio.delta", delta: audioDelta() }, socket, 1);
@@ -274,11 +302,17 @@ test("call languages are selected after the contact and passed explicitly to the
   assert.doesNotMatch(overlay, /languageOne|languageTwo/);
   assert.match(selector, /I speak/);
   assert.match(selector, /They speak/);
-  assert.match(selector, /Translator voice/);
+  assert.match(selector, /SPEAK CALLING/);
+  assert.match(selector, /Voice options/);
+  assert.match(selector, /You hear/);
+  assert.match(selector, /They hear/);
+  assert.match(selector, /Voice 1/);
   assert.match(selector, /Male/);
   assert.match(selector, /Female/);
   assert.match(selector, /Start Voice Call/);
-  assert.match(contacts, /startVoiceCall\(\{ callerLanguage,[\s\S]*translatorVoicePreference \}\)/);
+  assert.doesNotMatch(selector, />cedar<|>marin</);
+  assert.match(contacts, /startVoiceCall\(\{ callerHearsVoiceId:[\s\S]*recipientHearsVoiceId:/);
+  assert.match(contacts, /keyboardShouldPersistTaps="handled"/);
 });
 
 test("server creates exactly two translation directions and stops them with the call", () => {
@@ -286,6 +320,8 @@ test("server creates exactly two translation directions and stops them with the 
   const calls = read("src", "server", "routes", "calls.js");
   assert.match(bridge, /sourceRole: "caller"[\s\S]*targetLanguage: recipientLanguage/);
   assert.match(bridge, /sourceRole: "recipient"[\s\S]*targetLanguage: callerLanguage/);
+  assert.match(bridge, /sourceRole: "caller"[\s\S]*voice: this\.recipientHearsVoiceId/);
+  assert.match(bridge, /sourceRole: "recipient"[\s\S]*voice: this\.callerHearsVoiceId/);
   assert.match(bridge, /session\.input_audio_buffer\.append/);
   assert.match(bridge, /response\.output_audio\.delta/);
   assert.match(bridge, /response\.cancel/);

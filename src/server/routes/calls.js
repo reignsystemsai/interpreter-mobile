@@ -11,6 +11,18 @@ const { startCallTranslation, stopCallTranslation } = require("../translation/tr
 const router = express.Router();
 const OPEN_STATUSES = ["calling", "ringing", "accepted"];
 const TRANSLATOR_VOICE_SUFFIX = /-translator-voice-(male|female)$/;
+const TRANSLATOR_VOICE_PAIR_SUFFIX = /-translator-voices-(cedar|marin)-(cedar|marin)$/;
+const DEFAULT_CALL_VOICES = Object.freeze({ callerHearsVoiceId: "cedar", recipientHearsVoiceId: "marin" });
+
+function supportedVoiceId(value, fallback) {
+  return value === "cedar" || value === "marin" ? value : fallback;
+}
+
+function voiceIdFromLegacyPreference(preference) {
+  if (preference === "male") return "cedar";
+  if (preference === "female") return "marin";
+  return null;
+}
 
 function roomNameWithVoicePreference(preference, id = crypto.randomUUID()) {
   return `voice-${id}-translator-voice-${preference === "male" ? "male" : "female"}`;
@@ -20,8 +32,33 @@ function translatorVoicePreferenceFromRoomName(roomName) {
   return typeof roomName === "string" && roomName.match(TRANSLATOR_VOICE_SUFFIX)?.[1] === "male" ? "male" : "female";
 }
 
+function callVoiceIdsFromRequest(body = {}) {
+  const legacyVoiceId = voiceIdFromLegacyPreference(body.translatorVoicePreference);
+  return {
+    callerHearsVoiceId: supportedVoiceId(body.callerHearsVoiceId, legacyVoiceId ?? DEFAULT_CALL_VOICES.callerHearsVoiceId),
+    recipientHearsVoiceId: supportedVoiceId(body.recipientHearsVoiceId, legacyVoiceId ?? DEFAULT_CALL_VOICES.recipientHearsVoiceId)
+  };
+}
+
+function roomNameWithCallVoiceIds(voices, id = crypto.randomUUID()) {
+  const callerHearsVoiceId = supportedVoiceId(voices?.callerHearsVoiceId, DEFAULT_CALL_VOICES.callerHearsVoiceId);
+  const recipientHearsVoiceId = supportedVoiceId(voices?.recipientHearsVoiceId, DEFAULT_CALL_VOICES.recipientHearsVoiceId);
+  return `voice-${id}-translator-voices-${callerHearsVoiceId}-${recipientHearsVoiceId}`;
+}
+
+function callVoiceIdsFromRoomName(roomName) {
+  if (typeof roomName === "string") {
+    const pair = roomName.match(TRANSLATOR_VOICE_PAIR_SUFFIX);
+    if (pair) return { callerHearsVoiceId: pair[1], recipientHearsVoiceId: pair[2] };
+    const legacy = roomName.match(TRANSLATOR_VOICE_SUFFIX)?.[1];
+    const legacyVoiceId = voiceIdFromLegacyPreference(legacy);
+    if (legacyVoiceId) return { callerHearsVoiceId: legacyVoiceId, recipientHearsVoiceId: legacyVoiceId };
+  }
+  return { ...DEFAULT_CALL_VOICES };
+}
+
 function roomNameWithoutVoicePreference(roomName) {
-  return typeof roomName === "string" ? roomName.replace(TRANSLATOR_VOICE_SUFFIX, "") : roomName;
+  return typeof roomName === "string" ? roomName.replace(TRANSLATOR_VOICE_PAIR_SUFFIX, "").replace(TRANSLATOR_VOICE_SUFFIX, "") : roomName;
 }
 
 function cleanText(value, maxLength = 160) {
@@ -87,7 +124,7 @@ router.post("/start", async (req, res) => {
   const callerDeviceId = cleanText(req.body?.callerDeviceId, 120);
   const recipientPhoneNumber = normalizeE164(req.body?.recipientPhoneNumber, req.body?.defaultRegion);
   const translationEnabled = req.body?.translationMode === "realtime-translate";
-  const translatorVoicePreference = req.body?.translatorVoicePreference === "male" ? "male" : "female";
+  const callVoiceIds = callVoiceIdsFromRequest(req.body);
   const callerLanguageCode = outputLanguageCode(req.body?.callerLanguage) ?? "en";
   const recipientLanguageCode = outputLanguageCode(req.body?.recipientLanguage) ?? "es";
   if (callerDeviceId.length < 16 || !recipientPhoneNumber) {
@@ -123,7 +160,7 @@ router.post("/start", async (req, res) => {
   if (callerOpen.data || recipientOpen.data) return callError(res, 409, "device_busy", "One of the devices is already in a call.");
 
   const roomName = translationEnabled
-    ? roomNameWithVoicePreference(translatorVoicePreference)
+    ? roomNameWithCallVoiceIds(callVoiceIds)
     : `voice-${crypto.randomUUID()}`;
   let row;
   try {
@@ -192,10 +229,10 @@ router.post("/:callId/accept", async (req, res) => {
       }
       await startCallTranslation({
         callId,
+        ...callVoiceIdsFromRoomName(row.room_name),
         callerLanguage: row.caller_language_code,
         recipientLanguage: row.recipient_language_code,
-        roomName: row.room_name,
-        translatorVoicePreference: translatorVoicePreferenceFromRoomName(row.room_name)
+        roomName: row.room_name
       });
     }
     return res.status(200).json({
@@ -251,7 +288,10 @@ router.post("/:callId/end", async (req, res) => {
 });
 
 router.roomNameWithVoicePreference = roomNameWithVoicePreference;
+router.roomNameWithCallVoiceIds = roomNameWithCallVoiceIds;
 router.roomNameWithoutVoicePreference = roomNameWithoutVoicePreference;
 router.translatorVoicePreferenceFromRoomName = translatorVoicePreferenceFromRoomName;
+router.callVoiceIdsFromRequest = callVoiceIdsFromRequest;
+router.callVoiceIdsFromRoomName = callVoiceIdsFromRoomName;
 
 module.exports = router;

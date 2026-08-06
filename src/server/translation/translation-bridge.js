@@ -27,6 +27,10 @@ function resolveTranslatorVoice(preference) {
   return preference === "male" ? MALE_TRANSLATOR_VOICE_ID : FEMALE_TRANSLATOR_VOICE_ID;
 }
 
+function resolveTranslatorVoiceId(voiceId, fallback) {
+  return voiceId === MALE_TRANSLATOR_VOICE_ID || voiceId === FEMALE_TRANSLATOR_VOICE_ID ? voiceId : fallback;
+}
+
 function interpreterInstructions(sourceLanguage, targetLanguage) {
   return [
     "You are Interpreter, a live simultaneous interpreter.",
@@ -355,12 +359,16 @@ class TranslationDirection {
 }
 
 class CallTranslationBridge {
-  constructor({ callId, callerLanguage, recipientLanguage, roomName, translatorVoicePreference }) {
+  constructor({ callId, callerHearsVoiceId, callerLanguage, recipientHearsVoiceId, recipientLanguage, roomName, translatorVoicePreference }) {
     this.callId = callId;
     this.roomName = roomName;
     this.room = new Room();
     this.pipeline = resolveTranslationPipeline();
-    this.translatorVoice = resolveTranslatorVoice(translatorVoicePreference);
+    const legacyVoice = translatorVoicePreference === "male" || translatorVoicePreference === "female"
+      ? resolveTranslatorVoice(translatorVoicePreference)
+      : null;
+    this.callerHearsVoiceId = resolveTranslatorVoiceId(callerHearsVoiceId, legacyVoice ?? MALE_TRANSLATOR_VOICE_ID);
+    this.recipientHearsVoiceId = resolveTranslatorVoiceId(recipientHearsVoiceId, legacyVoice ?? FEMALE_TRANSLATOR_VOICE_ID);
     this.outputSources = {
       caller: new AudioSource(SAMPLE_RATE, 1, 1000),
       recipient: new AudioSource(SAMPLE_RATE, 1, 1000)
@@ -374,7 +382,7 @@ class CallTranslationBridge {
         sourceLanguage: callerLanguage,
         sourceRole: "caller",
         targetLanguage: recipientLanguage,
-        voice: this.translatorVoice
+        voice: this.recipientHearsVoiceId
       }),
       recipient: new TranslationDirection({
         callId,
@@ -384,7 +392,7 @@ class CallTranslationBridge {
         sourceLanguage: recipientLanguage,
         sourceRole: "recipient",
         targetLanguage: callerLanguage,
-        voice: this.translatorVoice
+        voice: this.callerHearsVoiceId
       })
     };
     this.publications = [];
@@ -427,7 +435,12 @@ class CallTranslationBridge {
         if (publication.source === TrackSource.SOURCE_MICROPHONE) publication.setSubscribed(true);
       }
     }
-    console.info("[Translation] bridge ready", { callId: this.callId, pipeline: this.pipeline, voice: this.translatorVoice });
+    console.info("[Translation] bridge ready", {
+      callId: this.callId,
+      callerHearsVoiceId: this.callerHearsVoiceId,
+      pipeline: this.pipeline,
+      recipientHearsVoiceId: this.recipientHearsVoiceId
+    });
   }
 
   async stop() {
@@ -476,6 +489,7 @@ module.exports = {
   pcm16Frame,
   resolveTranslationPipeline,
   resolveTranslatorVoice,
+  resolveTranslatorVoiceId,
   startCallTranslation,
   stopCallTranslation,
   TranslationDirection

@@ -9,6 +9,7 @@ import { getDeviceId } from '../../services/deviceRegistration';
 
 export type VoiceCallStatus = 'idle' | 'preparing' | 'ringing' | 'connecting' | 'connected' | 'reconnecting' | 'ending' | 'ended' | 'failed';
 export type VoiceCallRole = 'caller' | 'recipient' | null;
+export type CallVoiceId = 'cedar' | 'marin';
 export type VoiceCallState = {
   callId: string | null;
   error: string;
@@ -85,7 +86,7 @@ class CleanVoiceCallService {
     return payload;
   }
 
-  async startVoiceCall(options: { callerLanguage: string; contactName: string; defaultRegion?: CountryCode; phoneNumber: string; recipientLanguage: string; translatorVoicePreference: 'male' | 'female' }) {
+  async startVoiceCall(options: { callerHearsVoiceId: CallVoiceId; callerLanguage: string; contactName: string; defaultRegion?: CountryCode; phoneNumber: string; recipientHearsVoiceId: CallVoiceId; recipientLanguage: string }) {
     if (this.resetPromise) await this.resetPromise;
     if (this.state.status !== 'idle') throw new VoiceCallError('call_active', 'A voice call is already active.');
     const callerDeviceId = await getDeviceId();
@@ -100,11 +101,12 @@ class CleanVoiceCallService {
         translationEnabled: boolean;
       }>('/api/v1/calls/start', {
         callerDeviceId,
+        callerHearsVoiceId: options.callerHearsVoiceId,
         callerLanguage: options.callerLanguage,
         defaultRegion: options.defaultRegion,
         recipientPhoneNumber: options.phoneNumber,
+        recipientHearsVoiceId: options.recipientHearsVoiceId,
         recipientLanguage: options.recipientLanguage,
-        translatorVoicePreference: options.translatorVoicePreference,
         translationMode: 'realtime-translate',
       });
       this.callContext = {

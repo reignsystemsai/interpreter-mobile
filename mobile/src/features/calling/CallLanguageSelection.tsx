@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
+import * as SecureStore from 'expo-secure-store';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import type { InterpreterContact } from '../contacts/ContactsProvider';
 
 const BLUE = '#075BFF';
+const PINK = '#F43F8A';
 
 export const CALL_LANGUAGES = [
   'English',
@@ -24,7 +26,40 @@ export const CALL_LANGUAGES = [
 ] as const;
 
 export type CallLanguage = typeof CALL_LANGUAGES[number];
-export type TranslatorVoicePreference = 'male' | 'female';
+export type VoiceCategory = 'male' | 'female';
+export type CallVoiceId = 'cedar' | 'marin';
+export type VoiceOption = { id: CallVoiceId; label: string; category: VoiceCategory; previewSource?: string | number; enabled: boolean };
+export type CallVoiceSelection = { category: VoiceCategory; voiceId: CallVoiceId };
+export type CallVoicePreferences = { caller: CallVoiceSelection; recipient: CallVoiceSelection };
+export type CallVoiceSnapshot = Readonly<{ callerHearsVoiceId: CallVoiceId; recipientHearsVoiceId: CallVoiceId }>;
+
+export const CALL_VOICE_OPTIONS: readonly VoiceOption[] = [
+  { id: 'cedar', label: 'Voice 1', category: 'male', enabled: true },
+  { id: 'marin', label: 'Voice 1', category: 'female', enabled: true },
+];
+
+export const DEFAULT_CALL_VOICE_PREFERENCES: CallVoicePreferences = {
+  caller: { category: 'male', voiceId: 'cedar' },
+  recipient: { category: 'female', voiceId: 'marin' },
+};
+export const DEFAULT_CALL_VOICE_SNAPSHOT: CallVoiceSnapshot = Object.freeze({ callerHearsVoiceId: 'cedar', recipientHearsVoiceId: 'marin' });
+
+const VOICE_KEYS = {
+  callerCategory: 'speak.callVoice.caller.category',
+  callerVoiceId: 'speak.callVoice.caller.voiceId',
+  recipientCategory: 'speak.callVoice.recipient.category',
+  recipientVoiceId: 'speak.callVoice.recipient.voiceId',
+} as const;
+
+function validCategory(value: string | null, fallback: VoiceCategory): VoiceCategory {
+  return value === 'male' || value === 'female' ? value : fallback;
+}
+
+function selectionFor(category: VoiceCategory, voiceId?: string | null): CallVoiceSelection {
+  const available = CALL_VOICE_OPTIONS.filter((option) => option.enabled && option.category === category);
+  const selected = available.find((option) => option.id === voiceId) ?? available[0];
+  return { category, voiceId: selected?.id ?? (category === 'male' ? 'cedar' : 'marin') };
+}
 
 function GlobeIcon() {
   return <Svg height={31} viewBox="0 0 32 32" width={31}>
@@ -49,17 +84,76 @@ function LanguageControl({ label, onPress, value }: { label: string; onPress: ()
   </Pressable>;
 }
 
+function VoiceChoiceControl({ accent, selection, sideLabel, onCategoryChange }: {
+  accent: string;
+  selection: CallVoiceSelection;
+  sideLabel: string;
+  onCategoryChange: (category: VoiceCategory) => void;
+}) {
+  const voiceLabel = CALL_VOICE_OPTIONS.find((candidate) => candidate.id === selection.voiceId)?.label ?? 'Voice 1';
+  return <View style={styles.voiceCard}>
+    <Text style={[styles.voiceSideLabel, { color: accent }]}>{sideLabel}</Text>
+    <Text style={styles.voiceLabel}>Voice options</Text>
+    <View style={styles.voiceNavigator}>
+      <Pressable accessibilityLabel={`Previous ${sideLabel} voice`} disabled style={styles.voiceArrow}><Text style={styles.voiceArrowText}>‹</Text></Pressable>
+      <Text style={styles.voiceName}>{voiceLabel}</Text>
+      <Pressable accessibilityLabel={`Next ${sideLabel} voice`} disabled style={styles.voiceArrow}><Text style={styles.voiceArrowText}>›</Text></Pressable>
+    </View>
+    <View style={styles.categoryOptions}>
+      {(['male', 'female'] as const).map((category) => {
+        const selected = selection.category === category;
+        return <Pressable
+          key={category}
+          accessibilityRole="radio"
+          accessibilityState={{ checked: selected }}
+          onPress={() => onCategoryChange(category)}
+          style={[styles.categoryOption, selected && { backgroundColor: accent }]}
+        >
+          <Text style={[styles.categoryText, selected && styles.categoryTextSelected]}>{category === 'male' ? 'Male' : 'Female'}</Text>
+        </Pressable>;
+      })}
+    </View>
+  </View>;
+}
+
 export function CallLanguageSelection({ contact, onBack, onContactPress, onStart }: {
   contact: InterpreterContact;
   onBack: () => void;
   onContactPress: () => void;
-  onStart: (callerLanguage: CallLanguage, recipientLanguage: CallLanguage, translatorVoicePreference: TranslatorVoicePreference) => void;
+  onStart: (callerLanguage: CallLanguage, recipientLanguage: CallLanguage, voices: CallVoiceSnapshot) => void;
 }) {
   const [callerLanguage, setCallerLanguage] = useState<CallLanguage>('English');
   const [recipientLanguage, setRecipientLanguage] = useState<CallLanguage>('Spanish');
-  const [translatorVoicePreference, setTranslatorVoicePreference] = useState<TranslatorVoicePreference>('female');
+  const [voicePreferences, setVoicePreferences] = useState<CallVoicePreferences>(DEFAULT_CALL_VOICE_PREFERENCES);
+  const [voicePreferencesRestored, setVoicePreferencesRestored] = useState(false);
   const [editing, setEditing] = useState<'caller' | 'recipient' | null>(null);
   const sameLanguage = callerLanguage === recipientLanguage;
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      SecureStore.getItemAsync(VOICE_KEYS.callerCategory),
+      SecureStore.getItemAsync(VOICE_KEYS.callerVoiceId),
+      SecureStore.getItemAsync(VOICE_KEYS.recipientCategory),
+      SecureStore.getItemAsync(VOICE_KEYS.recipientVoiceId),
+    ]).then(([callerCategoryValue, callerVoiceId, recipientCategoryValue, recipientVoiceId]) => {
+      if (!active) return;
+      const callerCategory = validCategory(callerCategoryValue, 'male');
+      const recipientCategory = validCategory(recipientCategoryValue, 'female');
+      setVoicePreferences({ caller: selectionFor(callerCategory, callerVoiceId), recipient: selectionFor(recipientCategory, recipientVoiceId) });
+    }).catch(() => undefined).finally(() => { if (active) setVoicePreferencesRestored(true); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!voicePreferencesRestored) return;
+    void Promise.all([
+      SecureStore.setItemAsync(VOICE_KEYS.callerCategory, voicePreferences.caller.category),
+      SecureStore.setItemAsync(VOICE_KEYS.callerVoiceId, voicePreferences.caller.voiceId),
+      SecureStore.setItemAsync(VOICE_KEYS.recipientCategory, voicePreferences.recipient.category),
+      SecureStore.setItemAsync(VOICE_KEYS.recipientVoiceId, voicePreferences.recipient.voiceId),
+    ]).catch(() => undefined);
+  }, [voicePreferences, voicePreferencesRestored]);
 
   const choose = (language: CallLanguage) => {
     if (editing === 'caller') setCallerLanguage(language);
@@ -67,9 +161,20 @@ export function CallLanguageSelection({ contact, onBack, onContactPress, onStart
     setEditing(null);
   };
 
+  const chooseVoiceCategory = (side: keyof CallVoicePreferences, category: VoiceCategory) => {
+    setVoicePreferences((current) => ({ ...current, [side]: selectionFor(category) }));
+  };
+
+  const start = () => {
+    const caller = selectionFor(voicePreferences.caller.category, voicePreferences.caller.voiceId);
+    const recipient = selectionFor(voicePreferences.recipient.category, voicePreferences.recipient.voiceId);
+    const snapshot: CallVoiceSnapshot = Object.freeze({ callerHearsVoiceId: caller.voiceId, recipientHearsVoiceId: recipient.voiceId });
+    onStart(callerLanguage, recipientLanguage, snapshot);
+  };
+
   return <View style={styles.screen}>
     <Pressable accessibilityRole="button" onPress={onBack} style={styles.back}><Text style={styles.backText}>‹ Contacts</Text></Pressable>
-    <Text style={styles.eyebrow}>INTERPRETER CALLING</Text>
+    <Text style={styles.eyebrow}>SPEAK CALLING</Text>
     <Text style={styles.title}>Choose call languages</Text>
     <Pressable accessibilityLabel="View contact details" accessibilityRole="button" onPress={onContactPress} style={({ pressed }) => [styles.contactCard, pressed && styles.pressed]}>
       <View style={styles.avatar}><Text style={styles.avatarText}>{contact.displayName.slice(0, 1).toUpperCase()}</Text></View>
@@ -81,26 +186,13 @@ export function CallLanguageSelection({ contact, onBack, onContactPress, onStart
       <LanguageControl label="They speak" onPress={() => setEditing('recipient')} value={recipientLanguage} />
     </View>
     <View style={styles.voiceSection}>
-      <Text style={styles.voiceLabel}>Translator voice</Text>
-      <View style={styles.voiceOptions}>
-        {(['male', 'female'] as const).map((preference) => {
-          const selected = translatorVoicePreference === preference;
-          return <Pressable
-            key={preference}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: selected }}
-            onPress={() => setTranslatorVoicePreference(preference)}
-            style={({ pressed }) => [styles.voiceOption, selected && styles.voiceOptionSelected, pressed && styles.pressed]}
-          >
-            <Text style={[styles.voiceOptionText, selected && styles.voiceOptionTextSelected]}>{preference === 'male' ? 'Male' : 'Female'}</Text>
-          </Pressable>;
-        })}
-      </View>
+      <VoiceChoiceControl accent={BLUE} onCategoryChange={(category) => chooseVoiceCategory('caller', category)} selection={voicePreferences.caller} sideLabel="You hear" />
+      <VoiceChoiceControl accent={PINK} onCategoryChange={(category) => chooseVoiceCategory('recipient', category)} selection={voicePreferences.recipient} sideLabel="They hear" />
     </View>
     <Text style={[styles.summary, sameLanguage && styles.warning]}>
       {sameLanguage ? 'Choose two different languages.' : <>You hear <Text style={styles.summaryStrong}>{callerLanguage}</Text>. {contact.givenName || contact.displayName} hears <Text style={styles.summaryStrong}>{recipientLanguage}</Text>.</>}
     </Text>
-    <Pressable accessibilityRole="button" disabled={sameLanguage} onPress={() => onStart(callerLanguage, recipientLanguage, translatorVoicePreference)} style={({ pressed }) => [styles.start, sameLanguage && styles.disabled, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" disabled={sameLanguage} onPress={start} style={({ pressed }) => [styles.start, sameLanguage && styles.disabled, pressed && styles.pressed]}>
       <PhoneIcon /><Text style={styles.startText}>Start Voice Call</Text>
     </Pressable>
 
@@ -142,13 +234,18 @@ const styles = StyleSheet.create({
   languageLabel: { color: '#667085', fontSize: 14 },
   languageValue: { color: '#101828', fontSize: 21, fontWeight: '700', marginTop: 2 },
   directionArrow: { color: BLUE, fontSize: 30, lineHeight: 40, textAlign: 'center' },
-  voiceSection: { marginTop: 22 },
-  voiceLabel: { color: '#667085', fontSize: 14, marginBottom: 9 },
-  voiceOptions: { backgroundColor: 'rgba(255,255,255,0.28)', borderRadius: 23, flexDirection: 'row', padding: 4 },
-  voiceOption: { alignItems: 'center', borderRadius: 19, flex: 1, justifyContent: 'center', minHeight: 42 },
-  voiceOptionSelected: { backgroundColor: '#FFFFFF' },
-  voiceOptionText: { color: '#667085', fontSize: 15, fontWeight: '600' },
-  voiceOptionTextSelected: { color: BLUE, fontWeight: '800' },
+  voiceSection: { flexDirection: 'row', gap: 10, marginTop: 22 },
+  voiceCard: { backgroundColor: 'rgba(255,255,255,0.30)', borderRadius: 20, flex: 1, padding: 11 },
+  voiceSideLabel: { fontSize: 11, fontWeight: '800' },
+  voiceLabel: { color: '#667085', fontSize: 11, marginTop: 2 },
+  voiceNavigator: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginTop: 9 },
+  voiceArrow: { alignItems: 'center', height: 25, justifyContent: 'center', opacity: 0.28, width: 24 },
+  voiceArrowText: { color: '#667085', fontSize: 23 },
+  voiceName: { color: '#101828', fontSize: 14, fontWeight: '800' },
+  categoryOptions: { backgroundColor: 'rgba(255,255,255,0.42)', borderRadius: 14, flexDirection: 'row', marginTop: 8, padding: 2 },
+  categoryOption: { alignItems: 'center', borderRadius: 12, flex: 1, justifyContent: 'center', minHeight: 28 },
+  categoryText: { color: '#667085', fontSize: 10, fontWeight: '700' },
+  categoryTextSelected: { color: '#FFFFFF' },
   summary: { color: '#344054', fontSize: 14, lineHeight: 21, marginTop: 25, textAlign: 'center' },
   summaryStrong: { color: BLUE, fontWeight: '700' },
   warning: { color: '#B42318', fontWeight: '600' },
