@@ -273,7 +273,9 @@ class CleanVoiceCallService {
       ios: { defaultOutput: 'speaker' },
     });
     await AudioSession.setDefaultRemoteAudioTrackVolume(1);
-    await AudioSession.startAudioSession();
+    // registerGlobals() owns the native iOS AVAudioSession lifecycle. Starting it
+    // manually here races LiveKit's automatic engine management on later calls.
+    if (Platform.OS === 'android') await AudioSession.startAudioSession();
     const room = new Room({
       adaptiveStream: true,
       audioCaptureDefaults: AUDIO_CAPTURE,
@@ -342,11 +344,7 @@ class CleanVoiceCallService {
   private async releaseRoom(room: Room | null) {
     if (room) {
       room.removeAllListeners();
-      const disconnect = room.disconnect().catch(() => undefined);
-      await Promise.all([
-        room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined),
-        disconnect,
-      ]);
+      await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
       for (const publication of room.localParticipant.audioTrackPublications.values()) {
         if (publication.track) await room.localParticipant.unpublishTrack(publication.track).catch(() => undefined);
       }
@@ -356,8 +354,10 @@ class CleanVoiceCallService {
           if (publication.isSubscribed) publication.setSubscribed(false);
         }
       }
+      await room.disconnect().catch(() => undefined);
     }
-    await AudioSession.stopAudioSession().catch(() => undefined);
+    // iOS is released automatically by LiveKit when its WebRTC audio engine stops.
+    if (Platform.OS === 'android') await AudioSession.stopAudioSession().catch(() => undefined);
   }
 }
 

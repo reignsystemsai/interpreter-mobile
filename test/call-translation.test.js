@@ -72,3 +72,20 @@ test("server creates exactly two translation directions and stops them with the 
   assert.match(bridge, /session\.output_audio\.delta/);
   assert.match(calls, /await stopCallTranslation\(row\.id\)/);
 });
+
+test("translated playback cannot immediately feed back into the opposite translation direction", () => {
+  const bridge = read("src", "server", "translation", "translation-bridge.js");
+  assert.match(bridge, /SELF_PLAYBACK_COOLDOWN_MS = 250/);
+  assert.match(bridge, /onOutputAudio: \(durationMs\) => this\.markPlayback\("recipient", durationMs\)/);
+  assert.match(bridge, /onOutputAudio: \(durationMs\) => this\.markPlayback\("caller", durationMs\)/);
+  assert.match(bridge, /if \(this\.shouldSuppressInput\(\)\) continue/);
+});
+
+test("iOS leaves AVAudioSession ownership to LiveKit and call cleanup is ordered", () => {
+  const mobile = read("mobile", "src", "features", "calling", "VoiceCallService.ts");
+  assert.match(mobile, /if \(Platform\.OS === 'android'\) await AudioSession\.startAudioSession\(\)/);
+  assert.match(mobile, /if \(Platform\.OS === 'android'\) await AudioSession\.stopAudioSession\(\)/);
+  assert.ok(mobile.indexOf("setMicrophoneEnabled(false)") < mobile.indexOf("await room.disconnect()"));
+  assert.ok(mobile.indexOf("unpublishTrack(publication.track)") < mobile.indexOf("await room.disconnect()"));
+  assert.ok(mobile.indexOf("publication.track?.detach()") < mobile.indexOf("await room.disconnect()"));
+});
