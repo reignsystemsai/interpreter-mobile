@@ -11,10 +11,30 @@ const {
 const WebSocket = require("ws");
 
 const { createTranslationToken } = require("../livekit");
+const { SpeechGate, speechGateOptionsFromEnv } = require("./speech-gate");
 
 const SAMPLE_RATE = 24_000;
 const TRANSLATION_URL = "wss://api.openai.com/v1/realtime/translations?model=gpt-realtime-translate";
+const OUTPUT_AUTHORIZATION_MS = 5_000;
+const SELF_PLAYBACK_COOLDOWN_MS = 350;
+const MAX_PENDING_OUTPUT_FRAMES = 150;
 const bridges = new Map();
+
+const NON_SPEECH_TRANSCRIPTS = new Set([
+  "ah", "applause", "breathing", "cough", "coughing", "door", "hmm", "laughter",
+  "music", "noise", "oh", "silence", "tapping", "traffic", "uh", "um", "wind"
+]);
+
+function isVerifiedHumanTranscript(value) {
+  if (typeof value !== "string") return false;
+  const normalized = value
+    .toLocaleLowerCase()
+    .replace(/[\[\](){}<>]/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+  if (!normalized || !/[\p{L}\p{N}]/u.test(normalized)) return false;
+  return !NON_SPEECH_TRANSCRIPTS.has(normalized);
+}
 
 function humanRole(identity, callId) {
   if (typeof identity !== "string") return null;
@@ -34,11 +54,13 @@ function pcm16Frame(base64Audio) {
 }
 
 class TranslationDirection {
-  constructor({ callId, outputSource, sourceRole, targetLanguage }) {
+  constructor({ callId, onOutputAudio, outputSource, shouldSuppressInput, sourceRole, targetLanguage }) {
     this.callId = callId;
     this.outputSource = outputSource;
     this.sourceRole = sourceRole;
     this.targetLanguage = targetLanguage;
+    this.onOutputAudio = onOutputAudio;
+    this.shouldSuppressInput = shouldSuppressInput;
     this.abortController = null;
     this.socket = null;
     this.readyPromise = null;
@@ -48,10 +70,39 @@ class TranslationDirection {
     this.reconnectAttempts = 0;
     this.reconnectTimer = null;
     this.outputChain = Promise.resolve();
+    this.outputAuthorizedUntil = 0;
+    this.hasTranscriptEvidence = false;
+    this.sourceTranscript = "";
+    this.pendingOutputFrames = [];
+    this.speechGate = new SpeechGate(speechGateOptionsFromEnv());
+  }
+
+  queueOutput(frame, durationMs) {
+    this.outputChain = this.outputChain
+      .then(() => {
+        this.onOutputAudio(durationMs);
+        return this.outputSource.captureFrame(frame);
+      })
+      .catch(() => undefined);
+  }
+
+  confirmTranscript(delta) {
+    if (typeof delta !== "string" || !delta.trim() || this.hasTranscriptEvidence) return;
+    this.sourceTranscript += delta;
+    if (!isVerifiedHumanTranscript(this.sourceTranscript)) return;
+    this.hasTranscriptEvidence = true;
+    const pending = this.pendingOutputFrames;
+    this.pendingOutputFrames = [];
+    for (const item of pending) this.queueOutput(item.frame, item.durationMs);
   }
 
   async open() {
     if (!process.env.OPENAI_API_KEY) throw new Error("OpenAI translation is not configured");
+    this.hasTranscriptEvidence = false;
+    this.sourceTranscript = "";
+    this.pendingOutputFrames = [];
+    this.outputAuthorizedUntil = 0;
+    this.speechGate.reset();
     const socket = new WebSocket(TRANSLATION_URL, {
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }
     });
@@ -96,9 +147,20 @@ class TranslationDirection {
           resolve();
           return;
         }
+        if (event.type === "session.input_transcript.delta") {
+          this.confirmTranscript(event.delta);
+          return;
+        }
         if (event.type === "session.output_audio.delta" && typeof event.delta === "string") {
+          if (Date.now() > this.outputAuthorizedUntil) return;
           const frame = pcm16Frame(event.delta);
           if (!frame) return;
+          const durationMs = (Buffer.from(event.delta, "base64").length / 2 / SAMPLE_RATE) * 1000;
+          if (!this.hasTranscriptEvidence) {
+            this.pendingOutputFrames.push({ durationMs, frame });
+            if (this.pendingOutputFrames.length > MAX_PENDING_OUTPUT_FRAMES) this.pendingOutputFrames.shift();
+            return;
+          }
           if (!this.firstOutputLogged) {
             this.firstOutputLogged = true;
             console.info("[Translation] first translated audio", {
@@ -107,9 +169,11 @@ class TranslationDirection {
               latencyMs: this.firstInputAt ? Date.now() - this.firstInputAt : null
             });
           }
-          this.outputChain = this.outputChain
-            .then(() => this.outputSource.captureFrame(frame))
-            .catch(() => undefined);
+          this.queueOutput(frame, durationMs);
+          return;
+        }
+        if (event.type === "session.output_audio.done" && !this.hasTranscriptEvidence) {
+          this.pendingOutputFrames = [];
           return;
         }
         if (event.type === "error") {
@@ -148,12 +212,21 @@ class TranslationDirection {
           const socket = this.socket;
           if (!socket || socket.readyState !== WebSocket.OPEN) continue;
           if (socket.bufferedAmount > 1_000_000) continue;
-          if (!this.firstInputAt) this.firstInputAt = Date.now();
           const pcm = Buffer.from(value.data.buffer, value.data.byteOffset, value.data.byteLength);
-          socket.send(JSON.stringify({
-            type: "session.input_audio_buffer.append",
-            audio: pcm.toString("base64")
-          }));
+          const gated = this.speechGate.push(pcm, { suppressed: this.shouldSuppressInput() });
+          if (gated.started) {
+            this.firstInputAt = Date.now();
+            this.hasTranscriptEvidence = false;
+            this.sourceTranscript = "";
+            this.pendingOutputFrames = [];
+          }
+          if (gated.frames.length) this.outputAuthorizedUntil = Date.now() + OUTPUT_AUTHORIZATION_MS;
+          for (const frame of gated.frames) {
+            socket.send(JSON.stringify({
+              type: "session.input_audio_buffer.append",
+              audio: frame.toString("base64")
+            }));
+          }
         }
       } catch {
         if (!abortController.signal.aborted) {
@@ -171,6 +244,10 @@ class TranslationDirection {
     this.reconnectTimer = null;
     this.abortController?.abort();
     this.abortController = null;
+    this.speechGate.reset();
+    this.pendingOutputFrames = [];
+    this.sourceTranscript = "";
+    this.outputAuthorizedUntil = 0;
     const socket = this.socket;
     this.socket = null;
     if (socket && socket.readyState < WebSocket.CLOSING) socket.close();
@@ -186,21 +263,34 @@ class CallTranslationBridge {
       caller: new AudioSource(SAMPLE_RATE, 1, 1000),
       recipient: new AudioSource(SAMPLE_RATE, 1, 1000)
     };
+    this.playbackEndsAt = { caller: 0, recipient: 0 };
     this.directions = {
       caller: new TranslationDirection({
         callId,
+        onOutputAudio: (durationMs) => this.markPlayback("recipient", durationMs),
         outputSource: this.outputSources.recipient,
+        shouldSuppressInput: () => this.isPlaybackActive("caller"),
         sourceRole: "caller",
         targetLanguage: recipientLanguage
       }),
       recipient: new TranslationDirection({
         callId,
+        onOutputAudio: (durationMs) => this.markPlayback("caller", durationMs),
         outputSource: this.outputSources.caller,
+        shouldSuppressInput: () => this.isPlaybackActive("recipient"),
         sourceRole: "recipient",
         targetLanguage: callerLanguage
       })
     };
     this.publications = [];
+  }
+
+  markPlayback(role, durationMs) {
+    this.playbackEndsAt[role] = Math.max(Date.now(), this.playbackEndsAt[role]) + Math.max(0, durationMs);
+  }
+
+  isPlaybackActive(role) {
+    return Date.now() < this.playbackEndsAt[role] + SELF_PLAYBACK_COOLDOWN_MS;
   }
 
   async start() {
@@ -277,6 +367,7 @@ async function stopCallTranslation(callId) {
 module.exports = {
   CallTranslationBridge,
   humanRole,
+  isVerifiedHumanTranscript,
   pcm16Frame,
   startCallTranslation,
   stopCallTranslation
