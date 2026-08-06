@@ -75,7 +75,7 @@ test("server creates exactly two translation directions and stops them with the 
 
 test("translated playback cannot immediately feed back into the opposite translation direction", () => {
   const bridge = read("src", "server", "translation", "translation-bridge.js");
-  assert.match(bridge, /SELF_PLAYBACK_COOLDOWN_MS = 250/);
+  assert.match(bridge, /SELF_PLAYBACK_COOLDOWN_MS = 1_000/);
   assert.match(bridge, /onOutputAudio: \(durationMs\) => this\.markPlayback\("recipient", durationMs\)/);
   assert.match(bridge, /onOutputAudio: \(durationMs\) => this\.markPlayback\("caller", durationMs\)/);
   assert.match(bridge, /if \(this\.shouldSuppressInput\(\)\) continue/);

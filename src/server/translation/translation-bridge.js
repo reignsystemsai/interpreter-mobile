@@ -14,7 +14,10 @@ const { createTranslationToken } = require("../livekit");
 
 const SAMPLE_RATE = 24_000;
 const TRANSLATION_URL = "wss://api.openai.com/v1/realtime/translations?model=gpt-realtime-translate";
-const SELF_PLAYBACK_COOLDOWN_MS = 250;
+// LiveKit playout reaches the phone after the server has queued these frames.
+// Keep the matching microphone direction closed through that transport tail so
+// translated speaker audio cannot be interpreted and sent back to its source.
+const SELF_PLAYBACK_COOLDOWN_MS = 1_000;
 const bridges = new Map();
 
 function humanRole(identity, callId) {
