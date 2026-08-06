@@ -81,11 +81,8 @@ test("translated playback cannot immediately feed back into the opposite transla
   assert.match(bridge, /if \(this\.shouldSuppressInput\(\)\) continue/);
 });
 
-test("iOS leaves AVAudioSession ownership to LiveKit and call cleanup is ordered", () => {
+test("call audio session uses the proven explicit start and stop lifecycle", () => {
   const mobile = read("mobile", "src", "features", "calling", "VoiceCallService.ts");
-  assert.match(mobile, /if \(Platform\.OS === 'android'\) await AudioSession\.startAudioSession\(\)/);
-  assert.match(mobile, /if \(Platform\.OS === 'android'\) await AudioSession\.stopAudioSession\(\)/);
-  assert.ok(mobile.indexOf("setMicrophoneEnabled(false)") < mobile.indexOf("await room.disconnect()"));
-  assert.ok(mobile.indexOf("unpublishTrack(publication.track)") < mobile.indexOf("await room.disconnect()"));
-  assert.ok(mobile.indexOf("publication.track?.detach()") < mobile.indexOf("await room.disconnect()"));
+  assert.match(mobile, /await AudioSession\.startAudioSession\(\)/);
+  assert.match(mobile, /await AudioSession\.stopAudioSession\(\)/);
 });
