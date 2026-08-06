@@ -11,6 +11,7 @@ const {
 const WebSocket = require("ws");
 
 const { createTranslationToken } = require("../livekit");
+const { isSpeakVoiceId } = require("../voices/catalog");
 
 const SAMPLE_RATE = 24_000;
 const GENERAL_REALTIME_URL = "wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1";
@@ -28,7 +29,7 @@ function resolveTranslatorVoice(preference) {
 }
 
 function resolveTranslatorVoiceId(voiceId, fallback) {
-  return voiceId === MALE_TRANSLATOR_VOICE_ID || voiceId === FEMALE_TRANSLATOR_VOICE_ID ? voiceId : fallback;
+  return isSpeakVoiceId(voiceId) ? voiceId : fallback;
 }
 
 function interpreterInstructions(sourceLanguage, targetLanguage) {

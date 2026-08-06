@@ -310,6 +310,8 @@ test("call languages are selected after the contact and passed explicitly to the
   assert.match(selector, /Male/);
   assert.match(selector, /Female/);
   assert.match(selector, /Start Voice Call/);
+  assert.match(selector, /Speak Voice Call/);
+  assert.doesNotMatch(selector, /You hear <Text[\s\S]*hears <Text/);
   assert.doesNotMatch(selector, />cedar<|>marin</);
   assert.match(contacts, /startVoiceCall\(\{ callerHearsVoiceId:[\s\S]*recipientHearsVoiceId:/);
   assert.match(contacts, /keyboardShouldPersistTaps="handled"/);

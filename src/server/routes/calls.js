@@ -7,15 +7,17 @@ const { sendIncomingVoiceCallPush } = require("../push");
 const { getSupabaseAdmin, isSupabaseConfigured } = require("../supabase");
 const { outputLanguageCode } = require("../translation/languages");
 const { startCallTranslation, stopCallTranslation } = require("../translation/translation-bridge");
+const { SPEAK_VOICE_IDS, isSpeakVoiceId } = require("../voices/catalog");
 
 const router = express.Router();
 const OPEN_STATUSES = ["calling", "ringing", "accepted"];
 const TRANSLATOR_VOICE_SUFFIX = /-translator-voice-(male|female)$/;
-const TRANSLATOR_VOICE_PAIR_SUFFIX = /-translator-voices-(cedar|marin)-(cedar|marin)$/;
+const VOICE_ID_PATTERN = SPEAK_VOICE_IDS.join("|");
+const TRANSLATOR_VOICE_PAIR_SUFFIX = new RegExp(`-translator-voices-(${VOICE_ID_PATTERN})-(${VOICE_ID_PATTERN})$`);
 const DEFAULT_CALL_VOICES = Object.freeze({ callerHearsVoiceId: "cedar", recipientHearsVoiceId: "marin" });
 
 function supportedVoiceId(value, fallback) {
-  return value === "cedar" || value === "marin" ? value : fallback;
+  return isSpeakVoiceId(value) ? value : fallback;
 }
 
 function voiceIdFromLegacyPreference(preference) {

@@ -6,10 +6,10 @@ import InCallManager from 'react-native-incall-manager';
 
 import { API_BASE_URL } from '../../config/runtime';
 import { getDeviceId } from '../../services/deviceRegistration';
+import type { CallVoiceId } from './voiceCatalog';
 
 export type VoiceCallStatus = 'idle' | 'preparing' | 'ringing' | 'connecting' | 'connected' | 'reconnecting' | 'ending' | 'ended' | 'failed';
 export type VoiceCallRole = 'caller' | 'recipient' | null;
-export type CallVoiceId = 'cedar' | 'marin';
 export type VoiceCallState = {
   callId: string | null;
   error: string;
