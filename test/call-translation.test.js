@@ -72,3 +72,12 @@ test("server creates exactly two translation directions and stops them with the 
   assert.match(bridge, /session\.output_audio\.delta/);
   assert.match(calls, /await stopCallTranslation\(row\.id\)/);
 });
+
+test("remote translation suppresses only its own speaker playback from re-entering the microphone", () => {
+  const bridge = read("src", "server", "translation", "translation-bridge.js");
+  assert.match(bridge, /SELF_PLAYBACK_COOLDOWN_MS = 250/);
+  assert.match(bridge, /shouldSuppressInput: \(\) => this\.isPlaybackActive\("caller"\)/);
+  assert.match(bridge, /shouldSuppressInput: \(\) => this\.isPlaybackActive\("recipient"\)/);
+  assert.match(bridge, /if \(this\.shouldSuppressInput\(\)\) continue/);
+  assert.doesNotMatch(bridge, /SpeechGate|outputAuthorizedUntil|hasTranscriptEvidence/);
+});
