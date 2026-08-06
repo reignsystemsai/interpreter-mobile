@@ -13,9 +13,36 @@ const WebSocket = require("ws");
 const { createTranslationToken } = require("../livekit");
 
 const SAMPLE_RATE = 24_000;
-const TRANSLATION_URL = "wss://api.openai.com/v1/realtime/translations?model=gpt-realtime-translate";
-const SELF_PLAYBACK_COOLDOWN_MS = 250;
+const REALTIME_URL = "wss://api.openai.com/v1/realtime?model=gpt-realtime";
+const FEMALE_VOICE = "marin";
+const MALE_VOICE = "cedar";
+const LANGUAGE_NAMES = Object.freeze({
+  en: "English",
+  es: "Spanish",
+  pt: "Brazilian Portuguese",
+  fr: "French",
+  de: "German",
+  it: "Italian",
+  ru: "Russian",
+  zh: "Mandarin Chinese",
+  ja: "Japanese",
+  ko: "Korean",
+  hi: "Hindi",
+  id: "Indonesian",
+  vi: "Vietnamese"
+});
 const bridges = new Map();
+
+function interpreterInstructions(sourceLanguage, targetLanguage) {
+  const source = LANGUAGE_NAMES[sourceLanguage] ?? sourceLanguage;
+  const target = LANGUAGE_NAMES[targetLanguage] ?? targetLanguage;
+  return `You are a live interpreter translating from ${source} into ${target}.
+Translate every utterance naturally and accurately into ${target}.
+Speak only the translated meaning in ${target}.
+Never answer the speaker, ask questions, greet, explain, add commentary, or act as an assistant.
+Never repeat the original ${source} aloud.
+Preserve names, numbers, dates, addresses, currency amounts, tone, and intent accurately.`;
+}
 
 function humanRole(identity, callId) {
   if (typeof identity !== "string") return null;
@@ -35,13 +62,13 @@ function pcm16Frame(base64Audio) {
 }
 
 class TranslationDirection {
-  constructor({ callId, onOutputAudio, outputSource, shouldSuppressInput, sourceRole, targetLanguage }) {
+  constructor({ callId, outputSource, sourceLanguage, sourceRole, targetLanguage, voice }) {
     this.callId = callId;
     this.outputSource = outputSource;
+    this.sourceLanguage = sourceLanguage;
     this.sourceRole = sourceRole;
     this.targetLanguage = targetLanguage;
-    this.onOutputAudio = onOutputAudio;
-    this.shouldSuppressInput = shouldSuppressInput;
+    this.voice = voice;
     this.abortController = null;
     this.socket = null;
     this.readyPromise = null;
@@ -55,7 +82,7 @@ class TranslationDirection {
 
   async open() {
     if (!process.env.OPENAI_API_KEY) throw new Error("OpenAI translation is not configured");
-    const socket = new WebSocket(TRANSLATION_URL, {
+    const socket = new WebSocket(REALTIME_URL, {
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }
     });
     this.socket = socket;
@@ -78,12 +105,22 @@ class TranslationDirection {
         socket.send(JSON.stringify({
           type: "session.update",
           session: {
+            type: "realtime",
+            model: "gpt-realtime",
+            instructions: interpreterInstructions(this.sourceLanguage, this.targetLanguage),
+            output_modalities: ["audio"],
             audio: {
               input: {
-                transcription: { model: "gpt-realtime-whisper" },
-                noise_reduction: { type: "near_field" }
+                turn_detection: {
+                  type: "server_vad",
+                  threshold: 0.5,
+                  prefix_padding_ms: 300,
+                  silence_duration_ms: 500,
+                  create_response: true,
+                  interrupt_response: true
+                }
               },
-              output: { language: this.targetLanguage }
+              output: { voice: this.voice }
             }
           }
         }));
@@ -99,10 +136,9 @@ class TranslationDirection {
           resolve();
           return;
         }
-        if (event.type === "session.output_audio.delta" && typeof event.delta === "string") {
+        if (event.type === "response.output_audio.delta" && typeof event.delta === "string") {
           const frame = pcm16Frame(event.delta);
           if (!frame) return;
-          const durationMs = (Buffer.from(event.delta, "base64").length / 2 / SAMPLE_RATE) * 1000;
           if (!this.firstOutputLogged) {
             this.firstOutputLogged = true;
             console.info("[Translation] first translated audio", {
@@ -112,10 +148,7 @@ class TranslationDirection {
             });
           }
           this.outputChain = this.outputChain
-            .then(() => {
-              this.onOutputAudio(durationMs);
-              return this.outputSource.captureFrame(frame);
-            })
+            .then(() => this.outputSource.captureFrame(frame))
             .catch(() => undefined);
           return;
         }
@@ -155,11 +188,10 @@ class TranslationDirection {
           const socket = this.socket;
           if (!socket || socket.readyState !== WebSocket.OPEN) continue;
           if (socket.bufferedAmount > 1_000_000) continue;
-          if (this.shouldSuppressInput()) continue;
           if (!this.firstInputAt) this.firstInputAt = Date.now();
           const pcm = Buffer.from(value.data.buffer, value.data.byteOffset, value.data.byteLength);
           socket.send(JSON.stringify({
-            type: "session.input_audio_buffer.append",
+            type: "input_audio_buffer.append",
             audio: pcm.toString("base64")
           }));
         }
@@ -194,34 +226,25 @@ class CallTranslationBridge {
       caller: new AudioSource(SAMPLE_RATE, 1, 1000),
       recipient: new AudioSource(SAMPLE_RATE, 1, 1000)
     };
-    this.playbackEndsAt = { caller: 0, recipient: 0 };
     this.directions = {
       caller: new TranslationDirection({
         callId,
-        onOutputAudio: (durationMs) => this.markPlayback("recipient", durationMs),
         outputSource: this.outputSources.recipient,
-        shouldSuppressInput: () => this.isPlaybackActive("caller"),
+        sourceLanguage: callerLanguage,
         sourceRole: "caller",
-        targetLanguage: recipientLanguage
+        targetLanguage: recipientLanguage,
+        voice: FEMALE_VOICE
       }),
       recipient: new TranslationDirection({
         callId,
-        onOutputAudio: (durationMs) => this.markPlayback("caller", durationMs),
         outputSource: this.outputSources.caller,
-        shouldSuppressInput: () => this.isPlaybackActive("recipient"),
+        sourceLanguage: recipientLanguage,
         sourceRole: "recipient",
-        targetLanguage: callerLanguage
+        targetLanguage: callerLanguage,
+        voice: MALE_VOICE
       })
     };
     this.publications = [];
-  }
-
-  markPlayback(role, durationMs) {
-    this.playbackEndsAt[role] = Math.max(Date.now(), this.playbackEndsAt[role]) + Math.max(0, durationMs);
-  }
-
-  isPlaybackActive(role) {
-    return Date.now() < this.playbackEndsAt[role] + SELF_PLAYBACK_COOLDOWN_MS;
   }
 
   async start() {
@@ -297,7 +320,10 @@ async function stopCallTranslation(callId) {
 
 module.exports = {
   CallTranslationBridge,
+  FEMALE_VOICE,
+  MALE_VOICE,
   humanRole,
+  interpreterInstructions,
   pcm16Frame,
   startCallTranslation,
   stopCallTranslation
