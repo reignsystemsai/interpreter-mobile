@@ -14,8 +14,7 @@ const { createTranslationToken } = require("../livekit");
 
 const SAMPLE_RATE = 24_000;
 const REALTIME_URL = "wss://api.openai.com/v1/realtime?model=gpt-realtime";
-const FEMALE_VOICE = "marin";
-const MALE_VOICE = "cedar";
+const INTERPRETER_VOICE = "marin";
 const LANGUAGE_NAMES = Object.freeze({
   en: "English",
   es: "Spanish",
@@ -116,7 +115,7 @@ class TranslationDirection {
                   threshold: 0.5,
                   prefix_padding_ms: 300,
                   silence_duration_ms: 500,
-                  create_response: true,
+                  create_response: false,
                   interrupt_response: true
                 }
               },
@@ -134,6 +133,10 @@ class TranslationDirection {
           socket.off("close", fail);
           this.reconnectAttempts = 0;
           resolve();
+          return;
+        }
+        if (event.type === "input_audio_buffer.speech_stopped") {
+          socket.send(JSON.stringify({ type: "response.create" }));
           return;
         }
         if (event.type === "response.output_audio.delta" && typeof event.delta === "string") {
@@ -233,7 +236,7 @@ class CallTranslationBridge {
         sourceLanguage: callerLanguage,
         sourceRole: "caller",
         targetLanguage: recipientLanguage,
-        voice: FEMALE_VOICE
+        voice: INTERPRETER_VOICE
       }),
       recipient: new TranslationDirection({
         callId,
@@ -241,7 +244,7 @@ class CallTranslationBridge {
         sourceLanguage: recipientLanguage,
         sourceRole: "recipient",
         targetLanguage: callerLanguage,
-        voice: MALE_VOICE
+        voice: INTERPRETER_VOICE
       })
     };
     this.publications = [];
@@ -320,8 +323,7 @@ async function stopCallTranslation(callId) {
 
 module.exports = {
   CallTranslationBridge,
-  FEMALE_VOICE,
-  MALE_VOICE,
+  INTERPRETER_VOICE,
   humanRole,
   interpreterInstructions,
   pcm16Frame,
