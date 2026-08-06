@@ -7,12 +7,7 @@ const root = path.join(__dirname, "..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 const { createTranslationToken } = require("../src/server/livekit");
 const { outputLanguageCode } = require("../src/server/translation/languages");
-const {
-  INTERPRETER_VOICE,
-  humanRole,
-  interpreterInstructions,
-  pcm16Frame
-} = require("../src/server/translation/translation-bridge");
+const { humanRole, pcm16Frame } = require("../src/server/translation/translation-bridge");
 
 test("call languages map only to supported Realtime Translation outputs", () => {
   assert.equal(outputLanguageCode("English"), "en");
@@ -71,30 +66,9 @@ test("call languages are selected after the contact and passed explicitly to the
 test("server creates exactly two translation directions and stops them with the call", () => {
   const bridge = read("src", "server", "translation", "translation-bridge.js");
   const calls = read("src", "server", "routes", "calls.js");
-  assert.match(bridge, /sourceRole: "caller"[\s\S]*targetLanguage: recipientLanguage[\s\S]*voice: INTERPRETER_VOICE/);
-  assert.match(bridge, /sourceRole: "recipient"[\s\S]*targetLanguage: callerLanguage[\s\S]*voice: INTERPRETER_VOICE/);
-  assert.match(bridge, /input_audio_buffer\.append/);
-  assert.match(bridge, /response\.output_audio\.delta/);
+  assert.match(bridge, /sourceRole: "caller"[\s\S]*targetLanguage: recipientLanguage/);
+  assert.match(bridge, /sourceRole: "recipient"[\s\S]*targetLanguage: callerLanguage/);
+  assert.match(bridge, /session\.input_audio_buffer\.append/);
+  assert.match(bridge, /session\.output_audio\.delta/);
   assert.match(calls, /await stopCallTranslation\(row\.id\)/);
-});
-
-test("both call directions pin the same permanent voice for the entire session", () => {
-  const bridge = read("src", "server", "translation", "translation-bridge.js");
-  assert.equal(INTERPRETER_VOICE, "marin");
-  assert.match(bridge, /output: \{ voice: this\.voice \}/);
-  assert.doesNotMatch(bridge, /SELF_PLAYBACK_COOLDOWN_MS|shouldSuppressInput|isPlaybackActive/);
-});
-
-test("each detected speech turn explicitly creates one translated response", () => {
-  const bridge = read("src", "server", "translation", "translation-bridge.js");
-  assert.match(bridge, /create_response: false/);
-  assert.match(bridge, /event\.type === "input_audio_buffer\.speech_stopped"/);
-  assert.match(bridge, /type: "response\.create"/);
-});
-
-test("fixed-voice sessions remain strict interpreters", () => {
-  const instructions = interpreterInstructions("en", "es");
-  assert.match(instructions, /translating from English into Spanish/);
-  assert.match(instructions, /Speak only the translated meaning in Spanish/);
-  assert.match(instructions, /Never answer the speaker/);
 });
