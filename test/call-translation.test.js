@@ -73,12 +73,11 @@ test("server creates exactly two translation directions and stops them with the 
   assert.match(calls, /await stopCallTranslation\(row\.id\)/);
 });
 
-test("translated playback cannot immediately feed back into the opposite translation direction", () => {
+test("both call directions continuously reach their independent translation sessions", () => {
   const bridge = read("src", "server", "translation", "translation-bridge.js");
-  assert.match(bridge, /SELF_PLAYBACK_COOLDOWN_MS = 1_000/);
-  assert.match(bridge, /onOutputAudio: \(durationMs\) => this\.markPlayback\("recipient", durationMs\)/);
-  assert.match(bridge, /onOutputAudio: \(durationMs\) => this\.markPlayback\("caller", durationMs\)/);
-  assert.match(bridge, /if \(this\.shouldSuppressInput\(\)\) continue/);
+  assert.doesNotMatch(bridge, /SELF_PLAYBACK_COOLDOWN_MS|shouldSuppressInput|isPlaybackActive/);
+  assert.match(bridge, /this\.directions\[role\]\.attach\(track\)/);
+  assert.match(bridge, /noise_reduction: \{ type: "near_field" \}/);
 });
 
 test("call audio session uses the proven explicit start and stop lifecycle", () => {

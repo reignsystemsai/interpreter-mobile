@@ -14,10 +14,6 @@ const { createTranslationToken } = require("../livekit");
 
 const SAMPLE_RATE = 24_000;
 const TRANSLATION_URL = "wss://api.openai.com/v1/realtime/translations?model=gpt-realtime-translate";
-// LiveKit playout reaches the phone after the server has queued these frames.
-// Keep the matching microphone direction closed through that transport tail so
-// translated speaker audio cannot be interpreted and sent back to its source.
-const SELF_PLAYBACK_COOLDOWN_MS = 1_000;
 const bridges = new Map();
 
 function humanRole(identity, callId) {
@@ -38,11 +34,9 @@ function pcm16Frame(base64Audio) {
 }
 
 class TranslationDirection {
-  constructor({ callId, onOutputAudio, outputSource, shouldSuppressInput, sourceRole, targetLanguage }) {
+  constructor({ callId, outputSource, sourceRole, targetLanguage }) {
     this.callId = callId;
-    this.onOutputAudio = onOutputAudio;
     this.outputSource = outputSource;
-    this.shouldSuppressInput = shouldSuppressInput;
     this.sourceRole = sourceRole;
     this.targetLanguage = targetLanguage;
     this.abortController = null;
@@ -105,7 +99,6 @@ class TranslationDirection {
         if (event.type === "session.output_audio.delta" && typeof event.delta === "string") {
           const frame = pcm16Frame(event.delta);
           if (!frame) return;
-          const durationMs = (Buffer.from(event.delta, "base64").length / 2 / SAMPLE_RATE) * 1000;
           if (!this.firstOutputLogged) {
             this.firstOutputLogged = true;
             console.info("[Translation] first translated audio", {
@@ -115,10 +108,7 @@ class TranslationDirection {
             });
           }
           this.outputChain = this.outputChain
-            .then(() => {
-              this.onOutputAudio(durationMs);
-              return this.outputSource.captureFrame(frame);
-            })
+            .then(() => this.outputSource.captureFrame(frame))
             .catch(() => undefined);
           return;
         }
@@ -158,7 +148,6 @@ class TranslationDirection {
           const socket = this.socket;
           if (!socket || socket.readyState !== WebSocket.OPEN) continue;
           if (socket.bufferedAmount > 1_000_000) continue;
-          if (this.shouldSuppressInput()) continue;
           if (!this.firstInputAt) this.firstInputAt = Date.now();
           const pcm = Buffer.from(value.data.buffer, value.data.byteOffset, value.data.byteLength);
           socket.send(JSON.stringify({
@@ -197,34 +186,21 @@ class CallTranslationBridge {
       caller: new AudioSource(SAMPLE_RATE, 1, 1000),
       recipient: new AudioSource(SAMPLE_RATE, 1, 1000)
     };
-    this.playbackEndsAt = { caller: 0, recipient: 0 };
     this.directions = {
       caller: new TranslationDirection({
         callId,
-        onOutputAudio: (durationMs) => this.markPlayback("recipient", durationMs),
         outputSource: this.outputSources.recipient,
-        shouldSuppressInput: () => this.isPlaybackActive("caller"),
         sourceRole: "caller",
         targetLanguage: recipientLanguage
       }),
       recipient: new TranslationDirection({
         callId,
-        onOutputAudio: (durationMs) => this.markPlayback("caller", durationMs),
         outputSource: this.outputSources.caller,
-        shouldSuppressInput: () => this.isPlaybackActive("recipient"),
         sourceRole: "recipient",
         targetLanguage: callerLanguage
       })
     };
     this.publications = [];
-  }
-
-  markPlayback(role, durationMs) {
-    this.playbackEndsAt[role] = Math.max(Date.now(), this.playbackEndsAt[role]) + Math.max(0, durationMs);
-  }
-
-  isPlaybackActive(role) {
-    return Date.now() < this.playbackEndsAt[role] + SELF_PLAYBACK_COOLDOWN_MS;
   }
 
   async start() {
