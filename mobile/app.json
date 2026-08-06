@@ -2,7 +2,7 @@
   "expo": {
     "name": "interpreter",
     "slug": "interpreter-ai",
-    "owner": "speak.ai",
+    "owner": "speakai",
     "version": "1.1.0",
     "icon": "./assets/interpreter-mark-clean.png",
     "orientation": "portrait",
