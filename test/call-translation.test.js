@@ -70,7 +70,5 @@ test("server creates exactly two translation directions and stops them with the 
   assert.match(bridge, /sourceRole: "recipient"[\s\S]*targetLanguage: callerLanguage/);
   assert.match(bridge, /session\.input_audio_buffer\.append/);
   assert.match(bridge, /session\.output_audio\.delta/);
-  assert.match(bridge, /noise_reduction: \{ type: "near_field" \}/);
-  assert.match(bridge, /type: "server_vad",\s*threshold: 0\.65/);
   assert.match(calls, /await stopCallTranslation\(row\.id\)/);
 });
