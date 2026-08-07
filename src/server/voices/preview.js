@@ -4,6 +4,8 @@ const crypto = require("node:crypto");
 const PREVIEW_SAMPLE_KEY = "speak-default-introduction";
 const PREVIEW_SAMPLE_TEXT = "Hello. Speak will translate your conversation using this voice.";
 const PREVIEW_CONTENT_TYPE = "audio/mpeg";
+const PREVIEW_RESPONSE_FORMAT = "mp3";
+const DEFAULT_PREVIEW_MODEL = "gpt-4o-mini-tts";
 const previewCache = new Map();
 const pendingPreviews = new Map();
 const previewTokens = new Map();
@@ -13,6 +15,7 @@ const MAX_PREVIEW_TOKENS = 100;
 async function generatePreview(voiceId, fetchImpl = fetch) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OpenAI preview service is unavailable");
+  const model = process.env.OPENAI_PREVIEW_TTS_MODEL || DEFAULT_PREVIEW_MODEL;
   const response = await fetchImpl("https://api.openai.com/v1/audio/speech", {
     method: "POST",
     headers: {
@@ -20,13 +23,29 @@ async function generatePreview(voiceId, fetchImpl = fetch) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: process.env.OPENAI_PREVIEW_TTS_MODEL || "tts-1",
+      model,
       voice: voiceId,
       input: PREVIEW_SAMPLE_TEXT,
-      response_format: "mp3"
+      response_format: PREVIEW_RESPONSE_FORMAT
     })
   });
-  if (!response.ok) throw new Error(`OpenAI preview generation failed (${response.status})`);
+  if (!response.ok) {
+    let payload = {};
+    try { payload = await response.json(); } catch {}
+    const details = payload?.error ?? {};
+    const message = typeof details.message === "string" ? details.message : "Speech generation request was rejected.";
+    const error = new Error(`OpenAI preview generation failed (${response.status}): ${message}`);
+    error.openAI = {
+      status: response.status,
+      type: typeof details.type === "string" ? details.type : null,
+      code: typeof details.code === "string" ? details.code : null,
+      message,
+      model,
+      voice: voiceId,
+      responseFormat: PREVIEW_RESPONSE_FORMAT
+    };
+    throw error;
+  }
   return Buffer.from(await response.arrayBuffer());
 }
 
@@ -76,6 +95,8 @@ function resolveVoicePreviewToken(token, now = Date.now()) {
 
 module.exports = {
   PREVIEW_CONTENT_TYPE,
+  DEFAULT_PREVIEW_MODEL,
+  PREVIEW_RESPONSE_FORMAT,
   PREVIEW_SAMPLE_KEY,
   PREVIEW_SAMPLE_TEXT,
   clearVoicePreviewCache,

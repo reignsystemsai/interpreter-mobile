@@ -7,8 +7,12 @@ const root = path.join(__dirname, "..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 const { SPEAK_VOICE_IDS, isSpeakVoiceId } = require("../src/server/voices/catalog");
 const {
+  DEFAULT_PREVIEW_MODEL,
   PREVIEW_SAMPLE_KEY,
+  PREVIEW_SAMPLE_TEXT,
+  PREVIEW_RESPONSE_FORMAT,
   clearVoicePreviewCache,
+  generatePreview,
   getVoicePreview,
   issueVoicePreviewToken,
   resolveVoicePreviewToken
@@ -54,6 +58,64 @@ test("preview rejects unsupported inputs without contacting OpenAI", async () =>
   assert.deepEqual(await getVoicePreview("bad", PREVIEW_SAMPLE_KEY, fetchImpl), { error: "unsupported_voice", status: 400 });
   assert.deepEqual(await getVoicePreview("cedar", "bad", fetchImpl), { error: "unsupported_sample", status: 400 });
   assert.equal(requests, 0);
+});
+
+test("preview uses the supported speech contract and preserves the selected call voice", async () => {
+  const originalKey = process.env.OPENAI_API_KEY;
+  const originalModel = process.env.OPENAI_PREVIEW_TTS_MODEL;
+  process.env.OPENAI_API_KEY = "test-only";
+  delete process.env.OPENAI_PREVIEW_TTS_MODEL;
+  let request;
+  try {
+    const audio = await generatePreview("cedar", async (url, options) => {
+      request = { url, options, body: JSON.parse(options.body) };
+      return { ok: true, arrayBuffer: async () => Uint8Array.from([4, 5, 6]).buffer };
+    });
+    assert.deepEqual([...audio], [4, 5, 6]);
+    assert.equal(request.url, "https://api.openai.com/v1/audio/speech");
+    assert.deepEqual(request.body, {
+      model: DEFAULT_PREVIEW_MODEL,
+      voice: "cedar",
+      input: PREVIEW_SAMPLE_TEXT,
+      response_format: PREVIEW_RESPONSE_FORMAT
+    });
+    assert.equal(request.options.headers.Authorization, "Bearer test-only");
+  } finally {
+    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalKey;
+    if (originalModel === undefined) delete process.env.OPENAI_PREVIEW_TTS_MODEL;
+    else process.env.OPENAI_PREVIEW_TTS_MODEL = originalModel;
+  }
+});
+
+test("preview preserves only sanitized OpenAI error details", async () => {
+  const originalKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-only";
+  try {
+    await assert.rejects(
+      generatePreview("cedar", async () => ({
+        ok: false,
+        status: 400,
+        json: async () => ({ error: { type: "invalid_request_error", code: "invalid_value", message: "Unsupported model and voice combination." } })
+      })),
+      (error) => {
+        assert.deepEqual(error.openAI, {
+          status: 400,
+          type: "invalid_request_error",
+          code: "invalid_value",
+          message: "Unsupported model and voice combination.",
+          model: DEFAULT_PREVIEW_MODEL,
+          voice: "cedar",
+          responseFormat: PREVIEW_RESPONSE_FORMAT
+        });
+        assert.doesNotMatch(error.message, /test-only|Bearer|Authorization/);
+        return true;
+      }
+    );
+  } finally {
+    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalKey;
+  }
 });
 
 test("preview generation is deduplicated, cached, and clearable", async () => {
