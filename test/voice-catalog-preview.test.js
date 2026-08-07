@@ -19,10 +19,10 @@ const {
 } = require("../src/server/voices/preview");
 const callsRouter = require("../src/server/routes/calls");
 
-const expectedVoiceIds = ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"];
+const expectedVoiceIds = ["cedar", "ash", "echo", "ballad", "verse", "marin", "coral", "shimmer", "sage", "alloy"];
 
-test("supported voice catalog contains the ten approved IDs exactly once", () => {
-  assert.deepEqual([...SPEAK_VOICE_IDS].sort(), [...expectedVoiceIds].sort());
+test("supported voice catalog permanently preserves the approved order", () => {
+  assert.deepEqual([...SPEAK_VOICE_IDS], expectedVoiceIds);
   assert.equal(new Set(SPEAK_VOICE_IDS).size, 10);
   for (const voiceId of expectedVoiceIds) assert.equal(isSpeakVoiceId(voiceId), true);
   assert.equal(isSpeakVoiceId("unsupported"), false);
@@ -85,6 +85,27 @@ test("preview uses the supported speech contract and preserves the selected call
     else process.env.OPENAI_API_KEY = originalKey;
     if (originalModel === undefined) delete process.env.OPENAI_PREVIEW_TTS_MODEL;
     else process.env.OPENAI_PREVIEW_TTS_MODEL = originalModel;
+  }
+});
+
+test("all ten previews preserve the exact call voice and fixed sample sentence", async () => {
+  const originalKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-only";
+  try {
+    for (const voiceId of expectedVoiceIds) {
+      let requestBody;
+      const audio = await generatePreview(voiceId, async (_url, options) => {
+        requestBody = JSON.parse(options.body);
+        return { ok: true, arrayBuffer: async () => Uint8Array.from([1]).buffer };
+      });
+      assert.equal(audio.length, 1);
+      assert.equal(requestBody.voice, voiceId);
+      assert.equal(requestBody.input, "Hello. Speak will translate your conversation using this voice.");
+      assert.equal(requestBody.response_format, "mp3");
+    }
+  } finally {
+    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalKey;
   }
 });
 
@@ -168,6 +189,8 @@ test("screen text and controls reflect the approved UI corrections", () => {
   assert.match(screen, /onVoiceStep\(-1\)/);
   assert.match(screen, /onVoiceStep\(1\)/);
   assert.match(screen, /onPreview/);
+  assert.match(screen, /selection\.category === 'male' \? BLUE : PINK/);
+  assert.doesNotMatch(screen, /accent=\{BLUE\}|accent=\{PINK\}/);
   assert.match(player, /Preview unavailable\. Try again\./);
 });
 
@@ -178,10 +201,23 @@ test("shared preview player enforces one active sample and cleanup boundaries", 
   assert.match(player, /generation\.current \+= 1/);
   assert.match(player, /player\.pause\(\)/);
   assert.match(player, /player\.replace\(null\)/);
+  assert.match(player, /player\.replace\(\{ uri: previewUrl \}\);\s*player\.play\(\)/);
+  assert.match(player, /state\.status !== 'loading' \|\| !playerStatus\.playing/);
   assert.match(player, /AppState\.addEventListener\('change'/);
   assert.match(player, /return \(\) => subscription\.remove\(\)/);
   assert.match(player, /previewUrl\.startsWith\('http'\)/);
   assert.match(screen, /const start = \(\) => \{\s*stopPreview\(\)/);
   assert.match(screen, /const chooseVoiceCategory[\s\S]*stopPreview\(\)/);
   assert.match(screen, /const stepVoice[\s\S]*stopPreview\(\)/);
+});
+
+test("saved preferences restore the exact category and voice ID independently", () => {
+  const screen = read("mobile", "src", "features", "calling", "CallLanguageSelection.tsx");
+  assert.match(screen, /VOICE_KEYS\.callerCategory[\s\S]*VOICE_KEYS\.callerVoiceId[\s\S]*VOICE_KEYS\.recipientCategory[\s\S]*VOICE_KEYS\.recipientVoiceId/);
+  assert.match(screen, /selectionFor\(callerCategory, callerVoiceId\)/);
+  assert.match(screen, /selectionFor\(recipientCategory, recipientVoiceId\)/);
+  assert.match(screen, /setItemAsync\(VOICE_KEYS\.callerCategory, voicePreferences\.caller\.category\)/);
+  assert.match(screen, /setItemAsync\(VOICE_KEYS\.callerVoiceId, voicePreferences\.caller\.voiceId\)/);
+  assert.match(screen, /setItemAsync\(VOICE_KEYS\.recipientCategory, voicePreferences\.recipient\.category\)/);
+  assert.match(screen, /setItemAsync\(VOICE_KEYS\.recipientVoiceId, voicePreferences\.recipient\.voiceId\)/);
 });

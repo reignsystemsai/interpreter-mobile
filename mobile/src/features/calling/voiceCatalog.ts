@@ -1,14 +1,14 @@
 export const SPEAK_VOICE_IDS = [
-  'alloy',
+  'cedar',
   'ash',
-  'ballad',
-  'coral',
   'echo',
-  'sage',
-  'shimmer',
+  'ballad',
   'verse',
   'marin',
-  'cedar',
+  'coral',
+  'shimmer',
+  'sage',
+  'alloy',
 ] as const;
 
 export type CallVoiceId = typeof SPEAK_VOICE_IDS[number];
@@ -43,9 +43,7 @@ export const DEFAULT_VOICE_BY_CATEGORY: Readonly<Record<VoiceCategory, CallVoice
 });
 
 export function voicesForCategory(category: VoiceCategory) {
-  return SPEAK_VOICE_OPTIONS
-    .filter((option) => option.enabled && option.presentationCategory === category)
-    .sort((left, right) => left.displayOrder - right.displayOrder);
+  return SPEAK_VOICE_OPTIONS.filter((option) => option.enabled && option.presentationCategory === category);
 }
 
 export function isCallVoiceId(value: unknown): value is CallVoiceId {

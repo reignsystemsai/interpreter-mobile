@@ -82,8 +82,7 @@ function LanguageControl({ label, onPress, value }: { label: string; onPress: ()
   </Pressable>;
 }
 
-function VoiceChoiceControl({ accent, selection, sideLabel, onCategoryChange, onPreview, onVoiceStep, previewError, previewStatus }: {
-  accent: string;
+function VoiceChoiceControl({ selection, sideLabel, onCategoryChange, onPreview, onVoiceStep, previewError, previewStatus }: {
   selection: CallVoiceSelection;
   sideLabel: string;
   onCategoryChange: (category: VoiceCategory) => void;
@@ -92,6 +91,7 @@ function VoiceChoiceControl({ accent, selection, sideLabel, onCategoryChange, on
   previewError: string;
   previewStatus: VoicePreviewStatus;
 }) {
+  const accent = selection.category === 'male' ? BLUE : PINK;
   const voiceLabel = SPEAK_VOICE_OPTIONS.find((candidate) => candidate.id === selection.voiceId)?.label ?? 'Voice 1';
   const previewActive = previewStatus === 'loading' || previewStatus === 'playing';
   return <View style={styles.voiceCard}>
@@ -212,7 +212,6 @@ export function CallLanguageSelection({ contact, onBack, onContactPress, onStart
     </View>
     <View style={styles.voiceSection}>
       <VoiceChoiceControl
-        accent={BLUE}
         onCategoryChange={(category) => chooseVoiceCategory('caller', category)}
         onPreview={() => void togglePreview('caller', voicePreferences.caller.voiceId)}
         onVoiceStep={(direction) => stepVoice('caller', direction)}
@@ -222,7 +221,6 @@ export function CallLanguageSelection({ contact, onBack, onContactPress, onStart
         sideLabel="You hear"
       />
       <VoiceChoiceControl
-        accent={PINK}
         onCategoryChange={(category) => chooseVoiceCategory('recipient', category)}
         onPreview={() => void togglePreview('recipient', voicePreferences.recipient.voiceId)}
         onVoiceStep={(direction) => stepVoice('recipient', direction)}

@@ -71,7 +71,7 @@ test("General Realtime session locks one voice and strict interpreter behavior",
     voice: "cedar"
   });
   assert.equal(update.session.type, "realtime");
-  assert.equal(update.session.model, "gpt-realtime-2.1");
+  assert.equal("model" in update.session, false);
   assert.deepEqual(update.session.output_modalities, ["audio"]);
   assert.equal(update.session.audio.input.format.rate, 24_000);
   assert.equal(update.session.audio.output.voice, "cedar");
@@ -200,8 +200,9 @@ test("ringing call recovers its voice preference from the durable room record", 
 });
 
 test("ringing calls persist and restore independent caller and recipient voices", () => {
-  for (const callerHearsVoiceId of ["cedar", "marin"]) {
-    for (const recipientHearsVoiceId of ["cedar", "marin"]) {
+  const voiceIds = ["cedar", "ash", "echo", "ballad", "verse", "marin", "coral", "shimmer", "sage", "alloy"];
+  for (const callerHearsVoiceId of voiceIds) {
+    for (const recipientHearsVoiceId of voiceIds) {
       const roomName = callsRouter.roomNameWithCallVoiceIds({ callerHearsVoiceId, recipientHearsVoiceId }, `pair-${callerHearsVoiceId}-${recipientHearsVoiceId}`);
       assert.deepEqual(callsRouter.callVoiceIdsFromRoomName(roomName), { callerHearsVoiceId, recipientHearsVoiceId });
       assert.equal(callsRouter.roomNameWithoutVoicePreference(roomName), `voice-pair-${callerHearsVoiceId}-${recipientHearsVoiceId}`);

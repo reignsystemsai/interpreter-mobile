@@ -64,6 +64,7 @@ export function useVoicePreviewPlayer() {
       if (generation.current !== requestGeneration) return;
       const previewUrl = payload.previewUrl.startsWith('http') ? payload.previewUrl : `${API_BASE_URL}${payload.previewUrl}`;
       player.replace({ uri: previewUrl });
+      player.play();
       loadTimer.current = setTimeout(() => {
         if (generation.current !== requestGeneration) return;
         releaseCurrent();
@@ -77,16 +78,15 @@ export function useVoicePreviewPlayer() {
   }, [player, releaseCurrent, state.side, state.status, state.voiceId, stopPreview]);
 
   useEffect(() => {
-    if (state.status !== 'loading' || !playerStatus.isLoaded) return;
+    if (state.status !== 'loading' || !playerStatus.playing) return;
     clearLoadTimer();
-    player.play();
     setState((current) => current.status === 'loading' ? { ...current, status: 'playing' } : current);
-  }, [clearLoadTimer, player, playerStatus.isLoaded, state.status]);
+  }, [clearLoadTimer, playerStatus.playing, state.status]);
 
   useEffect(() => {
-    if (!playerStatus.didJustFinish) return;
+    if (state.status !== 'playing' || !playerStatus.didJustFinish) return;
     stopPreview();
-  }, [playerStatus.didJustFinish, stopPreview]);
+  }, [playerStatus.didJustFinish, state.status, stopPreview]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {

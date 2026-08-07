@@ -63,7 +63,6 @@ function buildSessionUpdate({ pipeline, sourceLanguage, targetLanguage, voice })
     type: "session.update",
     session: {
       type: "realtime",
-      model: "gpt-realtime-2.1",
       output_modalities: ["audio"],
       instructions: interpreterInstructions(sourceLanguage, targetLanguage),
       audio: {
@@ -178,6 +177,21 @@ class TranslationDirection {
           this.reconnectAttempts = 0;
           resolve();
           if (this.sourceTrack && !this.reader) this.attach(this.sourceTrack);
+          return;
+        }
+        if (event.type === "error") {
+          clearTimeout(timeout);
+          socket.off("error", fail);
+          socket.off("close", fail);
+          const details = event.error ?? {};
+          console.error("[Translation] OpenAI session rejected", {
+            callId: this.callId,
+            code: typeof details.code === "string" ? details.code : null,
+            direction: this.sourceRole,
+            message: typeof details.message === "string" ? details.message : "Session update rejected",
+            type: typeof details.type === "string" ? details.type : null
+          });
+          reject(new Error("OpenAI translation session was rejected"));
           return;
         }
         this.handleOpenAIEvent(event, socket, sessionGeneration);
