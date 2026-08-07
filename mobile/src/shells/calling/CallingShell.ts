@@ -16,6 +16,11 @@ export interface CallingShell {
 
   answerCall(callId: string): Promise<CallSession>;
 
+  // Moves a session from "connecting" or "reconnecting" to "connected" once the
+  // media layer confirms the remote participant's audio is actually flowing. The
+  // shell has no LiveKit awareness itself; a media adapter calls this.
+  confirmConnected(callId: string): Promise<CallSession>;
+
   declineCall(callId: string): Promise<void>;
 
   endCall(callId: string): Promise<void>;

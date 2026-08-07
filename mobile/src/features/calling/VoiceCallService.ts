@@ -33,6 +33,19 @@ export type IncomingVoiceCall = {
   callerPhoneNumber: string;
 };
 
+// Credentials issued by the new media-session endpoint (src/server/routes/mediaSessions.js)
+// for a call whose state is owned by CallingShellHost, not by this service's own
+// backend calls.
+export type MediaSessionCredentials = {
+  callId: string;
+  roomName: string;
+  livekitUrl: string;
+  token: string;
+  translationEnabled: boolean;
+  role: Exclude<VoiceCallRole, null>;
+  remoteLabel: string;
+};
+
 type ApiErrorPayload = { code?: string; error?: string };
 
 export class VoiceCallError extends Error {
@@ -54,6 +67,10 @@ class CleanVoiceCallService {
   private resetPromise: Promise<void> | null = null;
   private room: Room | null = null;
   private state: VoiceCallState = INITIAL_STATE;
+  // Call IDs whose call-data state is owned by CallingShellHost rather than by this
+  // service's own backend calls (see acceptIncomingCall).
+  private canonicalCallIds = new Set<string>();
+  private onMediaConnected: (() => void) | null = null;
 
   getState() {
     return this.state;
@@ -147,11 +164,23 @@ class CleanVoiceCallService {
     return true;
   }
 
+  // Marks a callId as belonging to CallingShellHost's call-data state rather than to
+  // the old /api/v1/calls/* backend. Called by VoiceCallHost the moment it presents a
+  // canonical incoming call. Without this, acceptIncomingCall's own OLD-backend
+  // request below would always 404 (the id never exists in active_calls) and its
+  // catch block would tear down whatever connectMedia concurrently establishes.
+  markCanonicalCall(callId: string) {
+    this.canonicalCallIds.add(callId);
+  }
+
   async acceptIncomingCall() {
     const call = this.callContext;
     if (!call || call.role !== 'recipient' || this.state.status !== 'ringing') return;
     InCallManager.stopRingtone();
     this.updateState({ status: 'connecting' });
+    // The real claim + media connection for canonical calls is driven externally
+    // (VoiceCallHost -> CallingShellHost.answerCall + connectMedia). Stop here.
+    if (this.canonicalCallIds.has(call.callId)) return;
     try {
       const recipientDeviceId = await getDeviceId();
       const response = await this.request<{ callId: string; livekitUrl: string; recipientToken: string; roomName: string; translationEnabled: boolean }>(
@@ -188,6 +217,44 @@ class CleanVoiceCallService {
     await this.resetVoiceCall({ notifyBackend: true });
   }
 
+  // Media-only entry point for calls whose data/state lives in CallingShellHost.
+  // Reuses the exact same connect() mechanics (room setup, track subscription,
+  // mic publish, audio session) as startVoiceCall/acceptIncomingCall — nothing
+  // about LiveKit connection, translation-track filtering, or audio-session
+  // configuration is duplicated or changed. onConnected fires once, the moment the
+  // real remote human participant's audio is confirmed (the same instant this
+  // service would otherwise set its own status to 'connected').
+  async connectMedia(credentials: MediaSessionCredentials, onConnected: () => void) {
+    if (this.resetPromise) await this.resetPromise;
+    this.markCanonicalCall(credentials.callId);
+    this.callContext = {
+      callId: credentials.callId,
+      livekitUrl: credentials.livekitUrl,
+      remoteLabel: credentials.remoteLabel,
+      role: credentials.role,
+      roomName: credentials.roomName,
+      token: credentials.token,
+      translationEnabled: credentials.translationEnabled,
+    };
+    this.onMediaConnected = onConnected;
+    if (this.state.status === 'idle') this.setState({ ...INITIAL_STATE, remoteLabel: credentials.remoteLabel, role: credentials.role, status: credentials.role === 'caller' ? 'preparing' : 'connecting' });
+    await this.connect(this.callContext);
+  }
+
+  // Local-only teardown: releases the LiveKit room and clears call context without
+  // making any request to the old backend. Call-data closure (speak_call_sessions)
+  // is CallingShellHost's responsibility, not this service's.
+  async disconnectMedia() {
+    this.onMediaConnected = null;
+    const room = this.room;
+    const call = this.callContext;
+    if (call) this.canonicalCallIds.delete(call.callId);
+    this.room = null;
+    this.callContext = null;
+    this.setState(INITIAL_STATE);
+    await this.releaseRoom(room);
+  }
+
   async handleAppForeground() {
     if (this.state.status === 'idle') return;
     const roomActuallyActive = this.room && [ConnectionState.Connecting, ConnectionState.Connected, ConnectionState.Reconnecting].includes(this.room.state);
@@ -212,6 +279,8 @@ class CleanVoiceCallService {
     InCallManager.stopRingback();
     InCallManager.stopRingtone();
     InCallManager.setKeepScreenOn(false);
+    if (call) this.canonicalCallIds.delete(call.callId);
+    this.onMediaConnected = null;
     this.callContext = null;
     this.room = null;
     this.setState(INITIAL_STATE);
@@ -256,6 +325,17 @@ class CleanVoiceCallService {
     if (payload.active === false) await this.resetVoiceCall({ notifyBackend: false });
   }
 
+  // Single trigger point for "a real remote human's audio is confirmed flowing" —
+  // used by both the legacy startVoiceCall/acceptIncomingCall path and the new
+  // connectMedia path, so the notification fires from exactly the same place this
+  // service already treated as "connected" (no new/duplicated connection logic).
+  private markConnected() {
+    this.updateState({ status: 'connected' });
+    const callback = this.onMediaConnected;
+    this.onMediaConnected = null;
+    callback?.();
+  }
+
   private async requestMicrophone() {
     if (Platform.OS !== 'android') return;
     const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
@@ -265,6 +345,9 @@ class CleanVoiceCallService {
   private async connect(call: ActiveCall) {
     if (!call.livekitUrl || !call.token) throw new VoiceCallError('missing_token', 'Unable to connect. Please try again.');
     await this.requestMicrophone();
+    // Other features (in-person interpreter mode, voice previews) can leave the shared native
+    // audio session claimed. Force a clean reset before configuring it for this call.
+    await AudioSession.stopAudioSession().catch(() => undefined);
     await AudioSession.configureAudio({
       android: {
         audioTypeOptions: { ...AndroidAudioTypePresets.communication, forceHandleAudioRouting: true },
@@ -287,7 +370,7 @@ class CleanVoiceCallService {
       InCallManager.stopRingtone();
       if (this.callTimer) clearTimeout(this.callTimer);
       this.callTimer = null;
-      this.updateState({ status: 'connected' });
+      this.markConnected();
     });
     room.on(RoomEvent.ParticipantDisconnected, (participant) => {
       if (participant.identity === `translator:${call.callId}`) return;
@@ -303,7 +386,7 @@ class CleanVoiceCallService {
         return;
       }
       console.info('[VoiceCall] remote audio subscribed');
-      this.updateState({ status: 'connected' });
+      this.markConnected();
     });
     room.on(RoomEvent.Reconnecting, () => {
       if (this.room === room) this.updateState({ status: 'reconnecting' });
@@ -327,14 +410,20 @@ class CleanVoiceCallService {
       this.callTimer = null;
     }
     const humanParticipantConnected = [...room.remoteParticipants.values()].some((participant) => participant.identity !== `translator:${call.callId}`);
-    this.updateState({ status: humanParticipantConnected ? 'connected' : call.role === 'caller' ? 'ringing' : 'connecting' });
+    if (humanParticipantConnected) this.markConnected();
+    else this.updateState({ status: call.role === 'caller' ? 'ringing' : 'connecting' });
     if (Platform.OS === 'android') await AudioSession.selectAudioOutput('speaker');
     else await AudioSession.selectAudioOutput('force_speaker');
   }
 
   private shouldSubscribe(call: ActiveCall, participantIdentity: string, trackName: string) {
     if (call.translationEnabled) {
-      return participantIdentity === `translator:${call.callId}` && trackName === `translation-to-${call.role}`;
+      const isTranslatorParticipant = participantIdentity === `translator:${call.callId}`;
+      const isMyTranslatedTrack = trackName === `translation-to-${call.role}`;
+      // Raw human mic tracks must stay published for the translation bridge to consume,
+      // but only the translator's matching dubbed track may ever be subscribed to here.
+      if (!isTranslatorParticipant) return false;
+      return isMyTranslatedTrack;
     }
     return participantIdentity !== `translator:${call.callId}`;
   }
@@ -342,11 +431,12 @@ class CleanVoiceCallService {
   private async releaseRoom(room: Room | null) {
     if (room) {
       room.removeAllListeners();
-      const disconnect = room.disconnect().catch(() => undefined);
-      await Promise.all([
-        room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined),
-        disconnect,
-      ]);
+      // The mic track must be fully, cleanly disabled while the room connection is still
+      // alive, not concurrently with disconnect — racing them can leave the native audio
+      // capture engine in a state where the next call's setMicrophoneEnabled(true) silently
+      // produces no audio, since permission is already granted and nothing errors.
+      await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
+      await room.disconnect().catch(() => undefined);
       for (const publication of room.localParticipant.audioTrackPublications.values()) {
         if (publication.track) await room.localParticipant.unpublishTrack(publication.track).catch(() => undefined);
       }

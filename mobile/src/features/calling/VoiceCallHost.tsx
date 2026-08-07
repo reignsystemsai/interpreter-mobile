@@ -12,10 +12,14 @@ import {
   restoreAndRefreshDeviceRegistration,
   wasCallNotificationOfferShown,
 } from '../../services/deviceRegistration';
+import { backendMediaAdapter } from '../../shells/audio/BackendMediaAdapter';
+import { CallingShellHost } from '../../shells/calling/CallingShellHost';
+import type { CallSession } from '../../shells/data/CallSession';
 import { VoiceCallService } from './VoiceCallService';
 import { VoiceCallSurface } from './VoiceCallSurface';
 
 const handledIncomingCallIds = new Set<string>();
+const handledCanonicalCallIds = new Set<string>();
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -48,6 +52,89 @@ async function pollIncomingCall() {
   if (!response.ok) return;
   const payload = (await response.json()) as { incoming?: boolean; callId?: string; callerPhoneNumber?: string };
   if (payload.incoming && payload.callId) presentIncoming(payload.callId, payload.callerPhoneNumber || 'Interpreter caller');
+}
+
+type IncomingCallSessionPayload = {
+  incoming: boolean;
+  callId?: string;
+  callerDeviceId?: string;
+  callerPhoneNumber?: string;
+  callerLanguage?: string;
+  recipientLanguage?: string;
+  callerParticipantIdentity?: string;
+  recipientParticipantIdentity?: string;
+};
+
+// Foreground-only discovery for canonical (speak_call_sessions) calls — push delivery
+// is a separate, later phase; this poll is the sole discovery mechanism for now.
+// Never reads or writes active_calls.
+async function pollIncomingCallSession() {
+  if (AppState.currentState !== 'active' || VoiceCallService.getState().status !== 'idle') return;
+  const deviceId = await getDeviceId();
+  const response = await fetch(`${API_BASE_URL}/api/v1/call-sessions/incoming?deviceId=${encodeURIComponent(deviceId)}`);
+  if (!response.ok) return;
+  const payload = (await response.json()) as IncomingCallSessionPayload;
+  if (
+    !payload.incoming ||
+    !payload.callId ||
+    !payload.callerDeviceId ||
+    !payload.callerLanguage ||
+    !payload.recipientLanguage ||
+    !payload.callerParticipantIdentity ||
+    !payload.recipientParticipantIdentity ||
+    handledCanonicalCallIds.has(payload.callId) ||
+    handledIncomingCallIds.has(payload.callId)
+  ) {
+    return;
+  }
+
+  const session: CallSession = {
+    callId: payload.callId,
+    callerDeviceId: payload.callerDeviceId,
+    recipientDeviceId: null,
+    callerLanguage: payload.callerLanguage,
+    recipientLanguage: payload.recipientLanguage,
+    callerParticipantIdentity: payload.callerParticipantIdentity,
+    recipientParticipantIdentity: payload.recipientParticipantIdentity,
+    status: 'ringing',
+  };
+  try {
+    CallingShellHost.presentIncomingCall(session);
+  } catch {
+    return; // a call is already active locally; ignore until it clears
+  }
+  VoiceCallService.markCanonicalCall(payload.callId);
+  const presented = VoiceCallService.presentIncomingCall({ callId: payload.callId, callerPhoneNumber: payload.callerPhoneNumber || 'Interpreter caller' });
+  if (presented) handledCanonicalCallIds.add(payload.callId);
+}
+
+// Bridges VoiceCallSurface's Answer/Decline/End button presses (which call
+// VoiceCallService directly and are not modified this phase) into the canonical
+// CallingShellHost + BackendMediaAdapter, for calls CallingShellHost currently owns.
+// A call whose id does not match CallingShellHost's current session is left
+// completely alone — this never touches a legacy (non-canonical) call.
+async function bridgeAnswer(callId: string) {
+  try {
+    await CallingShellHost.answerCall(callId);
+    await backendMediaAdapter.connect(callId, VoiceCallService.getState().remoteLabel, 'recipient');
+  } catch {
+    void VoiceCallService.disconnectMedia();
+  }
+}
+
+function bridgeCallStateChange(previousStatus: string, previousCallId: string | null, nextStatus: string) {
+  if (!previousCallId) return;
+  const canonicalSession = CallingShellHost.getSession();
+  if (!canonicalSession || canonicalSession.callId !== previousCallId) return;
+
+  if (previousStatus === 'ringing' && nextStatus === 'connecting') {
+    void bridgeAnswer(previousCallId);
+    return;
+  }
+  if (nextStatus === 'idle') {
+    if (previousStatus === 'ringing') void CallingShellHost.declineCall(previousCallId).catch(() => undefined);
+    else void CallingShellHost.endCall(previousCallId).catch(() => undefined);
+  }
 }
 
 async function enableNotificationsFromOffer() {
@@ -101,11 +188,17 @@ async function offerCallNotificationsAfterFirstCall() {
 
 export function VoiceCallHost() {
   useEffect(() => {
+    backendMediaAdapter.start();
     let completedConnectedCall = false;
     let previousStatus = VoiceCallService.getState().status;
+    let previousCallId = VoiceCallService.getState().callId;
     void restoreAndRefreshDeviceRegistration().catch(() => false);
     void pollIncomingCall().catch(() => undefined);
-    const incomingPoll = setInterval(() => void pollIncomingCall().catch(() => undefined), 2_000);
+    void pollIncomingCallSession().catch(() => undefined);
+    const incomingPoll = setInterval(() => {
+      void pollIncomingCall().catch(() => undefined);
+      void pollIncomingCallSession().catch(() => undefined);
+    }, 2_000);
     const foregroundListener = Notifications.addNotificationReceivedListener(handleIncoming);
     const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
       handleIncoming(response.notification);
@@ -119,12 +212,14 @@ export function VoiceCallHost() {
       if (response) void Notifications.clearLastNotificationResponseAsync();
     });
     const callStateListener = VoiceCallService.subscribe((state) => {
+      bridgeCallStateChange(previousStatus, previousCallId, state.status);
       if (state.status === 'connected') completedConnectedCall = true;
       if (completedConnectedCall && state.status === 'idle' && previousStatus !== 'idle') {
         completedConnectedCall = false;
         void offerCallNotificationsAfterFirstCall().catch(() => undefined);
       }
       previousStatus = state.status;
+      previousCallId = state.callId;
     });
     return () => {
       foregroundListener.remove();
