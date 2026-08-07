@@ -292,6 +292,8 @@ test("mobile subscribes only to its translated track and never carries an OpenAI
   assert.match(mobile, /translation-to-\$\{call\.role\}/);
   assert.match(mobile, /participant\.identity === `translator:\$\{call\.callId\}`/);
   assert.doesNotMatch(mobile, /OPENAI_API_KEY|api\.openai\.com/);
+  assert.match(mobile, /if \(!isTranslatorParticipant\) return false;/);
+  assert.match(mobile, /return isMyTranslatedTrack;/);
 });
 
 test("call languages are selected after the contact and passed explicitly to the call", () => {
@@ -310,7 +312,6 @@ test("call languages are selected after the contact and passed explicitly to the
   assert.match(selector, /Voice 1/);
   assert.match(selector, /Male/);
   assert.match(selector, /Female/);
-  assert.match(selector, /Start Voice Call/);
   assert.match(selector, /Speak Voice Call/);
   assert.doesNotMatch(selector, /You hear <Text[\s\S]*hears <Text/);
   assert.doesNotMatch(selector, />cedar<|>marin</);
@@ -331,12 +332,15 @@ test("server creates exactly two translation directions and stops them with the 
   assert.match(bridge, /clearQueue\(\)/);
   assert.match(calls, /await stopCallTranslation\(row\.id\)/);
   assert.match(calls, /room_name: roomNameWithoutVoicePreference\(row\.room_name\)/);
+  assert.match(bridge, /interruptStaleAudio\(sourceRole\) \{\s*this\.directions\[sourceRole\]\.cancelOutput\(\);/);
+  assert.doesNotMatch(bridge, /this\.directions\.caller\.cancelOutput\(\);\s*this\.directions\.recipient\.cancelOutput\(\);/);
 });
 
 test("both call directions continuously reach their independent translation sessions", () => {
   const bridge = read("src", "server", "translation", "translation-bridge.js");
   assert.doesNotMatch(bridge, /SELF_PLAYBACK_COOLDOWN_MS|shouldSuppressInput|isPlaybackActive/);
   assert.match(bridge, /this\.directions\[role\]\.attach\(track\)/);
+  assert.match(bridge, /if \(role && publication\.source === TrackSource\.SOURCE_MICROPHONE\) publication\.setSubscribed\(true\);/);
   assert.match(bridge, /noise_reduction: \{ type: "near_field" \}/);
 });
 

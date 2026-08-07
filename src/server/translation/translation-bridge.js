@@ -414,8 +414,7 @@ class CallTranslationBridge {
   }
 
   interruptStaleAudio(sourceRole) {
-    this.directions.caller.cancelOutput();
-    this.directions.recipient.cancelOutput();
+    this.directions[sourceRole].cancelOutput();
     console.info("[Translation] stale translated audio cancelled", { callId: this.callId, sourceRole });
   }
 
