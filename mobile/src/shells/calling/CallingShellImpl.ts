@@ -144,6 +144,22 @@ export class CallingShellImpl implements CallingShell {
     return session;
   }
 
+  async confirmConnected(callId: string): Promise<CallSession> {
+    const current = this.requireSession(callId);
+    assertValidTransition(current.status, 'connected');
+    const operationId = this.beginOperation();
+
+    try {
+      await this.deps.callData.updateCallStatus(callId, 'connected');
+    } catch (cause) {
+      throw asCallingError(cause, 'PERSISTENCE_FAILED', 'Unable to confirm the call as connected.');
+    }
+
+    const session: CallSession = { ...current, status: 'connected' };
+    this.commit(operationId, session);
+    return session;
+  }
+
   async declineCall(callId: string): Promise<void> {
     this.requireSession(callId, 'ringing');
     const operationId = this.beginOperation();

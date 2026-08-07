@@ -7,8 +7,11 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { type InterpreterContact, useContacts } from './ContactsProvider';
 import { CallLanguageSelection, type CallLanguage, type CallVoiceSnapshot, DEFAULT_CALL_VOICE_SNAPSHOT } from '../calling/CallLanguageSelection';
 import { VoiceCallService } from '../calling/VoiceCallService';
+import { backendMediaAdapter } from '../../shells/audio/BackendMediaAdapter';
+import { CallingShellHost } from '../../shells/calling/CallingShellHost';
 import {
   deviceDefaultPhoneRegion,
+  getDeviceId,
   getRegisteredPhoneNumber,
   lookupDeviceByPhone,
   normalizeE164,
@@ -113,11 +116,19 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     }
   };
 
-  const startContactCall = async (phoneNumberE164: string, defaultRegion: CountryCode, callerLanguage: CallLanguage, recipientLanguage: CallLanguage, voices: CallVoiceSnapshot) => {
+  // Voice selection (voices param) does not yet apply to canonical calls: the media
+  // endpoint issues plain LiveKit credentials only (translationEnabled: false) — live
+  // in-call translation is a separate, still-untouched system this phase does not
+  // wire up. The UI still collects a voice choice; it's just not consumed here yet.
+  const startContactCall = async (phoneNumberE164: string, defaultRegion: CountryCode, callerLanguage: CallLanguage, recipientLanguage: CallLanguage, _voices: CallVoiceSnapshot) => {
+    let createdCallId: string | null = null;
     try {
       const recipient = await lookupDeviceByPhone(phoneNumberE164, defaultRegion);
       if (!recipient.found) throw new Error('This person does not have Interpreter yet.');
-      await VoiceCallService.startVoiceCall({ callerHearsVoiceId: voices.callerHearsVoiceId, callerLanguage, contactName: contact.displayName, defaultRegion, phoneNumber: phoneNumberE164, recipientHearsVoiceId: voices.recipientHearsVoiceId, recipientLanguage });
+      const callerDeviceId = await getDeviceId();
+      const session = await CallingShellHost.createCall({ callerDeviceId, recipientPhoneNumber: phoneNumberE164, callerLanguage, recipientLanguage });
+      createdCallId = session.callId;
+      await backendMediaAdapter.connect(session.callId, contact.displayName, 'caller');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Please try again.';
       if (message === 'This person does not have Interpreter yet.') {
@@ -125,7 +136,9 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
           { text: 'Cancel', style: 'cancel', onPress: () => void VoiceCallService.resetVoiceCall({ notifyBackend: false }) },
           { text: 'Invite to Interpreter', onPress: () => void invite().finally(() => VoiceCallService.resetVoiceCall({ notifyBackend: false })) },
         ]);
-      } else if (VoiceCallService.getState().status !== 'failed') {
+      } else {
+        if (createdCallId) void CallingShellHost.endCall(createdCallId).catch(() => undefined);
+        void VoiceCallService.disconnectMedia();
         Alert.alert('Unable to connect', message);
       }
     }

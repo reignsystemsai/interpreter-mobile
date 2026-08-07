@@ -95,3 +95,25 @@ test("every route requires a device id and rejects unauthenticated/unauthorized 
   assert.match(source, /not_call_participant/);
   assert.match(source, /deviceId\.length < 16/);
 });
+
+test("GET /incoming is registered before GET /:callId so Express cannot treat 'incoming' as a callId", () => {
+  const source = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "src", "server", "routes", "callSessions.js"), "utf8");
+  const incomingIndex = source.indexOf('router.get("/incoming"');
+  const callIdIndex = source.indexOf('router.get("/:callId"');
+  assert.notEqual(incomingIndex, -1);
+  assert.notEqual(callIdIndex, -1);
+  assert.ok(incomingIndex < callIdIndex, "GET /incoming must be registered before GET /:callId");
+});
+
+test("the incoming lookup never reads or writes active_calls", () => {
+  const source = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "src", "server", "routes", "callSessions.js"), "utf8");
+  assert.doesNotMatch(source, /active_calls/);
+});
+
+test("the incoming lookup resolves the requesting device's own phone number before matching a call", () => {
+  const source = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "src", "server", "routes", "callSessions.js"), "utf8");
+  const incomingBlock = source.slice(source.indexOf('router.get("/incoming"'), source.indexOf('router.get("/:callId"'));
+  assert.match(incomingBlock, /device_installations/);
+  assert.match(incomingBlock, /recipient_phone_number/);
+  assert.match(incomingBlock, /status.*ringing|"ringing"/);
+});

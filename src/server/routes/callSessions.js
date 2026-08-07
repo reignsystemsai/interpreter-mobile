@@ -101,6 +101,44 @@ router.post("/", async (req, res) => {
   return res.status(201).json(toCallRecordJson(data));
 });
 
+// Must be registered before GET "/:callId" — otherwise Express would match
+// "incoming" as a :callId value on that route instead of reaching this one.
+router.get("/incoming", async (req, res) => {
+  if (!isSupabaseConfigured()) return callError(res, 503, "calling_unavailable", "Calling is temporarily unavailable.");
+  const deviceId = cleanText(req.query?.deviceId, 120);
+  if (deviceId.length < 16) return callError(res, 400, "invalid_call_request", "Unable to check incoming calls.");
+
+  const admin = getSupabaseAdmin();
+  const device = await admin.from("device_installations").select("phone_number_e164").eq("device_id", deviceId).eq("enabled", true).maybeSingle();
+  if (device.error) return callError(res, 502, "call_state_unavailable", "Unable to check incoming calls.");
+  if (!device.data) return res.status(200).json({ incoming: false });
+
+  const call = await admin
+    .from("speak_call_sessions")
+    .select("id,caller_device_id,caller_language,recipient_language,caller_participant_identity,recipient_participant_identity")
+    .eq("recipient_phone_number", device.data.phone_number_e164)
+    .eq("status", "ringing")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (call.error) return callError(res, 502, "call_state_unavailable", "Unable to check incoming calls.");
+  if (!call.data) return res.status(200).json({ incoming: false });
+
+  const caller = await admin.from("device_installations").select("phone_number_e164").eq("device_id", call.data.caller_device_id).maybeSingle();
+  if (caller.error) return callError(res, 502, "call_state_unavailable", "Unable to check incoming calls.");
+
+  return res.status(200).json({
+    incoming: true,
+    callId: call.data.id,
+    callerDeviceId: call.data.caller_device_id,
+    callerPhoneNumber: caller.data?.phone_number_e164 || "",
+    callerLanguage: call.data.caller_language,
+    recipientLanguage: call.data.recipient_language,
+    callerParticipantIdentity: call.data.caller_participant_identity,
+    recipientParticipantIdentity: call.data.recipient_participant_identity
+  });
+});
+
 router.get("/:callId", async (req, res) => {
   if (!isSupabaseConfigured()) return callError(res, 503, "calling_unavailable", "Calling is temporarily unavailable.");
   const callId = cleanText(req.params.callId, 80);

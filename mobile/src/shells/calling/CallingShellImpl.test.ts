@@ -250,6 +250,34 @@ test('caller and recipient roles remain deterministic', async () => {
   assert.equal(resolveCallRole(created, 'unknown-identity'), null);
 });
 
+test('confirmConnected moves a connecting call to connected', async () => {
+  const { shell } = makeShell();
+  const created = await shell.createCall(CALLER_INPUT);
+  await shell.answerCall(created.callId);
+  const connected = await shell.confirmConnected(created.callId);
+  assert.equal(connected.status, 'connected');
+  assert.equal(connected.callId, created.callId);
+});
+
+test('confirmConnected moves a reconnecting call to connected', async () => {
+  const { shell } = makeShell();
+  const created = await shell.createCall(CALLER_INPUT);
+  await shell.answerCall(created.callId);
+  await shell.reconnect(created.callId);
+  const connected = await shell.confirmConnected(created.callId);
+  assert.equal(connected.status, 'connected');
+});
+
+test('confirmConnected is rejected from an invalid source state', async () => {
+  const { shell } = makeShell();
+  const created = await shell.createCall(CALLER_INPUT);
+  // "ringing" has no -> connected edge; only connecting/reconnecting do.
+  await assert.rejects(
+    () => shell.confirmConnected(created.callId),
+    (err: unknown) => err instanceof CallingError && err.code === 'INVALID_CALL_STATE',
+  );
+});
+
 test('decline moves a ringing call to ended and clears local state', async () => {
   const callData = new FakeCallDataShell();
   const { shell } = makeShell({ callData });
