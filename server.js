@@ -8,6 +8,7 @@ const notificationRoutes = require("./src/server/routes/notifications");
 const subscriptionRoutes = require("./src/server/routes/subscriptions");
 const deviceRoutes = require("./src/server/routes/devices");
 const callRoutes = require("./src/server/routes/calls");
+const callSessionRoutes = require("./src/server/routes/callSessions");
 const liveKitTokenRoutes = require("./src/server/routes/livekit");
 const { isSupabaseConfigured } = require("./src/server/supabase");
 const { isLiveKitConfigured } = require("./src/server/livekit");
@@ -36,6 +37,7 @@ app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/subscriptions", subscriptionRoutes);
 app.use("/api/v1/devices", deviceRoutes);
 app.use("/api/v1/calls", callRoutes);
+app.use("/api/v1/call-sessions", callSessionRoutes);
 app.use("/api/v1/livekit", liveKitTokenRoutes);
 
 app.get("/health", (req, res) => {
