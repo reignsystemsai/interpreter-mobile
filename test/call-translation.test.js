@@ -103,6 +103,7 @@ test("dedicated translation fallback remains available", () => {
 
 test("late audio from a cancelled response never reaches LiveKit or a new response", async () => {
   const { direction, outputSource, socket } = testDirection();
+  direction.handleOpenAIEvent({ type: "input_audio_buffer.speech_started" }, socket, 1);
   direction.handleOpenAIEvent({ type: "response.created", response: { id: "response-old" } }, socket, 1);
   direction.handleOpenAIEvent({
     type: "response.output_audio.delta",
@@ -136,6 +137,7 @@ test("late audio from a cancelled response never reaches LiveKit or a new respon
 
 test("interruption truncates the assistant item at the locally played position", async () => {
   const { direction, outputSource, socket } = testDirection();
+  direction.handleOpenAIEvent({ type: "input_audio_buffer.speech_started" }, socket, 1);
   direction.handleOpenAIEvent({ type: "response.created", response: { id: "response-1" } }, socket, 1);
   direction.handleOpenAIEvent({
     type: "response.output_audio.delta",
@@ -160,6 +162,7 @@ test("reconnect invalidates the old session while preserving the selected voice"
   for (const voice of ["cedar", "marin"]) {
     const { direction, outputSource, socket } = testDirection({ voice });
     const oldGeneration = direction.sessionGeneration;
+    direction.handleOpenAIEvent({ type: "input_audio_buffer.speech_started" }, socket, oldGeneration);
     direction.handleOpenAIEvent({ type: "response.created", response: { id: "response-old" } }, socket, oldGeneration);
     direction.invalidateSession({ closeSocket: true, stopReader: false });
     assert.equal(socket.closed, true);
@@ -176,6 +179,7 @@ test("reconnect invalidates the old session while preserving the selected voice"
     const newSocket = { readyState: 1, sent: [], send(payload) { this.sent.push(JSON.parse(payload)); } };
     direction.socket = newSocket;
     const newGeneration = ++direction.sessionGeneration;
+    direction.handleOpenAIEvent({ type: "input_audio_buffer.speech_started" }, newSocket, newGeneration);
     direction.handleOpenAIEvent({ type: "response.created", response: { id: "response-new" } }, newSocket, newGeneration);
     direction.handleOpenAIEvent({
       type: "response.output_audio.delta",
@@ -340,6 +344,7 @@ test("both call directions continuously reach their independent translation sess
   const bridge = read("src", "server", "translation", "translation-bridge.js");
   assert.doesNotMatch(bridge, /SELF_PLAYBACK_COOLDOWN_MS|shouldSuppressInput|isPlaybackActive/);
   assert.match(bridge, /this\.directions\[role\]\.attach\(track\)/);
+  assert.match(bridge, /if \(this\.pipeline === "general-realtime" && !this\.speechDetected\) \{[\s\S]*?return;\s*\}[\s\S]*this\.activeResponseId = event\.response\.id;[\s\S]*input_audio_buffer\.speech_started" && this\.pipeline === "general-realtime"\) \{\s*this\.speechDetected = true;/);
   assert.match(bridge, /if \(role && publication\.source === TrackSource\.SOURCE_MICROPHONE\) publication\.setSubscribed\(true\);/);
   assert.match(bridge, /noise_reduction: \{ type: "near_field" \}/);
 });

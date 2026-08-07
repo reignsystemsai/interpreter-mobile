@@ -133,6 +133,7 @@ class TranslationDirection {
     this.outputStates = new Map();
     this.reader = null;
     this.sourceTrack = null;
+    this.speechDetected = false;
   }
 
   async open() {
@@ -204,6 +205,10 @@ class TranslationDirection {
   handleOpenAIEvent(event, socket = this.socket, sessionGeneration = this.sessionGeneration) {
     if (this.closed || this.socket !== socket || this.sessionGeneration !== sessionGeneration) return;
     if (event.type === "response.created" && typeof event.response?.id === "string") {
+      if (this.pipeline === "general-realtime" && !this.speechDetected) {
+        console.info("[Translation] response without a detected speech turn ignored", { callId: this.callId, direction: this.sourceRole });
+        return;
+      }
       this.outputStates.clear();
       this.activeResponseId = event.response.id;
       this.responseActive = true;
@@ -211,11 +216,15 @@ class TranslationDirection {
     }
     if (event.type === "response.done") {
       const responseId = typeof event.response?.id === "string" ? event.response.id : null;
-      if (!responseId || responseId === this.activeResponseId) this.responseActive = false;
+      if (!responseId || responseId === this.activeResponseId) {
+        this.responseActive = false;
+        this.speechDetected = false;
+      }
       if (responseId && this.cancelledResponseIds.delete(responseId)) this.outputStates.delete(responseId);
       return;
     }
     if (event.type === "input_audio_buffer.speech_started" && this.pipeline === "general-realtime") {
+      this.speechDetected = true;
       this.onSpeechStarted(this.sourceRole);
       return;
     }
@@ -307,6 +316,7 @@ class TranslationDirection {
     this.outputChain = Promise.resolve();
     this.responseActive = false;
     this.activeResponseId = null;
+    this.speechDetected = false;
     this.cancelledResponseIds.clear();
     this.outputStates.clear();
     this.outputSource.clearQueue();
