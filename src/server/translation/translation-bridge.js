@@ -80,7 +80,7 @@ function buildSessionUpdate({ pipeline, sourceLanguage, targetLanguage, voice })
           }
         },
         output: {
-          format: { type: "audio/pcm" },
+          format: { type: "audio/pcm", rate: SAMPLE_RATE },
           voice
         }
       }

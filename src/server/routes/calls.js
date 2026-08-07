@@ -245,7 +245,7 @@ router.post("/:callId/accept", async (req, res) => {
       translationEnabled: row.translation_enabled
     });
   } catch (error) {
-    console.error("[Translation] bridge startup failed", { callId });
+    console.error("[Translation] bridge startup failed", { callId, reason: error instanceof Error ? error.message : "unknown" });
     await finishCall(admin, row, "failed").catch(() => undefined);
     const recipientUpgradeRequired = error instanceof Error && error.message === "Recipient does not support interpreted calls";
     return callError(
