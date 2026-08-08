@@ -3,6 +3,8 @@ import * as Contacts from 'expo-contacts';
 import { Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { type InterpreterContact, useContacts } from './ContactsProvider';
+import { CallError, CallService } from '../calling/CallService';
+import { deviceDefaultPhoneRegion, normalizeE164, normalizePhoneRegion } from '../../services/deviceRegistration';
 
 const APP_DOWNLOAD_URL = 'https://interpreter.ai/download';
 const BLUE = '#075BFF';
@@ -89,12 +91,28 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     }
   };
 
+  const call = async () => {
+    const region = normalizePhoneRegion(contact.phoneNumbers[0]?.countryCode) ?? deviceDefaultPhoneRegion();
+    const firstValidPhone = contact.phoneNumbers.find((item) => Boolean(normalizeE164(item.value, normalizePhoneRegion(item.countryCode) ?? region)));
+    if (!firstValidPhone) {
+      Alert.alert('This contact has no phone number saved.');
+      return;
+    }
+    const phoneNumberE164 = normalizeE164(firstValidPhone.value, normalizePhoneRegion(firstValidPhone.countryCode) ?? region);
+    try {
+      await CallService.createCall(phoneNumberE164, contact.displayName);
+    } catch (error) {
+      Alert.alert('Unable to call', error instanceof CallError ? error.message : 'Please try again.');
+    }
+  };
+
   return <>
     <ScrollView contentContainerStyle={styles.details} showsVerticalScrollIndicator={false}>
       <Pressable onPress={onBack} style={styles.back}><Text style={styles.backText}>‹ Contacts</Text></Pressable>
       <View style={styles.detailAvatar}><Text style={styles.detailAvatarText}>{contact.displayName.slice(0, 1).toUpperCase()}</Text></View>
       <Text style={styles.detailName}>{contact.displayName}</Text>
       <Text style={styles.userStatus}>iPhone contact</Text>
+      <PrimaryButton label="Call" onPress={() => void call()} />
       <PrimaryButton label="Invite to Interpreter" onPress={() => void invite().catch(() => Alert.alert('Unable to open invite'))} />
       <Text style={styles.sectionTitle}>Contact details</Text>
       <View style={styles.detailCard}>
