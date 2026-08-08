@@ -168,7 +168,11 @@ export class CallingShellImpl implements CallingShell {
       // Locked contract uses the existing "ended" state for a normal decline.
       await this.deps.callData.updateCallStatus(callId, 'ended');
     } catch (cause) {
-      throw asCallingError(cause, 'PERSISTENCE_FAILED', 'Unable to decline the call.');
+      const error = asCallingError(cause, 'PERSISTENCE_FAILED', 'Unable to decline the call.');
+      // The backend already considers this call over (e.g. the other side ended or
+      // declined it first) — that is the outcome we wanted anyway, so clear local
+      // state instead of leaving a stale session that blocks a new call.
+      if (error.code !== 'INVALID_CALL_STATE') throw error;
     }
 
     this.commit(operationId, null);
@@ -192,9 +196,13 @@ export class CallingShellImpl implements CallingShell {
       }
       await this.deps.callData.updateCallStatus(callId, 'ended');
     } catch (cause) {
-      // Leave local state untouched so an explicit retry is possible — never report
-      // success, and never silently clear the call, on a failed terminal write.
-      throw asCallingError(cause, 'PERSISTENCE_FAILED', 'Unable to end the call. The call remains active locally for retry.');
+      const error = asCallingError(cause, 'PERSISTENCE_FAILED', 'Unable to end the call. The call remains active locally for retry.');
+      // INVALID_CALL_STATE here means the backend already has this call in a
+      // terminal state (the other participant already ended/declined it) — that is
+      // the outcome this call wanted anyway. Clear local state rather than leaving
+      // it stuck, which would otherwise block placing a new call from this device.
+      // Any other failure still leaves local state untouched so a retry is possible.
+      if (error.code !== 'INVALID_CALL_STATE') throw error;
     }
 
     this.commit(operationId, null);

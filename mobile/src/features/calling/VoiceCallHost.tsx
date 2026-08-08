@@ -118,6 +118,10 @@ async function bridgeAnswer(callId: string) {
     await CallingShellHost.answerCall(callId);
     await backendMediaAdapter.connect(callId, VoiceCallService.getState().remoteLabel, 'recipient');
   } catch {
+    // Failure at either step (including the recipient denying mic access, which
+    // rejects inside connect()) must not leave this device's reservation active —
+    // release the call on the backend, not just the local media state.
+    void CallingShellHost.endCall(callId).catch(() => undefined);
     void VoiceCallService.disconnectMedia();
   }
 }
@@ -135,6 +139,29 @@ function bridgeCallStateChange(previousStatus: string, previousCallId: string | 
     if (previousStatus === 'ringing') void CallingShellHost.declineCall(previousCallId).catch(() => undefined);
     else void CallingShellHost.endCall(previousCallId).catch(() => undefined);
   }
+}
+
+// Once both sides are actually connected in the same LiveKit room, one side
+// disconnecting is detected by the other via LiveKit's own participant-disconnected
+// event (see VoiceCallService.connect). Before that point — most importantly, a
+// caller waiting for pickup while the recipient declines, which never joins a room
+// at all — there is no such signal. This poll is that missing signal: while this
+// device's canonical session exists but has not yet reached "connected", check
+// whether the call is already over on the backend, and if so, release this device's
+// reservation and clear local state instead of leaving it stuck.
+async function pollCanonicalCallLiveness() {
+  const session = CallingShellHost.getSession();
+  if (!session || session.status === 'connected') return;
+  if (session.status !== 'ringing' && session.status !== 'connecting' && session.status !== 'reconnecting') return;
+  const deviceId = await getDeviceId().catch(() => '');
+  if (!deviceId) return;
+  const response = await fetch(`${API_BASE_URL}/api/v1/call-sessions/${encodeURIComponent(session.callId)}?deviceId=${encodeURIComponent(deviceId)}`).catch(() => null);
+  if (!response?.ok) return;
+  const payload = (await response.json().catch(() => ({}))) as { found?: boolean; call?: { status?: string } };
+  const remoteEnded = payload.found === false || payload.call?.status === 'ended' || payload.call?.status === 'failed';
+  if (!remoteEnded) return;
+  await CallingShellHost.endCall(session.callId).catch(() => undefined);
+  await VoiceCallService.disconnectMedia();
 }
 
 async function enableNotificationsFromOffer() {
@@ -198,6 +225,7 @@ export function VoiceCallHost() {
     const incomingPoll = setInterval(() => {
       void pollIncomingCall().catch(() => undefined);
       void pollIncomingCallSession().catch(() => undefined);
+      void pollCanonicalCallLiveness().catch(() => undefined);
     }, 2_000);
     const foregroundListener = Notifications.addNotificationReceivedListener(handleIncoming);
     const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
