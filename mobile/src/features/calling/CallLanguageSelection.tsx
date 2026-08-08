@@ -48,8 +48,9 @@ function LanguageControl({ label, onPress, value }: { label: string; onPress: ()
   </Pressable>;
 }
 
-export function CallLanguageSelection({ contact, onBack, onContactPress, onStart }: {
+export function CallLanguageSelection({ contact, creating = false, onBack, onContactPress, onStart }: {
   contact: InterpreterContact;
+  creating?: boolean;
   onBack: () => void;
   onContactPress: () => void;
   onStart: (callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => void;
@@ -58,6 +59,7 @@ export function CallLanguageSelection({ contact, onBack, onContactPress, onStart
   const [recipientLanguage, setRecipientLanguage] = useState<CallLanguage>('Spanish');
   const [editing, setEditing] = useState<'caller' | 'recipient' | null>(null);
   const sameLanguage = callerLanguage === recipientLanguage;
+  const startDisabled = sameLanguage || creating;
 
   const choose = (language: CallLanguage) => {
     if (editing === 'caller') setCallerLanguage(language);
@@ -81,8 +83,8 @@ export function CallLanguageSelection({ contact, onBack, onContactPress, onStart
     <Text style={[styles.summary, sameLanguage && styles.warning]}>
       {sameLanguage ? 'Choose two different languages.' : <>You hear <Text style={styles.summaryStrong}>{callerLanguage}</Text>. {contact.givenName || contact.displayName} hears <Text style={styles.summaryStrong}>{recipientLanguage}</Text>.</>}
     </Text>
-    <Pressable accessibilityRole="button" disabled={sameLanguage} onPress={() => onStart(callerLanguage, recipientLanguage)} style={({ pressed }) => [styles.start, sameLanguage && styles.disabled, pressed && styles.pressed]}>
-      <PhoneIcon /><Text style={styles.startText}>Start Voice Call</Text>
+    <Pressable accessibilityRole="button" disabled={startDisabled} onPress={() => onStart(callerLanguage, recipientLanguage)} style={({ pressed }) => [styles.start, startDisabled && styles.disabled, pressed && styles.pressed]}>
+      <PhoneIcon /><Text style={styles.startText}>{creating ? 'Starting…' : 'Start Voice Call'}</Text>
     </Pressable>
 
     <Modal animationType="fade" onRequestClose={() => setEditing(null)} transparent visible={editing !== null}>

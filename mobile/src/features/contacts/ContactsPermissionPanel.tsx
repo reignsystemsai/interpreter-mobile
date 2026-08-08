@@ -91,6 +91,7 @@ function permissionLabel(permission: ReturnType<typeof useContacts>['permission'
 
 function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterContact; onBack: () => void; onRefresh: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);
+  const [creatingCall, setCreatingCall] = useState(false);
   const [showLanguageSelection, setShowLanguageSelection] = useState(true);
   const [numberPromptVisible, setNumberPromptVisible] = useState(false);
   const [ownPhoneNumber, setOwnPhoneNumber] = useState('');
@@ -189,9 +190,13 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
   if (showLanguageSelection) return <>
     <CallLanguageSelection
       contact={contact}
+      creating={creatingCall}
       onBack={onBack}
       onContactPress={() => setShowLanguageSelection(false)}
-      onStart={(callerLanguage, recipientLanguage) => void beginVoiceCall(callerLanguage, recipientLanguage)}
+      onStart={(callerLanguage, recipientLanguage) => {
+        setCreatingCall(true);
+        void beginVoiceCall(callerLanguage, recipientLanguage).finally(() => setCreatingCall(false));
+      }}
     />
     <Modal animationType="fade" onRequestClose={() => setNumberPromptVisible(false)} transparent visible={numberPromptVisible}>
       <View style={styles.numberBackdrop}>
