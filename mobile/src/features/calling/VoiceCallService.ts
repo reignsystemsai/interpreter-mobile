@@ -317,6 +317,11 @@ class CleanVoiceCallService {
 
   private async pollCallStatus(callId: string) {
     if (this.callContext?.callId !== callId) return;
+    // This liveness check only knows the OLD /api/v1/calls/* backend (active_calls).
+    // A canonical call's id never exists there, so that endpoint would always report
+    // "not found" and this would immediately reset a call that is actually still
+    // ringing/active under the new system. Canonical liveness is tracked separately.
+    if (this.canonicalCallIds.has(callId)) return;
     const deviceId = await getDeviceId().catch(() => '');
     if (!deviceId) return;
     const response = await fetch(`${API_BASE_URL}/api/v1/calls/${encodeURIComponent(callId)}?deviceId=${encodeURIComponent(deviceId)}`).catch(() => null);
