@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import Animated, {
   useAnimatedStyle,
@@ -24,8 +24,7 @@ import { AudioWaveform } from '../src/components/AudioWaveform';
 import { useDemoAudioLevel } from '../src/hooks/useDemoAudioLevel';
 import { useRealtimeInterpreter } from '../src/hooks/useRealtimeInterpreter';
 import { recordAppReady } from '../src/services/performance';
-import { CallingOverlay } from '../src/features/calling/CallingOverlay';
-import { VoiceCallService } from '../src/features/calling/VoiceCallService';
+import { ContactsPermissionPanel } from '../src/features/contacts/ContactsPermissionPanel';
 import { useAuth } from '../src/features/account/AuthProvider';
 import { AppMenu, type MenuDestination } from '../src/features/menu/AppMenu';
 import { DestinationSheet } from '../src/features/menu/DestinationSheet';
@@ -44,7 +43,7 @@ const LANGUAGE_LABELS: Record<string, string> = {
 
 type Gender = 'female' | 'male';
 type LanguageSide = 'one' | 'two';
-type Overlay = 'menu' | 'language' | 'calling' | MenuDestination | null;
+type Overlay = 'menu' | 'language' | 'contacts' | MenuDestination | null;
 
 const PINK = '#FF3E91';
 const BLUE = '#075BFF';
@@ -150,11 +149,6 @@ export default function InterpreterScreen() {
   }, [isActive, status]);
 
   const conversationRunning = isActive || ['requesting_permission', 'creating_session', 'connecting', 'connected', 'reconnecting'].includes(status);
-  useEffect(() => VoiceCallService.subscribe((callState) => {
-    if (callState.role !== 'recipient' || callState.status !== 'ringing') return;
-    setOverlay(null);
-    if (status === 'failed' || conversationRunning) stop();
-  }), [conversationRunning, status, stop]);
   const openLanguage = (side: LanguageSide) => {
     if (conversationRunning) return;
     setLanguageSide(side);
@@ -179,7 +173,7 @@ export default function InterpreterScreen() {
     <View style={styles.page}>
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <ScrollView bounces={false} contentContainerStyle={[styles.content, compact && styles.contentCompact]} scrollEnabled={compact} showsVerticalScrollIndicator={false}>
-          <Pressable accessibilityLabel="Open calling" accessibilityRole="button" disabled={conversationRunning} hitSlop={12} onPress={() => setOverlay('calling')} style={({ pressed }) => [styles.phoneButton, conversationRunning && styles.disabled, pressed && styles.pressed]}><PhoneIcon /></Pressable>
+          <Pressable accessibilityLabel="Open contacts" accessibilityRole="button" disabled={conversationRunning} hitSlop={12} onPress={() => setOverlay('contacts')} style={({ pressed }) => [styles.phoneButton, conversationRunning && styles.disabled, pressed && styles.pressed]}><PhoneIcon /></Pressable>
           <Pressable accessibilityLabel="Open menu" accessibilityRole="button" hitSlop={12} onPress={() => setOverlay('menu')} style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}><MenuIcon /></Pressable>
 
           <View style={[styles.hero, compact && styles.heroCompact]}>
@@ -228,7 +222,7 @@ export default function InterpreterScreen() {
 
       <AppMenu onClose={() => setOverlay(null)} onNavigate={setOverlay} visible={overlay === 'menu'} />
       <LanguageSheet onClose={() => setOverlay(null)} onSelect={chooseLanguage} selectedLanguage={languageSide === 'one' ? languageOne : languageTwo} visible={overlay === 'language'} />
-      <CallingOverlay onClose={() => setOverlay(null)} visible={overlay === 'calling'} />
+      <ContactsSheet onClose={() => setOverlay(null)} visible={overlay === 'contacts'} />
       <Modal animationType="fade" onRequestClose={stop} transparent visible={status === 'failed'}>
         <BlurView experimentalBlurMethod="dimezisBlurView" intensity={52} style={styles.connectionErrorBackdrop} tint="light">
           <View accessibilityViewIsModal style={styles.connectionErrorCard}>
@@ -240,7 +234,7 @@ export default function InterpreterScreen() {
         </BlurView>
       </Modal>
       <DestinationSheet
-        destination={overlay && overlay !== 'menu' && overlay !== 'language' && overlay !== 'calling' ? overlay : null}
+        destination={overlay && overlay !== 'menu' && overlay !== 'language' && overlay !== 'contacts' ? overlay : null}
         onClose={() => setOverlay(null)}
       />
     </View>
@@ -273,6 +267,21 @@ function LanguageButton({ color, disabled, language, onPress }: { color: string;
       <Text numberOfLines={1} style={styles.languageButtonText}>{languageLabel(language)}</Text>
       <ChevronIcon color={color} />
     </Pressable>
+  );
+}
+
+function ContactsSheet({ onClose, visible }: { onClose: () => void; visible: boolean }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
+      <BlurView experimentalBlurMethod="dimezisBlurView" intensity={18} style={styles.contactsBackdrop} tint="light">
+        <Pressable accessibilityLabel="Close contacts" onPress={onClose} style={StyleSheet.absoluteFill} />
+        <View accessibilityViewIsModal style={[styles.contactsSheet, { paddingTop: insets.top + 58 }]}>
+          <Pressable accessibilityLabel="Close contacts" accessibilityRole="button" hitSlop={12} onPress={onClose} style={[styles.contactsClose, { top: insets.top + 6 }]}><Text style={styles.contactsCloseText}>×</Text></Pressable>
+          <ContactsPermissionPanel onBack={onClose} />
+        </View>
+      </BlurView>
+    </Modal>
   );
 }
 
@@ -332,6 +341,10 @@ const styles = StyleSheet.create({
   startText: { color: '#FFFFFF', fontSize: 19, fontWeight: '600', marginLeft: 14 },
   modalBackdrop: { backgroundColor: 'rgba(8, 18, 38, 0.16)', flex: 1, justifyContent: 'flex-end' },
   sheet: { backgroundColor: 'rgba(248,251,255,0.70)', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 28, paddingHorizontal: 22, paddingTop: 12 },
+  contactsBackdrop: { flex: 1 },
+  contactsSheet: { backgroundColor: 'rgba(255,255,255,0.12)', flex: 1, paddingBottom: 28, paddingHorizontal: 22 },
+  contactsClose: { alignItems: 'center', elevation: 10, height: 44, justifyContent: 'center', position: 'absolute', right: 16, width: 44, zIndex: 20 },
+  contactsCloseText: { color: BLUE, fontSize: 34, fontWeight: '300' },
   languageSheet: { backgroundColor: 'rgba(248,251,255,0.70)', borderColor: 'rgba(255,255,255,0.96)', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, maxHeight: '82%', paddingBottom: 24, paddingHorizontal: 22, paddingTop: 12, shadowColor: '#164995', shadowOffset: { height: -8, width: 0 }, shadowOpacity: 0.18, shadowRadius: 28 },
   sheetHandle: { alignSelf: 'center', backgroundColor: '#CBD5E1', borderRadius: 3, height: 5, marginBottom: 18, width: 44 },
   sheetTitle: { color: '#101828', fontSize: 24, fontWeight: '700', marginBottom: 12 },
