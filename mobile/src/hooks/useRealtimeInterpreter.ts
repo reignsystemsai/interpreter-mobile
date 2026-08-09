@@ -10,7 +10,7 @@ import {
 } from 'react-native-webrtc';
 
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
-const PRODUCTION_API_BASE_URL = 'https://interpreter-api-fycw.onrender.com';
+const PRODUCTION_API_BASE_URL = 'https://speaktele-api.onrender.com';
 const SESSION_REQUEST_TIMEOUT_MS = 60_000;
 const WEBRTC_NEGOTIATION_TIMEOUT_MS = 20_000;
 const DATA_CHANNEL_TIMEOUT_MS = 20_000;

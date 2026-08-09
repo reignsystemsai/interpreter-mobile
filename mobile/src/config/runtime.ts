@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 
 export const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_BASE_URL?.trim() ||
-  'https://interpreter-api-fycw.onrender.com'
+  'https://speaktele-api.onrender.com'
 ).replace(/\/+$/, '');
 
 const publicConfig = Constants.expoConfig?.extra ?? {};
