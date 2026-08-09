@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "interpreter",
-    "slug": "interpreter-ai",
-    "owner": "www.interpreter.ai",
+    "name": "speaktele",
+    "slug": "speaktele",
+    "owner": "reignai",
     "version": "1.1.0",
     "icon": "./assets/interpreter-mark-clean.png",
     "orientation": "portrait",
@@ -11,7 +11,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ai.interpreter.mobile",
+      "bundleIdentifier": "com.speakapp.speaktest",
       "buildNumber": "21",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -82,8 +82,11 @@
     },
     "extra": {
       "router": {},
+      "livekitUrl": "",
+      "supabasePublishableKey": "",
+      "supabaseUrl": "",
       "eas": {
-        "projectId": "151f64e9-74cf-4482-8ebe-a5dedb489afd"
+        "projectId": "d48f551e-34c4-436d-8cca-17a49930647a"
       }
     }
   }
