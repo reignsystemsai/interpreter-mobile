@@ -29,6 +29,10 @@ function authorizeParticipant(row, deviceId) {
   return row.caller_device_id === deviceId || row.recipient_device_id === deviceId;
 }
 
+function authorizeUnclaimedRecipient(row, devicePhoneNumber) {
+  return row.recipient_device_id === null && row.recipient_phone_e164 === devicePhoneNumber;
+}
+
 // Postgres errcodes raised by the basic_call_* functions (see the migration),
 // mapped to safe, stable response shapes. The underlying Postgres error is
 // never forwarded to mobile callers.
@@ -128,7 +132,13 @@ router.get("/:callId", async (req, res) => {
   const { data, error } = await admin.from("basic_calls").select("*").eq("id", callId).maybeSingle();
   if (error) return callError(res, 502, "call_state_unavailable", "Unable to check this call.");
   if (!data) return res.status(200).json({ found: false });
-  if (!authorizeParticipant(data, deviceId)) return callError(res, 403, "not_call_participant", "Unable to check this call.");
+  let authorized = authorizeParticipant(data, deviceId);
+  if (!authorized && data.recipient_device_id === null) {
+    const device = await admin.from("device_installations").select("phone_number_e164").eq("device_id", deviceId).eq("enabled", true).maybeSingle();
+    if (device.error) return callError(res, 502, "call_state_unavailable", "Unable to check this call.");
+    authorized = Boolean(device.data && authorizeUnclaimedRecipient(data, device.data.phone_number_e164));
+  }
+  if (!authorized) return callError(res, 403, "not_call_participant", "Unable to check this call.");
   return res.status(200).json({ found: true, call: toCallRecordJson(data) });
 });
 
@@ -197,6 +207,7 @@ router.post("/:callId/end", (req, res) => handleTerminalTransition(req, res, { r
 router.roomNameForCall = roomNameForCall;
 router.participantIdentityFor = participantIdentityFor;
 router.authorizeParticipant = authorizeParticipant;
+router.authorizeUnclaimedRecipient = authorizeUnclaimedRecipient;
 router.resolveBasicCallErrorResponse = resolveBasicCallErrorResponse;
 router.toCallRecordJson = toCallRecordJson;
 

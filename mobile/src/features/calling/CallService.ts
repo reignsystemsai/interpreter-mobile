@@ -239,7 +239,9 @@ class BasicCallService {
     const response = await fetch(`${API_BASE_URL}/api/v1/calls/${encodeURIComponent(callId)}?deviceId=${encodeURIComponent(deviceId)}`).catch(() => null);
     if (!response?.ok) return;
     const payload = (await response.json().catch(() => ({}))) as { call?: { status?: string }; found?: boolean };
-    const remoteEnded = payload.found === false || payload.call?.status === 'ended';
+    // Only the authoritative terminal state may dismiss a ringing/connecting
+    // overlay. A missing lookup must not self-terminate a real incoming call.
+    const remoteEnded = payload.call?.status === 'ended';
     if (remoteEnded && this.state.callId === callId) await this.hangup({ notifyBackend: false });
   }
 

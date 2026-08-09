@@ -21,6 +21,13 @@ test("authorization only recognizes the caller or claimed recipient device", () 
   assert.equal(callRoutes.authorizeParticipant(row, "device-c"), false);
 });
 
+test("an unclaimed recipient can poll call status only through the matching registered phone", () => {
+  const ringing = { recipient_device_id: null, recipient_phone_e164: "+15550000002" };
+  assert.equal(callRoutes.authorizeUnclaimedRecipient(ringing, "+15550000002"), true);
+  assert.equal(callRoutes.authorizeUnclaimedRecipient(ringing, "+15550000003"), false);
+  assert.equal(callRoutes.authorizeUnclaimedRecipient({ ...ringing, recipient_device_id: "device-b" }, "+15550000002"), false);
+});
+
 test("Postgres errcodes map to stable, safe responses without leaking the raw error", () => {
   assert.deepEqual(callRoutes.resolveBasicCallErrorResponse({ code: "P0001" }, "fallback"), {
     status: 409, code: "device_already_active", message: "This device is already in a call."
