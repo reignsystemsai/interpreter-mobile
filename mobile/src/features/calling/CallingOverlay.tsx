@@ -16,7 +16,7 @@ export function CallingOverlay({ onClose, onOpenSpeakTools, onOpenUtilities, vis
   return <Modal animationType="fade" onRequestClose={onClose} visible={visible}>
     <View style={[styles.page, { paddingTop: insets.top + 8 }]} {...panResponder.panHandlers}>
       <View style={styles.header}>
-        <Pressable accessibilityLabel="Close calling" accessibilityRole="button" hitSlop={14} onPress={onClose} style={styles.headerButton}><Text style={styles.close}>‹</Text></Pressable>
+        <View style={styles.headerButton} />
         <SpeakMark compact />
         <View style={styles.headerButton} />
       </View>

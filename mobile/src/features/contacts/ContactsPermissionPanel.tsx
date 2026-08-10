@@ -240,9 +240,9 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
       <View style={styles.callGrid}>
         <Pressable disabled={busy} onPress={() => { setLaunchingMode('voice'); setBusy(true); void beginVoiceCall(languageOne, languageTwo).finally(() => { setBusy(false); setLaunchingMode(null); }); }} style={styles.callButton}><CallIcon name="phone" /><Text style={styles.callLabel}>{launchingMode === 'voice' ? 'Calling…' : 'Call'}</Text></Pressable>
         <Pressable disabled={busy} onPress={() => { setLaunchingMode('video'); setBusy(true); void beginVoiceCall(languageOne, languageTwo, { interpreter: false, video: true, voiceGender: 'male' }).finally(() => { setBusy(false); setLaunchingMode(null); }); }} style={styles.callButton}><CallIcon name="video" /><Text style={styles.callLabel}>{launchingMode === 'video' ? 'Video Calling…' : 'Video Call'}</Text></Pressable>
-        <Pressable disabled={busy} onPress={() => setShowInterpreterSetup(true)} style={[styles.callButton, styles.interpretButton]}><CallIcon name="interpret" /><Text style={[styles.callLabel, styles.interpretLabel]}>Interpret</Text></Pressable>
+        <Pressable disabled={busy} onPress={() => setShowInterpreterSetup(true)} style={[styles.callButton, styles.interpretButton]}><CallIcon name="interpret" /><Text style={[styles.callLabel, styles.interpretLabel]}>Speak Interpreter</Text></Pressable>
       </View>
-      <PrimaryButton label="Invite to Interpreter" onPress={() => void invite().catch(() => Alert.alert('Unable to open invite'))} />
+      <PrimaryButton label="Invite to Speak" onPress={() => void invite().catch(() => Alert.alert('Unable to open invite'))} />
       <Text style={styles.sectionTitle}>Contact details</Text>
       <View style={styles.detailCard}>
         <Detail label="Phone" value={contact.phoneNumbers.map((item) => item.value).join('\n') || 'Not provided'} />
