@@ -16,6 +16,25 @@ const WEBRTC_NEGOTIATION_TIMEOUT_MS = 20_000;
 const DATA_CHANNEL_TIMEOUT_MS = 20_000;
 const REMOTE_AUDIO_TRACK_TIMEOUT_MS = 12_000;
 const MAX_RECONNECT_ATTEMPTS = 3;
+const SPEECH_DETECTION_UPDATE = JSON.stringify({
+  type: 'session.update',
+  session: {
+    type: 'realtime',
+    audio: {
+      input: {
+        noise_reduction: { type: 'near_field' },
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.65,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 700,
+          create_response: true,
+          interrupt_response: true,
+        },
+      },
+    },
+  },
+});
 
 export type TranscriptTurn = {
   id: string;
@@ -462,7 +481,10 @@ export function useRealtimeInterpreter(languageOne: string, languageTwo: string)
       dataChannelRef.current = dataChannel;
       const channelOpened = new Promise<void>((resolve, reject) => {
         rejectChannelOpen = reject;
-        dataChannel.onopen = () => resolve();
+        dataChannel.onopen = () => {
+          dataChannel.send(SPEECH_DETECTION_UPDATE);
+          resolve();
+        };
         dataChannel.onclose = () => reject(new InterpreterConnectionError('data_channel_closed'));
         dataChannel.onerror = () => reject(new InterpreterConnectionError('realtime_error'));
       });
