@@ -86,6 +86,7 @@ class CleanVoiceCallService {
   private canonicalCallIds = new Set<string>();
   private canonicalEndHandler: ((callId: string) => Promise<void>) | null = null;
   private onMediaConnected: (() => void) | null = null;
+  private pendingInterpreterVoiceGender: 'female' | 'male' | null = null;
 
   getState() {
     return this.state;
@@ -290,6 +291,11 @@ class CleanVoiceCallService {
   async setInterpreterEnabled(enabled: boolean, voiceGender: 'female' | 'male' = 'male') {
     const call = this.callContext;
     if (!call || !['ringing', 'connecting', 'connected', 'reconnecting'].includes(this.state.status)) return;
+    if (enabled && this.state.status !== 'connected') {
+      this.pendingInterpreterVoiceGender = voiceGender;
+      return;
+    }
+    if (!enabled) this.pendingInterpreterVoiceGender = null;
     const deviceId = await getDeviceId();
     await this.request<{ interpreterEnabled: boolean }>(`/api/v1/media-sessions/${encodeURIComponent(call.callId)}/interpreter`, { deviceId, enabled, voiceGender });
     call.translationEnabled = enabled;
@@ -337,6 +343,7 @@ class CleanVoiceCallService {
   // is CallingShellHost's responsibility, not this service's.
   async disconnectMedia() {
     this.onMediaConnected = null;
+    this.pendingInterpreterVoiceGender = null;
     const room = this.room;
     const call = this.callContext;
     if (call) this.canonicalCallIds.delete(call.callId);
@@ -372,6 +379,7 @@ class CleanVoiceCallService {
     InCallManager.setKeepScreenOn(false);
     if (call) this.canonicalCallIds.delete(call.callId);
     this.onMediaConnected = null;
+    this.pendingInterpreterVoiceGender = null;
     this.callContext = null;
     this.room = null;
     this.setState(INITIAL_STATE);
@@ -430,6 +438,11 @@ class CleanVoiceCallService {
     const callback = this.onMediaConnected;
     this.onMediaConnected = null;
     callback?.();
+    const voiceGender = this.pendingInterpreterVoiceGender;
+    this.pendingInterpreterVoiceGender = null;
+    if (voiceGender) void this.setInterpreterEnabled(true, voiceGender).catch((error) => {
+      this.updateState({ error: error instanceof Error ? error.message : 'Interpreter could not connect.' });
+    });
   }
 
   private async connect(call: ActiveCall) {
