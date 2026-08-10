@@ -16,6 +16,26 @@ const SAMPLE_RATE = 24_000;
 const TRANSLATION_URL = "wss://api.openai.com/v1/realtime/translations?model=gpt-realtime-translate";
 const bridges = new Map();
 const FIXED_VOICES = { female: "marin", male: "cedar" };
+const META_SPEECH = [
+  "i'm sorry",
+  "i am sorry",
+  "i can't assist",
+  "i cannot assist",
+  "i can't help",
+  "i cannot help",
+  "as an ai",
+  "unable to provide"
+];
+
+function normalizeSpeech(value) {
+  return String(value || "").toLowerCase().replace(/[’]/g, "'").replace(/\s+/g, " ").trim();
+}
+
+function isUnpromptedMetaSpeech(outputTranscript, inputTranscript) {
+  const output = normalizeSpeech(outputTranscript);
+  const input = normalizeSpeech(inputTranscript);
+  return META_SPEECH.some((phrase) => output.includes(phrase) && !input.includes(phrase));
+}
 
 function humanRole(identity, callId) {
   if (typeof identity !== "string") return null;
@@ -50,10 +70,19 @@ class TranslationDirection {
     this.reconnectAttempts = 0;
     this.reconnectTimer = null;
     this.outputChain = Promise.resolve();
+    this.inputTranscript = "";
+    this.outputTranscript = "";
+    this.pendingOutputAudio = [];
+    this.outputBlocked = false;
+    this.outputFlushTimer = null;
   }
 
   async open() {
     if (!process.env.OPENAI_API_KEY) throw new Error("OpenAI translation is not configured");
+    this.inputTranscript = "";
+    this.outputTranscript = "";
+    this.pendingOutputAudio = [];
+    this.outputBlocked = false;
     const socket = new WebSocket(TRANSLATION_URL, {
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }
     });
@@ -79,7 +108,6 @@ class TranslationDirection {
           session: {
             audio: {
               input: {
-                transcription: { model: "gpt-realtime-whisper" },
                 noise_reduction: { type: "near_field" }
               },
               output: { language: this.targetLanguage, voice: this.voice }
@@ -98,20 +126,28 @@ class TranslationDirection {
           resolve();
           return;
         }
-        if (event.type === "session.output_audio.delta" && typeof event.delta === "string") {
-          const frame = pcm16Frame(event.delta);
-          if (!frame) return;
-          if (!this.firstOutputLogged) {
-            this.firstOutputLogged = true;
-            console.info("[Translation] first translated audio", {
-              callId: this.callId,
-              direction: this.sourceRole,
-              latencyMs: this.firstInputAt ? Date.now() - this.firstInputAt : null
-            });
+        if (event.type === "session.input_transcript.delta" && typeof event.delta === "string") {
+          this.inputTranscript = `${this.inputTranscript}${event.delta}`.slice(-1000);
+          return;
+        }
+        if (event.type === "session.output_transcript.delta" && typeof event.delta === "string") {
+          this.outputTranscript = `${this.outputTranscript}${event.delta}`.slice(-1000);
+          if (isUnpromptedMetaSpeech(this.outputTranscript, this.inputTranscript)) {
+            this.outputBlocked = true;
+            this.pendingOutputAudio = [];
+            if (this.outputFlushTimer) clearTimeout(this.outputFlushTimer);
+            this.outputFlushTimer = null;
+            console.warn("[Translation] blocked non-translation speech", { callId: this.callId, direction: this.sourceRole });
+            if (socket.readyState === WebSocket.OPEN) socket.close();
+          } else {
+            this.scheduleOutputFlush();
           }
-          this.outputChain = this.outputChain
-            .then(() => this.outputSource.captureFrame(frame))
-            .catch(() => undefined);
+          return;
+        }
+        if (event.type === "session.output_audio.delta" && typeof event.delta === "string") {
+          if (this.outputBlocked || !this.firstInputAt) return;
+          this.pendingOutputAudio.push(event.delta);
+          this.scheduleOutputFlush();
           return;
         }
         if (event.type === "error") {
@@ -120,6 +156,33 @@ class TranslationDirection {
       });
     });
     await this.readyPromise;
+  }
+
+  scheduleOutputFlush() {
+    if (this.closed || this.outputBlocked || this.outputFlushTimer || !this.outputTranscript) return;
+    this.outputFlushTimer = setTimeout(() => {
+      this.outputFlushTimer = null;
+      if (isUnpromptedMetaSpeech(this.outputTranscript, this.inputTranscript)) {
+        this.outputBlocked = true;
+        this.pendingOutputAudio = [];
+        return;
+      }
+      const audio = this.pendingOutputAudio.splice(0);
+      for (const delta of audio) {
+        const frame = pcm16Frame(delta);
+        if (!frame) continue;
+        if (!this.firstOutputLogged) {
+          this.firstOutputLogged = true;
+          console.info("[Translation] first source-locked audio", {
+            callId: this.callId,
+            direction: this.sourceRole,
+            latencyMs: this.firstInputAt ? Date.now() - this.firstInputAt : null
+          });
+        }
+        this.outputChain = this.outputChain.then(() => this.outputSource.captureFrame(frame)).catch(() => undefined);
+      }
+      if (this.pendingOutputAudio.length) this.scheduleOutputFlush();
+    }, 900);
   }
 
   scheduleReconnect() {
@@ -169,6 +232,9 @@ class TranslationDirection {
 
   close() {
     this.closed = true;
+    if (this.outputFlushTimer) clearTimeout(this.outputFlushTimer);
+    this.outputFlushTimer = null;
+    this.pendingOutputAudio = [];
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     this.abortController?.abort();
