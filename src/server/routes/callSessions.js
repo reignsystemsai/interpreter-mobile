@@ -1,7 +1,7 @@
 const express = require("express");
 
 const { getSupabaseAdmin, isSupabaseConfigured } = require("../supabase");
-const { startCallTranslation, stopCallTranslation } = require("../translation/translation-bridge");
+const { stopCallTranslation } = require("../translation/translation-bridge");
 
 const router = express.Router();
 
@@ -170,39 +170,6 @@ router.post("/:callId/claim", async (req, res) => {
     return callError(res, resolved.status, resolved.code, resolved.message);
   }
   return res.status(200).json(toCallRecordJson(data));
-});
-
-router.post("/:callId/interpreter", async (req, res) => {
-  if (!isSupabaseConfigured()) return callError(res, 503, "calling_unavailable", "Calling is temporarily unavailable.");
-  const callId = cleanText(req.params.callId, 80);
-  const deviceId = cleanText(req.body?.deviceId, 120);
-  const enabled = req.body?.enabled === true;
-  const voiceGender = req.body?.voiceGender === "female" ? "female" : "male";
-  if (!callId || deviceId.length < 16) return callError(res, 400, "invalid_call_request", "Unable to update Interpreter.");
-
-  const admin = getSupabaseAdmin();
-  const current = await admin.from("speak_call_sessions").select("*").eq("id", callId).maybeSingle();
-  if (current.error) return callError(res, 502, "call_state_unavailable", "Unable to update Interpreter.");
-  if (!current.data) return callError(res, 404, "call_not_found", "This call is no longer available.");
-  if (!authorizeParticipant(current.data, deviceId)) return callError(res, 403, "not_call_participant", "Unable to update Interpreter.");
-
-  try {
-    if (enabled) {
-      await startCallTranslation({
-        callId,
-        callerLanguage: current.data.caller_language,
-        recipientLanguage: current.data.recipient_language,
-        roomName: `speak-${callId}`,
-        voiceGender
-      });
-    } else {
-      await stopCallTranslation(callId);
-    }
-    return res.status(200).json({ callId, interpreterEnabled: enabled });
-  } catch (error) {
-    console.error("[CallSessions] interpreter update failed", { callId, reason: error instanceof Error ? error.message : "unknown" });
-    return callError(res, 502, "interpreter_unavailable", "Interpreter is temporarily unavailable.");
-  }
 });
 
 router.post("/:callId/transition", async (req, res) => {
