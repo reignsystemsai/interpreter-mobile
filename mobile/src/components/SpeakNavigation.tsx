@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 const BLUE = '#075BFF';
@@ -12,14 +13,31 @@ export function SpeakMark({ compact = false }: { compact?: boolean }) {
 }
 
 function HomeIcon() {
-  return <Svg height={22} viewBox="0 0 24 24" width={22}><Path d="m3.5 11 8.5-7 8.5 7v8.5a1 1 0 0 1-1 1h-5v-6h-5v6h-5a1 1 0 0 1-1-1V11Z" fill="none" stroke={BLUE} strokeLinejoin="round" strokeWidth={1.8} /></Svg>;
+  return <Svg height={25} viewBox="0 0 24 24" width={25}><Path d="m3.5 11 8.5-7 8.5 7v8.5a1 1 0 0 1-1 1h-5v-6h-5v6h-5a1 1 0 0 1-1-1V11Z" fill="none" stroke="#F8FBFF" strokeLinejoin="round" strokeWidth={1.8} /></Svg>;
+}
+
+function NavButton({ children, label, onPress, selected = false }: { children: ReactNode; label: string; onPress: () => void; selected?: boolean }) {
+  const [hovered, setHovered] = useState(false);
+  const activate = () => {
+    Vibration.vibrate(8);
+    onPress();
+  };
+  return <Pressable
+    accessibilityLabel={label}
+    accessibilityRole="button"
+    hitSlop={10}
+    onHoverIn={() => setHovered(true)}
+    onHoverOut={() => setHovered(false)}
+    onPress={activate}
+    style={({ pressed }) => [styles.button, selected && styles.buttonSelected, hovered && styles.hovered, pressed && styles.pressed]}
+  >{children}</Pressable>;
 }
 
 export function SpeakBottomBar({ onHome, onSpeak, onUtilities }: { onHome: () => void; onSpeak: () => void; onUtilities: () => void }) {
   return <View style={styles.bar}>
-    <Pressable accessibilityLabel="Speak tools" hitSlop={10} onPress={onSpeak} style={({ pressed }) => [styles.button, pressed && styles.pressed]}><Text style={styles.s}>S</Text></Pressable>
-    <Pressable accessibilityLabel="Home" hitSlop={10} onPress={onHome} style={({ pressed }) => [styles.button, pressed && styles.pressed]}><HomeIcon /></Pressable>
-    <Pressable accessibilityLabel="Utilities" hitSlop={10} onPress={onUtilities} style={({ pressed }) => [styles.button, pressed && styles.pressed]}><Text style={styles.plus}>+</Text></Pressable>
+    <NavButton label="Speak tools" onPress={onSpeak}><Text style={styles.s}>S</Text></NavButton>
+    <NavButton label="Home" onPress={onHome} selected><HomeIcon /></NavButton>
+    <NavButton label="Utilities" onPress={onUtilities}><Text style={styles.plus}>+</Text></NavButton>
   </View>;
 }
 
@@ -31,9 +49,11 @@ const styles = StyleSheet.create({
   sparkCompact: { height: 4, right: 7, top: 6 },
   sparkSecond: { height: 2, right: 0, top: 12, transform: [{ rotate: '-18deg' }], width: 4 },
   sparkSecondCompact: { right: 4, top: 12 },
-  bar: { alignItems: 'center', backgroundColor: '#FFFFFF', flexDirection: 'row', justifyContent: 'space-between', minHeight: 62, paddingHorizontal: 20, paddingVertical: 7 },
-  button: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#E2EAF7', borderRadius: 20, borderWidth: 1, height: 40, justifyContent: 'center', shadowColor: '#075BFF', shadowOffset: { height: 4, width: 0 }, shadowOpacity: 0.09, shadowRadius: 8, width: 40 },
-  s: { color: BLUE, fontSize: 21, fontWeight: '700' },
-  plus: { color: BLUE, fontSize: 28, fontWeight: '300', marginTop: -2 },
-  pressed: { opacity: 0.68, transform: [{ scale: 0.96 }] },
+  bar: { alignItems: 'center', backgroundColor: '#020713', flexDirection: 'row', justifyContent: 'space-between', minHeight: 72, paddingBottom: 7, paddingHorizontal: 34, paddingTop: 5 },
+  button: { alignItems: 'center', backgroundColor: 'rgba(4,16,38,0.72)', borderColor: 'rgba(38,160,255,0.58)', borderRadius: 27, borderWidth: 1, height: 54, justifyContent: 'center', shadowColor: '#0878FF', shadowOffset: { height: 0, width: 0 }, shadowOpacity: 0.18, shadowRadius: 8, width: 54 },
+  buttonSelected: { borderColor: '#19D7FF', borderWidth: 2, shadowColor: '#19D7FF', shadowOpacity: 0.76, shadowRadius: 13 },
+  hovered: { borderColor: '#19D7FF', shadowOpacity: 0.72, shadowRadius: 12, transform: [{ scale: 1.05 }] },
+  s: { color: BLUE, fontSize: 27, fontWeight: '700' },
+  plus: { color: BLUE, fontSize: 35, fontWeight: '300', marginTop: -3 },
+  pressed: { opacity: 0.78, transform: [{ scale: 0.93 }] },
 });
