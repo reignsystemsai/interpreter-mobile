@@ -17,6 +17,7 @@ export type VoiceCallState = {
   muted: boolean;
   speakerEnabled: boolean;
   remoteLabel: string;
+  remoteVideoAvailable: boolean;
   role: VoiceCallRole;
   status: VoiceCallStatus;
   videoEnabled: boolean;
@@ -59,7 +60,7 @@ export class VoiceCallError extends Error {
   }
 }
 
-const INITIAL_STATE: VoiceCallState = { callId: null, cameraFacing: 'front', error: '', interpreterEnabled: false, muted: false, remoteLabel: '', role: null, speakerEnabled: false, status: 'idle', videoEnabled: false };
+const INITIAL_STATE: VoiceCallState = { callId: null, cameraFacing: 'front', error: '', interpreterEnabled: false, muted: false, remoteLabel: '', remoteVideoAvailable: false, role: null, speakerEnabled: false, status: 'idle', videoEnabled: false };
 const AUDIO_CAPTURE = { autoGainControl: true, channelCount: 1, echoCancellation: true, noiseSuppression: true } as const;
 const CALL_TIMEOUT_MS = 45_000;
 
@@ -78,6 +79,10 @@ class CleanVoiceCallService {
 
   getState() {
     return this.state;
+  }
+
+  getRoom() {
+    return this.room;
   }
 
   subscribe(listener: (state: VoiceCallState) => void) {
@@ -434,7 +439,12 @@ class CleanVoiceCallService {
       publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName));
     });
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-      if (track.kind !== Track.Kind.Audio || this.room !== room) return;
+      if (this.room !== room) return;
+      if (track.kind === Track.Kind.Video) {
+        this.updateState({ remoteVideoAvailable: true });
+        return;
+      }
+      if (track.kind !== Track.Kind.Audio) return;
       if (!this.shouldSubscribe(call, participant.identity, publication.trackName)) {
         publication.setSubscribed(false);
         return;
@@ -452,6 +462,10 @@ class CleanVoiceCallService {
       this.markConnected();
     });
     room.on(RoomEvent.TrackUnsubscribed, (_track, _publication, participant) => {
+      if (_track.kind === Track.Kind.Video) {
+        this.updateState({ remoteVideoAvailable: false });
+        return;
+      }
       if (participant.identity !== `translator:${call.callId}`) return;
       for (const human of room.remoteParticipants.values()) {
         for (const humanPublication of human.audioTrackPublications.values()) {
