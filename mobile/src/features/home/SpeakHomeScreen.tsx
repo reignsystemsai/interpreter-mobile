@@ -11,10 +11,10 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useAudioPlayer } from 'expo-audio';
-import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 
+import { SpeakBottomBar, SpeakMark } from '../../components/SpeakNavigation';
 import { useRealtimeInterpreter } from '../../hooks/useRealtimeInterpreter';
 import { recordAppReady } from '../../services/performance';
 import { CallingOverlay } from '../calling/CallingOverlay';
@@ -125,34 +125,31 @@ export function SpeakHomeScreen() {
   return <View style={styles.page}>
     <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
       <View style={styles.header}>
-        <View style={styles.brand}><View style={styles.brandBars}>{[16, 28, 40, 25, 14].map((height, index) => <View key={`${height}-${index}`} style={[styles.brandBar, { height }]} />)}</View><View><Text style={styles.brandName}>Speak</Text><Text style={styles.tagline}>The world speaks here.</Text></View></View>
+        <Pressable accessibilityLabel="Open calling" accessibilityRole="button" disabled={busy} onPress={() => setOverlay('calling')} style={styles.headerAction}><PhoneIcon size={20} /></Pressable>
+        <SpeakMark compact />
+        <View style={styles.headerSpacer} />
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.title}>Speak languages</Text>
-        <View style={styles.languages}>
-          <Pressable disabled={busy} onPress={() => setOverlay('languageOne')} style={styles.languageLight}><Text numberOfLines={1} style={styles.languageLightText}>{languageOne}</Text><Text style={styles.lightChevron}>⌄</Text></Pressable>
-          <Pressable disabled={busy} onPress={() => { const first = languageOne; setLanguageOne(languageTwo); setLanguageTwo(first); }}><Text style={styles.swap}>⇄</Text></Pressable>
-          <Pressable disabled={busy} onPress={() => setOverlay('languageTwo')} style={styles.languageBlue}><Text numberOfLines={1} style={styles.languageBlueText}>{languageTwo}</Text><Text style={styles.blueChevron}>⌄</Text></Pressable>
-        </View>
+        <Text style={styles.heroName}>Speak</Text>
+        <Text style={styles.heroTagline}>The world speaks here.</Text>
 
         <View style={styles.microphoneArea}>
-          <LivingRing size={232}><View style={[styles.microphoneCore, (listening || speaking) && styles.microphoneActive]}><Text accessibilityLiveRegion="polite" style={styles.readyText}>{statusLabel}</Text><Text style={styles.readyHint}>{busy ? 'Live interpretation' : 'Tap Speak Now'}</Text></View></LivingRing>
+          <LivingRing size={218}><View style={[styles.microphoneCore, (listening || speaking) && styles.microphoneActive]}><View style={styles.readyWave}>{[20, 35, 51, 30, 44, 24].map((height, index) => <View key={`${height}-${index}`} style={[styles.readyBar, { height }]} />)}</View><Text accessibilityLiveRegion="polite" style={styles.readyText}>{statusLabel}</Text></View></LivingRing>
         </View>
-        <LinearGradient colors={['rgba(39,214,235,0)', '#27D6EB', BLUE, 'rgba(20,92,246,0)']} end={{ x: 1, y: 0 }} pointerEvents="none" start={{ x: 0, y: 0 }} style={styles.readyEdge} />
 
-        <Pressable accessibilityRole="button" onPress={toggleConversation} style={({ pressed }) => [styles.speakButton, pressed && styles.pressed]}><MicrophoneIcon /><Text style={styles.speakButtonText}>{busy ? 'Stop' : 'Speak Now'}</Text></Pressable>
-        <Text style={styles.startConversation}>{busy ? 'Conversation active' : 'Start Conversation'}</Text>
+        <Pressable accessibilityRole="button" onPress={toggleConversation} style={({ pressed }) => [styles.speakButton, pressed && styles.pressed]}><MicrophoneIcon color={BLUE} size={22} /><Text style={styles.speakButtonText}>{busy ? 'Stop' : 'Speak Now'}</Text></Pressable>
+        <View style={styles.languageStrip}>
+          <Pressable disabled={busy} onPress={() => setOverlay('languageOne')} style={styles.languageChoice}><Text style={styles.personBlue}>●</Text><Text numberOfLines={1} style={styles.languageChoiceText}>{languageOne}</Text></Pressable>
+          <Pressable disabled={busy} onPress={() => { const first = languageOne; setLanguageOne(languageTwo); setLanguageTwo(first); }}><Text style={styles.swapCompact}>⇄</Text></Pressable>
+          <Pressable disabled={busy} onPress={() => setOverlay('languageTwo')} style={styles.languageChoice}><Text numberOfLines={1} style={styles.languageChoiceText}>{languageTwo}</Text><Text style={styles.personPink}>●</Text></Pressable>
+        </View>
       </View>
 
-      <View style={styles.footer}>
-        <Pressable accessibilityLabel="Open calling" accessibilityRole="button" disabled={busy} onPress={() => setOverlay('calling')} style={styles.homeBarButton}><PhoneIcon size={24} /></Pressable>
-        <Pressable accessibilityLabel="Open Speak tools" accessibilityRole="button" onPress={() => setOverlay('speakTools')} style={styles.homeBarButton}><View style={styles.sButton}><Text style={styles.sHub}>S</Text></View></Pressable>
-        <Pressable accessibilityLabel="Open utilities" accessibilityRole="button" hitSlop={18} onPress={() => setOverlay('menu')} style={styles.homeBarButton}><Text style={styles.plus}>+</Text></Pressable>
-      </View>
+      <SpeakBottomBar onHome={() => setOverlay(null)} onSpeak={() => setOverlay('speakTools')} onUtilities={() => setOverlay('menu')} />
     </SafeAreaView>
 
-    <CallingOverlay onClose={() => setOverlay(null)} visible={overlay === 'calling'} />
+    <CallingOverlay onClose={() => setOverlay(null)} onOpenSpeakTools={() => setOverlay('speakTools')} onOpenUtilities={() => setOverlay('menu')} visible={overlay === 'calling'} />
     <SpeakCameraModal onClose={() => setOverlay(null)} visible={overlay === 'camera'} />
     <AppMenu onClose={() => setOverlay(null)} onNavigate={setOverlay} visible={overlay === 'menu'} />
     <DestinationSheet destination={destination} onClose={() => setOverlay(null)} />
@@ -172,7 +169,9 @@ export function SpeakHomeScreen() {
 const styles = StyleSheet.create({
   page: { backgroundColor: WHITE, flex: 1 },
   safe: { flex: 1 },
-  header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8 },
+  header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 22, paddingTop: 4 },
+  headerAction: { alignItems: 'center', backgroundColor: WHITE, borderColor: '#E2EAF7', borderRadius: 18, borderWidth: 1, height: 36, justifyContent: 'center', shadowColor: BLUE, shadowOpacity: 0.09, shadowRadius: 8, width: 36 },
+  headerSpacer: { width: 36 },
   brand: { alignItems: 'center', flexDirection: 'row' },
   brandBars: { alignItems: 'center', flexDirection: 'row', gap: 4, marginRight: 10 },
   brandBar: { backgroundColor: BLUE, borderRadius: 3, width: 3 },
@@ -181,7 +180,9 @@ const styles = StyleSheet.create({
   livingRing: { alignItems: 'center', borderColor: BLUE, borderWidth: 2, justifyContent: 'center', shadowColor: BLUE, shadowOpacity: 0.24, shadowRadius: 14 },
   outerBand: { borderColor: 'rgba(20,92,246,0.46)', borderWidth: 1.5, position: 'absolute', shadowColor: BLUE, shadowOpacity: 0.55, shadowRadius: 20 },
   outerBandSoft: { borderColor: 'rgba(71,139,255,0.22)', borderWidth: 1 },
-  content: { alignItems: 'center', flex: 1, paddingHorizontal: 24, paddingTop: 38 },
+  content: { alignItems: 'center', flex: 1, paddingHorizontal: 24, paddingTop: 0 },
+  heroName: { color: BLUE, fontSize: 40, fontWeight: '800', letterSpacing: -1.5, marginTop: -4 },
+  heroTagline: { color: '#6B7FA5', fontSize: 12, marginTop: 1 },
   title: { color: BLUE, fontSize: 39, fontWeight: '600', letterSpacing: -1.5 },
   languages: { alignItems: 'center', flexDirection: 'row', gap: 10, marginTop: 28, width: '100%' },
   languageLight: { alignItems: 'center', backgroundColor: LIGHT_BLUE, borderRadius: 25, flex: 1, flexDirection: 'row', height: 58, justifyContent: 'space-between', paddingHorizontal: 18 },
@@ -191,14 +192,21 @@ const styles = StyleSheet.create({
   lightChevron: { color: BLUE, fontSize: 23 },
   blueChevron: { color: WHITE, fontSize: 23 },
   swap: { color: BLUE, fontSize: 34, fontWeight: '700' },
-  microphoneArea: { alignItems: 'center', marginTop: 52 },
-  microphoneCore: { alignItems: 'center', backgroundColor: WHITE, borderRadius: 108, height: 216, justifyContent: 'center', width: 216 },
+  microphoneArea: { alignItems: 'center', marginTop: 38 },
+  microphoneCore: { alignItems: 'center', backgroundColor: WHITE, borderRadius: 102, height: 202, justifyContent: 'center', width: 202 },
   microphoneActive: { backgroundColor: '#EEF5FF', shadowColor: BLUE, shadowOpacity: 0.4, shadowRadius: 30 },
-  readyText: { color: BLUE, fontSize: 35, fontWeight: '700', letterSpacing: -0.8 },
+  readyWave: { alignItems: 'center', flexDirection: 'row', gap: 5, height: 58 },
+  readyBar: { backgroundColor: BLUE, borderRadius: 4, width: 5 },
+  readyText: { color: BLUE, fontSize: 14, fontWeight: '700', marginTop: 9 },
   readyHint: { color: '#7EB1FF', fontSize: 12, fontWeight: '600', marginTop: 7 },
-  readyEdge: { height: 2, marginTop: 28, shadowColor: '#27D6EB', shadowOpacity: 0.72, shadowRadius: 8, width: '92%' },
-  speakButton: { alignItems: 'center', backgroundColor: BLUE, borderRadius: 28, flexDirection: 'row', height: 62, justifyContent: 'center', marginTop: 31, width: '88%' },
-  speakButtonText: { color: WHITE, fontSize: 21, fontWeight: '600', marginLeft: 12 },
+  speakButton: { alignItems: 'center', backgroundColor: WHITE, borderColor: '#CADCF7', borderRadius: 25, borderWidth: 1, flexDirection: 'row', height: 50, justifyContent: 'center', marginTop: 34, shadowColor: BLUE, shadowOffset: { height: 7, width: 0 }, shadowOpacity: 0.18, shadowRadius: 13, width: '58%' },
+  speakButtonText: { color: BLUE, fontSize: 16, fontWeight: '700', marginLeft: 9 },
+  languageStrip: { alignItems: 'center', backgroundColor: WHITE, borderColor: '#E0E8F5', borderRadius: 20, borderWidth: 1, flexDirection: 'row', justifyContent: 'space-between', marginTop: 24, minHeight: 52, paddingHorizontal: 15, shadowColor: BLUE, shadowOpacity: 0.08, shadowRadius: 10, width: '92%' },
+  languageChoice: { alignItems: 'center', flexDirection: 'row', gap: 7, maxWidth: '40%' },
+  languageChoiceText: { color: '#102A56', fontSize: 12, fontWeight: '600' },
+  personBlue: { color: BLUE, fontSize: 16 },
+  personPink: { color: '#EC6AB4', fontSize: 16 },
+  swapCompact: { color: '#E94FB1', fontSize: 23, fontWeight: '600' },
   startConversation: { color: BLUE, fontSize: 15, marginTop: 14 },
   pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
   footer: { alignItems: 'center', backgroundColor: WHITE, borderTopColor: '#E6EEFB', borderTopWidth: 1, flexDirection: 'row', minHeight: 58, paddingBottom: 3, paddingHorizontal: 24 },
