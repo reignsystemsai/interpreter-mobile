@@ -50,7 +50,9 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Speak to use the camera for in-person and video interpretation."
+          "cameraPermission": "Allow Speak to use the camera for photos and video calls.",
+          "microphonePermission": "Allow Speak to use the microphone for voice, video, and interpreted calls.",
+          "recordAudioAndroid": true
         }
       ],
       [
