@@ -13,6 +13,7 @@ export type VoiceCallState = {
   callId: string | null;
   error: string;
   cameraFacing: 'front' | 'back';
+  interpreterEnabled: boolean;
   muted: boolean;
   speakerEnabled: boolean;
   remoteLabel: string;
@@ -58,7 +59,7 @@ export class VoiceCallError extends Error {
   }
 }
 
-const INITIAL_STATE: VoiceCallState = { callId: null, cameraFacing: 'front', error: '', muted: false, remoteLabel: '', role: null, speakerEnabled: false, status: 'idle', videoEnabled: false };
+const INITIAL_STATE: VoiceCallState = { callId: null, cameraFacing: 'front', error: '', interpreterEnabled: false, muted: false, remoteLabel: '', role: null, speakerEnabled: false, status: 'idle', videoEnabled: false };
 const AUDIO_CAPTURE = { autoGainControl: true, channelCount: 1, echoCancellation: true, noiseSuppression: true } as const;
 const CALL_TIMEOUT_MS = 45_000;
 
@@ -248,6 +249,16 @@ class CleanVoiceCallService {
     this.updateState({ cameraFacing: nextFacing });
   }
 
+  async toggleInterpreter() {
+    const call = this.callContext;
+    if (!call || !['ringing', 'connecting', 'connected', 'reconnecting'].includes(this.state.status)) return;
+    const enabled = !this.state.interpreterEnabled;
+    const deviceId = await getDeviceId();
+    await this.request<{ interpreterEnabled: boolean }>(`/api/v1/call-sessions/${encodeURIComponent(call.callId)}/interpreter`, { deviceId, enabled });
+    call.translationEnabled = enabled;
+    this.updateState({ interpreterEnabled: enabled });
+  }
+
   async endCall() {
     await this.resetVoiceCall({ notifyBackend: true });
   }
@@ -429,7 +440,25 @@ class CleanVoiceCallService {
         return;
       }
       console.info('[VoiceCall] remote audio subscribed');
+      if (participant.identity === `translator:${call.callId}`) {
+        for (const human of room.remoteParticipants.values()) {
+          if (human.identity === participant.identity) continue;
+          for (const humanPublication of human.audioTrackPublications.values()) {
+            (humanPublication.track as { setVolume?: (volume: number) => void } | undefined)?.setVolume?.(0.18);
+          }
+        }
+        this.updateState({ interpreterEnabled: true });
+      }
       this.markConnected();
+    });
+    room.on(RoomEvent.TrackUnsubscribed, (_track, _publication, participant) => {
+      if (participant.identity !== `translator:${call.callId}`) return;
+      for (const human of room.remoteParticipants.values()) {
+        for (const humanPublication of human.audioTrackPublications.values()) {
+          (humanPublication.track as { setVolume?: (volume: number) => void } | undefined)?.setVolume?.(1);
+        }
+      }
+      this.updateState({ interpreterEnabled: false });
     });
     room.on(RoomEvent.Reconnecting, () => {
       if (this.room === room) this.updateState({ status: 'reconnecting' });
@@ -459,15 +488,8 @@ class CleanVoiceCallService {
   }
 
   private shouldSubscribe(call: ActiveCall, participantIdentity: string, trackName: string) {
-    if (call.translationEnabled) {
-      const isTranslatorParticipant = participantIdentity === `translator:${call.callId}`;
-      const isMyTranslatedTrack = trackName === `translation-to-${call.role}`;
-      // Raw human mic tracks must stay published for the translation bridge to consume,
-      // but only the translator's matching dubbed track may ever be subscribed to here.
-      if (!isTranslatorParticipant) return false;
-      return isMyTranslatedTrack;
-    }
-    return participantIdentity !== `translator:${call.callId}`;
+    if (participantIdentity !== `translator:${call.callId}`) return true;
+    return trackName === `translation-to-${call.role}`;
   }
 
   private async releaseRoom(room: Room | null) {
