@@ -44,10 +44,6 @@ function PhoneIcon({ size = 30 }: { size?: number }) {
   return <Svg height={size} viewBox="0 0 32 32" width={size}><Path d="M8.2 4.8 12 4l3.1 7.1-2.8 2.2c1.6 3.2 4.1 5.7 7.3 7.3l2.2-2.8L29 21l-.8 3.8c-.4 2-2.2 3.4-4.3 3.2C13.4 27 5 18.6 4 8.1 3.8 6 5.2 4.2 7.2 3.8" fill="none" stroke={BLUE} strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} /></Svg>;
 }
 
-function DotsIcon() {
-  return <Svg height={30} viewBox="0 0 24 30" width={24}>{[7, 15, 23].map((cy) => <Circle cx={12} cy={cy} fill={BLUE} key={cy} r={2.1} />)}</Svg>;
-}
-
 function ProfileIcon({ gender }: { gender: 'female' | 'male' }) {
   const color = gender === 'female' ? PINK : BLUE;
   return <Svg height={34} viewBox="0 0 40 40" width={34}>
@@ -118,13 +114,13 @@ export function SpeakHomeScreen() {
     <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
       <View style={styles.utilityRow}>
         <Pressable accessibilityLabel="Open calling" accessibilityRole="button" disabled={busy} onPress={() => setOverlay('calling')} style={styles.headerAction}><PhoneIcon size={20} /></Pressable>
-        <Pressable accessibilityLabel="Open menu" accessibilityRole="button" onPress={() => setOverlay('menu')} style={styles.dotsAction}><DotsIcon /></Pressable>
+        <View style={styles.utilitySpacer} />
       </View>
 
       <View style={styles.content}>
         <SpeakMark />
-        <Text style={styles.heroName}>Speak</Text>
-        <Text style={styles.heroTagline}>The world speaks here.</Text>
+        <Text style={styles.heroName}>SPEAK</Text>
+        <Text style={styles.heroTagline}>The world SPEAKS here.</Text>
 
         <View style={styles.microphoneArea}>
           <DynamicReadyOrb mode={readyMode} />
@@ -165,7 +161,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   utilityRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 48, paddingHorizontal: 24, paddingTop: 2 },
   headerAction: { alignItems: 'center', backgroundColor: 'rgba(6,20,43,0.76)', borderColor: 'rgba(80,176,255,0.5)', borderRadius: 23, borderWidth: 1, height: 46, justifyContent: 'center', shadowColor: BLUE, shadowOpacity: 0.24, shadowRadius: 9, width: 46 },
-  dotsAction: { alignItems: 'center', height: 46, justifyContent: 'center', width: 46 },
+  utilitySpacer: { height: 46, width: 46 },
   brand: { alignItems: 'center', flexDirection: 'row' },
   brandBars: { alignItems: 'center', flexDirection: 'row', gap: 4, marginRight: 10 },
   brandBar: { backgroundColor: BLUE, borderRadius: 3, width: 3 },
@@ -174,8 +170,8 @@ const styles = StyleSheet.create({
   livingRing: { alignItems: 'center', borderColor: BLUE, borderWidth: 2, justifyContent: 'center', shadowColor: BLUE, shadowOpacity: 0.24, shadowRadius: 14 },
   outerBand: { borderColor: 'rgba(20,92,246,0.46)', borderWidth: 1.5, position: 'absolute', shadowColor: BLUE, shadowOpacity: 0.55, shadowRadius: 20 },
   outerBandSoft: { borderColor: 'rgba(71,139,255,0.22)', borderWidth: 1 },
-  content: { alignItems: 'center', flex: 1, paddingHorizontal: 20, paddingTop: 0 },
-  heroName: { color: '#F8FBFF', fontSize: 40, fontWeight: '800', letterSpacing: -1.5, marginTop: -3 },
+  content: { alignItems: 'center', flex: 1, paddingHorizontal: 20, paddingTop: 10 },
+  heroName: { color: '#F8FBFF', fontSize: 40, fontWeight: '800', letterSpacing: 1.2, marginTop: -3 },
   heroTagline: { color: '#1596FF', fontSize: 13, marginTop: 1 },
   title: { color: BLUE, fontSize: 39, fontWeight: '600', letterSpacing: -1.5 },
   languages: { alignItems: 'center', flexDirection: 'row', gap: 10, marginTop: 28, width: '100%' },
@@ -186,17 +182,17 @@ const styles = StyleSheet.create({
   lightChevron: { color: BLUE, fontSize: 23 },
   blueChevron: { color: WHITE, fontSize: 23 },
   swap: { color: BLUE, fontSize: 34, fontWeight: '700' },
-  microphoneArea: { alignItems: 'center', marginTop: 7 },
+  microphoneArea: { alignItems: 'center', height: 248, justifyContent: 'center', marginTop: 22, transform: [{ scale: 0.9 }] },
   microphoneCore: { alignItems: 'center', backgroundColor: WHITE, borderRadius: 102, height: 202, justifyContent: 'center', width: 202 },
   microphoneActive: { backgroundColor: '#EEF5FF', shadowColor: BLUE, shadowOpacity: 0.4, shadowRadius: 30 },
   readyWave: { alignItems: 'center', flexDirection: 'row', gap: 5, height: 58 },
   readyBar: { backgroundColor: BLUE, borderRadius: 4, width: 5 },
   readyText: { color: BLUE, fontSize: 14, fontWeight: '700', marginTop: 9 },
   readyHint: { color: '#7EB1FF', fontSize: 12, fontWeight: '600', marginTop: 7 },
-  speakButton: { alignItems: 'center', backgroundColor: '#0737A9', borderColor: CYAN, borderRadius: 27, borderWidth: 1.5, flexDirection: 'row', height: 54, justifyContent: 'center', marginTop: 8, shadowColor: CYAN, shadowOffset: { height: 0, width: 0 }, shadowOpacity: 0.62, shadowRadius: 15, width: '64%' },
+  speakButton: { alignItems: 'center', backgroundColor: '#0737A9', borderColor: CYAN, borderRadius: 27, borderWidth: 1.5, flexDirection: 'row', height: 54, justifyContent: 'center', marginTop: 22, shadowColor: CYAN, shadowOffset: { height: 0, width: 0 }, shadowOpacity: 0.62, shadowRadius: 15, width: '64%' },
   speakButtonHovered: { borderWidth: 2, shadowOpacity: 0.95, shadowRadius: 22, transform: [{ scale: 1.025 }] },
   speakButtonText: { color: WHITE, fontSize: 17, fontWeight: '700', marginLeft: 10 },
-  languageStrip: { alignItems: 'center', backgroundColor: 'transparent', flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, minHeight: 54, paddingHorizontal: 4, width: '94%' },
+  languageStrip: { alignItems: 'center', backgroundColor: 'transparent', flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, minHeight: 54, paddingHorizontal: 4, width: '84%' },
   languageChoice: { alignItems: 'center', flexDirection: 'row', gap: 7, maxWidth: '40%' },
   languageChoiceText: { color: '#F8FBFF', fontSize: 14, fontWeight: '600', maxWidth: 90 },
   profileChoice: { alignItems: 'center', flexDirection: 'row' },
