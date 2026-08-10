@@ -177,6 +177,7 @@ router.post("/:callId/interpreter", async (req, res) => {
   const callId = cleanText(req.params.callId, 80);
   const deviceId = cleanText(req.body?.deviceId, 120);
   const enabled = req.body?.enabled === true;
+  const voiceGender = req.body?.voiceGender === "female" ? "female" : "male";
   if (!callId || deviceId.length < 16) return callError(res, 400, "invalid_call_request", "Unable to update Interpreter.");
 
   const admin = getSupabaseAdmin();
@@ -191,7 +192,8 @@ router.post("/:callId/interpreter", async (req, res) => {
         callId,
         callerLanguage: current.data.caller_language,
         recipientLanguage: current.data.recipient_language,
-        roomName: `speak-${callId}`
+        roomName: `speak-${callId}`,
+        voiceGender
       });
     } else {
       await stopCallTranslation(callId);

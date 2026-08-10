@@ -15,7 +15,7 @@ const { createTranslationToken } = require("../livekit");
 const SAMPLE_RATE = 24_000;
 const TRANSLATION_URL = "wss://api.openai.com/v1/realtime/translations?model=gpt-realtime-translate";
 const bridges = new Map();
-const FIXED_VOICES = { caller: "cedar", recipient: "marin" };
+const FIXED_VOICES = { female: "marin", male: "cedar" };
 
 function humanRole(identity, callId) {
   if (typeof identity !== "string") return null;
@@ -180,7 +180,7 @@ class TranslationDirection {
 }
 
 class CallTranslationBridge {
-  constructor({ callId, callerLanguage, recipientLanguage, roomName }) {
+  constructor({ callId, callerLanguage, recipientLanguage, roomName, voiceGender = "male" }) {
     this.callId = callId;
     this.roomName = roomName;
     this.room = new Room();
@@ -194,14 +194,14 @@ class CallTranslationBridge {
         outputSource: this.outputSources.recipient,
         sourceRole: "caller",
         targetLanguage: recipientLanguage,
-        voice: FIXED_VOICES.caller
+        voice: FIXED_VOICES[voiceGender]
       }),
       recipient: new TranslationDirection({
         callId,
         outputSource: this.outputSources.caller,
         sourceRole: "recipient",
         targetLanguage: callerLanguage,
-        voice: FIXED_VOICES.recipient
+        voice: FIXED_VOICES[voiceGender]
       })
     };
     this.publications = [];
