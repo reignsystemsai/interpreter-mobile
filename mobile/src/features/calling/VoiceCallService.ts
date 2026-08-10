@@ -9,10 +9,12 @@ import { getDeviceId } from '../../services/deviceRegistration';
 
 export type VoiceCallStatus = 'idle' | 'preparing' | 'ringing' | 'connecting' | 'connected' | 'reconnecting' | 'ending' | 'ended' | 'failed';
 export type VoiceCallRole = 'caller' | 'recipient' | null;
+export type VoiceCallMode = 'interpreter' | 'video' | 'voice';
 export type VoiceCallState = {
   callId: string | null;
   error: string;
   cameraFacing: 'front' | 'back';
+  callMode: VoiceCallMode;
   interpreterEnabled: boolean;
   muted: boolean;
   speakerEnabled: boolean;
@@ -25,6 +27,7 @@ export type VoiceCallState = {
 
 type ActiveCall = {
   callId: string;
+  callMode: VoiceCallMode;
   roomName: string | null;
   livekitUrl: string | null;
   remoteLabel: string;
@@ -43,6 +46,7 @@ export type IncomingVoiceCall = {
 // backend calls.
 export type MediaSessionCredentials = {
   callId: string;
+  callMode: VoiceCallMode;
   roomName: string;
   livekitUrl: string;
   token: string;
@@ -60,7 +64,7 @@ export class VoiceCallError extends Error {
   }
 }
 
-const INITIAL_STATE: VoiceCallState = { callId: null, cameraFacing: 'front', error: '', interpreterEnabled: false, muted: false, remoteLabel: '', remoteVideoAvailable: false, role: null, speakerEnabled: false, status: 'idle', videoEnabled: false };
+const INITIAL_STATE: VoiceCallState = { callId: null, callMode: 'voice', cameraFacing: 'front', error: '', interpreterEnabled: false, muted: false, remoteLabel: '', remoteVideoAvailable: false, role: null, speakerEnabled: false, status: 'idle', videoEnabled: false };
 const AUDIO_CAPTURE = { autoGainControl: true, channelCount: 1, echoCancellation: true, noiseSuppression: true } as const;
 const CALL_TIMEOUT_MS = 45_000;
 
@@ -135,6 +139,7 @@ class CleanVoiceCallService {
       });
       this.callContext = {
         callId: response.callId,
+        callMode: 'interpreter',
         livekitUrl: response.livekitUrl,
         remoteLabel: options.contactName,
         role: 'caller',
@@ -158,6 +163,7 @@ class CleanVoiceCallService {
     if (!incoming.callId || this.state.status !== 'idle') return false;
     this.callContext = {
       callId: incoming.callId,
+      callMode: 'voice',
       livekitUrl: null,
       remoteLabel: incoming.callerPhoneNumber || 'Interpreter caller',
       role: 'recipient',
@@ -295,6 +301,7 @@ class CleanVoiceCallService {
     this.markCanonicalCall(credentials.callId);
     this.callContext = {
       callId: credentials.callId,
+      callMode: credentials.callMode,
       livekitUrl: credentials.livekitUrl,
       remoteLabel: credentials.remoteLabel,
       role: credentials.role,
@@ -303,7 +310,7 @@ class CleanVoiceCallService {
       translationEnabled: credentials.translationEnabled,
     };
     this.onMediaConnected = onConnected;
-    if (this.state.status === 'idle') this.setState({ ...INITIAL_STATE, remoteLabel: credentials.remoteLabel, role: credentials.role, status: credentials.role === 'caller' ? 'preparing' : 'connecting' });
+    if (this.state.status === 'idle') this.setState({ ...INITIAL_STATE, callMode: credentials.callMode, remoteLabel: credentials.remoteLabel, role: credentials.role, status: credentials.role === 'caller' ? 'preparing' : 'connecting' });
     await this.connect(this.callContext);
   }
 
@@ -466,7 +473,7 @@ class CleanVoiceCallService {
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
       if (this.room !== room) return;
       if (track.kind === Track.Kind.Video) {
-        this.updateState({ remoteVideoAvailable: true });
+        this.updateState({ callMode: 'video', remoteVideoAvailable: true });
         if (call.role === 'recipient' && !this.state.videoEnabled) void this.enableVideo();
         return;
       }

@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../../config/runtime';
-import { VoiceCallService, type MediaSessionCredentials } from '../../features/calling/VoiceCallService';
+import { VoiceCallService, type MediaSessionCredentials, type VoiceCallMode } from '../../features/calling/VoiceCallService';
 import { CallingError } from '../calling/CallingError';
 import { CallingShellHost } from '../calling/CallingShellHost';
 import { RegisteredDeviceIdentityProvider, type DeviceIdentityProvider } from '../calling/DeviceIdentityProvider';
@@ -60,12 +60,13 @@ export class BackendMediaAdapter {
     });
   }
 
-  async connect(callId: string, remoteLabel: string, role: 'caller' | 'recipient'): Promise<void> {
+  async connect(callId: string, remoteLabel: string, role: 'caller' | 'recipient', callMode: VoiceCallMode = 'voice'): Promise<void> {
     const deviceId = await this.deviceIdentity.getDeviceId();
     const credentials = await requestMediaCredentials(callId, deviceId);
     this.connectedCallId = callId;
     const mediaCredentials: MediaSessionCredentials = {
       callId: credentials.callId,
+      callMode,
       roomName: credentials.roomName,
       livekitUrl: credentials.livekitUrl,
       token: credentials.token,

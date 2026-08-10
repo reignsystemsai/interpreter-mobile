@@ -95,6 +95,7 @@ function permissionLabel(permission: ReturnType<typeof useContacts>['permission'
 function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterContact; onBack: () => void; onRefresh: () => Promise<void> }) {
   const { languageOne, languageTwo } = useLanguagePreferences();
   const [busy, setBusy] = useState(false);
+  const [launchingMode, setLaunchingMode] = useState<'video' | 'voice' | null>(null);
   const [creatingCall, setCreatingCall] = useState(false);
   const [showInterpreterSetup, setShowInterpreterSetup] = useState(false);
   const [numberPromptVisible, setNumberPromptVisible] = useState(false);
@@ -129,7 +130,7 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
       const callerDeviceId = await getDeviceId();
       const session = await CallingShellHost.createCall({ callerDeviceId, recipientPhoneNumber: phoneNumberE164, callerLanguage, recipientLanguage });
       createdCallId = session.callId;
-      await backendMediaAdapter.connect(session.callId, contact.displayName, 'caller');
+      await backendMediaAdapter.connect(session.callId, contact.displayName, 'caller', options.interpreter ? 'interpreter' : options.video ? 'video' : 'voice');
       if (options.interpreter) await VoiceCallService.setInterpreterEnabled(true, options.voiceGender);
       if (options.video) await VoiceCallService.enableVideo();
     } catch (error) {
@@ -228,8 +229,8 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
       <Text style={styles.detailName}>{contact.displayName}</Text>
       <Text style={styles.userStatus}>iPhone contact</Text>
       <View style={styles.callGrid}>
-        <Pressable disabled={busy} onPress={() => { setBusy(true); void beginVoiceCall(languageOne, languageTwo).finally(() => setBusy(false)); }} style={styles.callButton}><CallIcon name="phone" /><Text style={styles.callLabel}>{busy ? 'Calling…' : 'Call'}</Text></Pressable>
-        <Pressable disabled={busy} onPress={() => { setBusy(true); void beginVoiceCall(languageOne, languageTwo, { interpreter: false, video: true, voiceGender: 'male' }).finally(() => setBusy(false)); }} style={styles.callButton}><CallIcon name="video" /><Text style={styles.callLabel}>Video Call</Text></Pressable>
+        <Pressable disabled={busy} onPress={() => { setLaunchingMode('voice'); setBusy(true); void beginVoiceCall(languageOne, languageTwo).finally(() => { setBusy(false); setLaunchingMode(null); }); }} style={styles.callButton}><CallIcon name="phone" /><Text style={styles.callLabel}>{launchingMode === 'voice' ? 'Calling…' : 'Call'}</Text></Pressable>
+        <Pressable disabled={busy} onPress={() => { setLaunchingMode('video'); setBusy(true); void beginVoiceCall(languageOne, languageTwo, { interpreter: false, video: true, voiceGender: 'male' }).finally(() => { setBusy(false); setLaunchingMode(null); }); }} style={styles.callButton}><CallIcon name="video" /><Text style={styles.callLabel}>{launchingMode === 'video' ? 'Video Calling…' : 'Video Call'}</Text></Pressable>
         <Pressable disabled={busy} onPress={() => setShowInterpreterSetup(true)} style={[styles.callButton, styles.interpretButton]}><CallIcon name="interpret" /><Text style={[styles.callLabel, styles.interpretLabel]}>Interpret</Text></Pressable>
       </View>
       <PrimaryButton label="Invite to Interpreter" onPress={() => void invite().catch(() => Alert.alert('Unable to open invite'))} />

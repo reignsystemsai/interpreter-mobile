@@ -66,10 +66,13 @@ export function VoiceCallSurface() {
   const connected = ['connected', 'reconnecting'].includes(state.status);
   const videoVisible = Boolean(state.videoEnabled || state.remoteVideoAvailable);
   const initial = (state.remoteLabel || 'S').trim().slice(0, 1).toUpperCase();
+  const placingCall = ['preparing', 'ringing', 'connecting'].includes(state.status);
+  const outgoingLabel = placingCall && state.callMode === 'video' ? 'Video Calling…' : placingCall && state.callMode === 'interpreter' ? 'Interpreter Calling…' : LABELS[state.status];
+  const callLabel = state.callMode === 'video' ? 'Speak Video Call' : state.callMode === 'interpreter' ? 'Speak Interpreter' : 'Speak Call';
 
   return <Modal animationType="fade" onRequestClose={() => void VoiceCallService.endCall()} visible>
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}><Text style={styles.status}>{LABELS[state.status]}</Text><Text style={styles.timer}>{connectedAt.current ? formatDuration(duration) : 'Speak Call'}</Text></View>
+      <View style={styles.header}><Text style={styles.status}>{outgoingLabel}</Text><Text style={styles.timer}>{connectedAt.current ? formatDuration(duration) : callLabel}</Text></View>
 
       <View style={styles.stage}>
         {remoteVideoTrack ? <VideoView objectFit="cover" style={StyleSheet.absoluteFill} videoTrack={remoteVideoTrack as never} /> : <View style={styles.avatar}><Text style={styles.avatarText}>{initial}</Text></View>}
