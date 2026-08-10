@@ -36,8 +36,8 @@ const LANGUAGES = [
 
 type Overlay = 'calling' | 'camera' | 'languageOne' | 'languageTwo' | 'menu' | 'speakTools' | MenuDestination | null;
 
-function PhoneIcon() {
-  return <Svg height={30} viewBox="0 0 32 32" width={30}><Path d="M8.2 4.8 12 4l3.1 7.1-2.8 2.2c1.6 3.2 4.1 5.7 7.3 7.3l2.2-2.8L29 21l-.8 3.8c-.4 2-2.2 3.4-4.3 3.2C13.4 27 5 18.6 4 8.1 3.8 6 5.2 4.2 7.2 3.8" fill="none" stroke={BLUE} strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} /></Svg>;
+function PhoneIcon({ size = 30 }: { size?: number }) {
+  return <Svg height={size} viewBox="0 0 32 32" width={size}><Path d="M8.2 4.8 12 4l3.1 7.1-2.8 2.2c1.6 3.2 4.1 5.7 7.3 7.3l2.2-2.8L29 21l-.8 3.8c-.4 2-2.2 3.4-4.3 3.2C13.4 27 5 18.6 4 8.1 3.8 6 5.2 4.2 7.2 3.8" fill="none" stroke={BLUE} strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} /></Svg>;
 }
 
 function MicrophoneIcon({ color = WHITE, size = 27 }: { color?: string; size?: number }) {
@@ -125,7 +125,6 @@ export function SpeakHomeScreen() {
     <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
       <View style={styles.header}>
         <View style={styles.brand}><View style={styles.brandBars}>{[16, 28, 40, 25, 14].map((height, index) => <View key={`${height}-${index}`} style={[styles.brandBar, { height }]} />)}</View><View><Text style={styles.brandName}>Speak</Text><Text style={styles.tagline}>The world speaks here.</Text></View></View>
-        <Pressable accessibilityLabel="Open calling" accessibilityRole="button" disabled={busy} onPress={() => setOverlay('calling')}><LivingRing size={70}><PhoneIcon /></LivingRing></Pressable>
       </View>
 
       <View style={styles.content}>
@@ -145,9 +144,9 @@ export function SpeakHomeScreen() {
       </View>
 
       <View style={styles.footer}>
-        <View style={styles.footerSpacer} />
-        <Pressable accessibilityLabel="Open Speak tools" accessibilityRole="button" onPress={() => setOverlay('speakTools')}><LivingRing size={78}><Text style={styles.sHub}>S</Text></LivingRing></Pressable>
-        <Pressable accessibilityLabel="Open utilities" accessibilityRole="button" hitSlop={18} onPress={() => setOverlay('menu')} style={styles.plusButton}><Text style={styles.plus}>+</Text></Pressable>
+        <Pressable accessibilityLabel="Open calling" accessibilityRole="button" disabled={busy} onPress={() => setOverlay('calling')} style={styles.homeBarButton}><PhoneIcon size={24} /></Pressable>
+        <Pressable accessibilityLabel="Open Speak tools" accessibilityRole="button" onPress={() => setOverlay('speakTools')} style={styles.homeBarButton}><View style={styles.sButton}><Text style={styles.sHub}>S</Text></View></Pressable>
+        <Pressable accessibilityLabel="Open utilities" accessibilityRole="button" hitSlop={18} onPress={() => setOverlay('menu')} style={styles.homeBarButton}><Text style={styles.plus}>+</Text></Pressable>
       </View>
     </SafeAreaView>
 
@@ -199,11 +198,11 @@ const styles = StyleSheet.create({
   speakButtonText: { color: WHITE, fontSize: 21, fontWeight: '600', marginLeft: 12 },
   startConversation: { color: BLUE, fontSize: 15, marginTop: 14 },
   pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
-  footer: { alignItems: 'center', flexDirection: 'row', paddingBottom: 7, paddingHorizontal: 24 },
-  footerSpacer: { flex: 1 },
-  sHub: { color: BLUE, fontSize: 45, fontWeight: '600' },
-  plusButton: { alignItems: 'center', flex: 1, justifyContent: 'center' },
-  plus: { color: BLUE, fontSize: 47, fontWeight: '300' },
+  footer: { alignItems: 'center', backgroundColor: WHITE, borderTopColor: '#E6EEFB', borderTopWidth: 1, flexDirection: 'row', minHeight: 58, paddingBottom: 3, paddingHorizontal: 24 },
+  homeBarButton: { alignItems: 'center', flex: 1, justifyContent: 'center', minHeight: 48 },
+  sButton: { alignItems: 'center', borderColor: '#BBD3FA', borderRadius: 18, borderWidth: 1, height: 36, justifyContent: 'center', shadowColor: BLUE, shadowOpacity: 0.16, shadowRadius: 8, width: 36 },
+  sHub: { color: BLUE, fontSize: 22, fontWeight: '600' },
+  plus: { color: BLUE, fontSize: 30, fontWeight: '300' },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end' },
   sheet: { backgroundColor: WHITE, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '70%', padding: 22 },
   sheetTitle: { color: BLUE, fontSize: 24, fontWeight: '700', marginBottom: 10 },
