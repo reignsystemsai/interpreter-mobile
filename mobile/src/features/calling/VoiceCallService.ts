@@ -291,7 +291,7 @@ class CleanVoiceCallService {
     const call = this.callContext;
     if (!call || !['ringing', 'connecting', 'connected', 'reconnecting'].includes(this.state.status)) return;
     const deviceId = await getDeviceId();
-    await this.request<{ interpreterEnabled: boolean }>(`/api/v1/call-sessions/${encodeURIComponent(call.callId)}/interpreter`, { deviceId, enabled, voiceGender });
+    await this.request<{ interpreterEnabled: boolean }>(`/api/v1/media-sessions/${encodeURIComponent(call.callId)}/interpreter`, { deviceId, enabled, voiceGender });
     call.translationEnabled = enabled;
     this.updateState({ interpreterEnabled: enabled });
     this.applySubscriptionPolicy(call);
