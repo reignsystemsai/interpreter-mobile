@@ -15,11 +15,12 @@ const { createTranslationToken } = require("../livekit");
 const SAMPLE_RATE = 24_000;
 const TRANSLATION_URL = "wss://api.openai.com/v1/realtime/translations?model=gpt-realtime-translate";
 const bridges = new Map();
+const FIXED_VOICES = { caller: "cedar", recipient: "marin" };
 
 function humanRole(identity, callId) {
   if (typeof identity !== "string") return null;
-  if (identity.endsWith(`:${callId}:caller`)) return "caller";
-  if (identity.endsWith(`:${callId}:recipient`)) return "recipient";
+  if (identity.endsWith(`:${callId}:caller`) || identity.includes(`:${callId}:caller:`)) return "caller";
+  if (identity.endsWith(`:${callId}:recipient`) || identity.includes(`:${callId}:recipient:`)) return "recipient";
   return null;
 }
 
@@ -34,11 +35,12 @@ function pcm16Frame(base64Audio) {
 }
 
 class TranslationDirection {
-  constructor({ callId, outputSource, sourceRole, targetLanguage }) {
+  constructor({ callId, outputSource, sourceRole, targetLanguage, voice }) {
     this.callId = callId;
     this.outputSource = outputSource;
     this.sourceRole = sourceRole;
     this.targetLanguage = targetLanguage;
+    this.voice = voice;
     this.abortController = null;
     this.socket = null;
     this.readyPromise = null;
@@ -80,7 +82,7 @@ class TranslationDirection {
                 transcription: { model: "gpt-realtime-whisper" },
                 noise_reduction: { type: "near_field" }
               },
-              output: { language: this.targetLanguage }
+              output: { language: this.targetLanguage, voice: this.voice }
             }
           }
         }));
@@ -191,13 +193,15 @@ class CallTranslationBridge {
         callId,
         outputSource: this.outputSources.recipient,
         sourceRole: "caller",
-        targetLanguage: recipientLanguage
+        targetLanguage: recipientLanguage,
+        voice: FIXED_VOICES.caller
       }),
       recipient: new TranslationDirection({
         callId,
         outputSource: this.outputSources.caller,
         sourceRole: "recipient",
-        targetLanguage: callerLanguage
+        targetLanguage: callerLanguage,
+        voice: FIXED_VOICES.recipient
       })
     };
     this.publications = [];
@@ -253,7 +257,8 @@ class CallTranslationBridge {
 }
 
 async function startCallTranslation(options) {
-  await stopCallTranslation(options.callId);
+  const active = bridges.get(options.callId);
+  if (active) return active;
   const bridge = new CallTranslationBridge(options);
   bridges.set(options.callId, bridge);
   try {
