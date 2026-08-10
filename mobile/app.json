@@ -46,6 +46,13 @@
     "plugins": [
       "expo-router",
       "expo-dev-client",
+      "expo-audio",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Speak to use the camera for in-person and video interpretation."
+        }
+      ],
       "expo-secure-store",
       [
         "expo-contacts",
