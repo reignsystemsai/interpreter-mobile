@@ -85,7 +85,7 @@ export function VoiceCallSurface() {
         <Pressable onPress={() => void VoiceCallService.acceptIncomingCall()} style={[styles.roundAction, styles.answer]}><Text style={styles.actionText}>Answer</Text></Pressable>
       </View> : <>
         <Pressable disabled={!connected} onPress={() => void VoiceCallService.toggleInterpreter()} style={[styles.interpreter, state.interpreterEnabled && styles.interpreterActive, !connected && styles.disabled]}>
-          <Text style={[styles.interpreterTitle, state.interpreterEnabled && styles.interpreterTitleActive]}>Interpreter {state.interpreterEnabled ? 'On' : 'Off'}</Text>
+          <Text style={[styles.interpreterTitle, state.interpreterEnabled && styles.interpreterTitleActive]}>Speak Interpreter {state.interpreterEnabled ? 'On' : 'Off'}</Text>
           <Text style={[styles.interpreterHint, state.interpreterEnabled && styles.interpreterTitleActive]}>{state.interpreterEnabled ? 'Live translation is active' : 'Tap to translate this call'}</Text>
         </Pressable>
         <View style={styles.controls}>
