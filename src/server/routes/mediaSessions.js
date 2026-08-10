@@ -2,6 +2,7 @@ const express = require("express");
 
 const { getSupabaseAdmin, isSupabaseConfigured } = require("../supabase");
 const { createVoiceToken, isLiveKitConfigured } = require("../livekit");
+const { startCallTranslation, stopCallTranslation } = require("../translation/translation-bridge");
 
 const router = express.Router();
 
@@ -62,6 +63,45 @@ router.post("/:callId", async (req, res) => {
     token,
     translationEnabled: false
   });
+});
+
+router.post("/:callId/interpreter", async (req, res) => {
+  if (!isSupabaseConfigured() || !isLiveKitConfigured()) {
+    return callError(res, 503, "calling_unavailable", "Calling is temporarily unavailable.");
+  }
+  const callId = cleanText(req.params.callId, 80);
+  const deviceId = cleanText(req.body?.deviceId, 120);
+  const enabled = req.body?.enabled === true;
+  const voiceGender = req.body?.voiceGender === "female" ? "female" : "male";
+  if (!callId || deviceId.length < 16) {
+    return callError(res, 400, "invalid_call_request", "Unable to update Interpreter.");
+  }
+
+  const admin = getSupabaseAdmin();
+  const { data, error } = await admin.from("speak_call_sessions").select("*").eq("id", callId).maybeSingle();
+  if (error) return callError(res, 502, "media_session_unavailable", "Unable to update Interpreter.");
+  if (!data) return callError(res, 404, "call_not_found", "This call is no longer available.");
+  if (!participantIdentityFor(data, deviceId)) {
+    return callError(res, 403, "not_call_participant", "Unable to update Interpreter.");
+  }
+
+  try {
+    if (enabled) {
+      await startCallTranslation({
+        callId,
+        callerLanguage: data.caller_language,
+        recipientLanguage: data.recipient_language,
+        roomName: roomNameForCall(callId),
+        voiceGender
+      });
+    } else {
+      await stopCallTranslation(callId);
+    }
+    return res.status(200).json({ callId, interpreterEnabled: enabled });
+  } catch (translationError) {
+    console.error("[MediaSessions] interpreter update failed", { callId, reason: translationError instanceof Error ? translationError.message : "unknown" });
+    return callError(res, 502, "interpreter_unavailable", "Interpreter is temporarily unavailable.");
+  }
 });
 
 router.roomNameForCall = roomNameForCall;
