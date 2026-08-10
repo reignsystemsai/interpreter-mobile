@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 72 },
   glassButton: { alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.48)', borderColor: 'rgba(255,255,255,0.35)', borderRadius: 20, borderWidth: 1, minWidth: 72, paddingHorizontal: 12, paddingVertical: 10 },
   glassText: { color: WHITE, fontSize: 13, fontWeight: '700' },
-  cameraControls: { alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.42)', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 24, paddingHorizontal: 34, paddingTop: 18 },
+  cameraControls: { alignItems: 'center', backgroundColor: 'transparent', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 24, paddingHorizontal: 34, paddingTop: 18 },
   controlSpacer: { width: 58 },
   shutterOuter: { alignItems: 'center', borderColor: WHITE, borderRadius: 39, borderWidth: 4, height: 78, justifyContent: 'center', width: 78 },
   shutterInner: { backgroundColor: WHITE, borderRadius: 31, height: 62, width: 62 },
