@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useAudioPlayer } from 'expo-audio';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 
@@ -138,6 +139,7 @@ export function SpeakHomeScreen() {
         <View style={styles.microphoneArea}>
           <LivingRing size={232}><View style={[styles.microphoneCore, (listening || speaking) && styles.microphoneActive]}><Text accessibilityLiveRegion="polite" style={styles.readyText}>{statusLabel}</Text><Text style={styles.readyHint}>{busy ? 'Live interpretation' : 'Tap Speak Now'}</Text></View></LivingRing>
         </View>
+        <LinearGradient colors={['rgba(39,214,235,0)', '#27D6EB', BLUE, 'rgba(20,92,246,0)']} end={{ x: 1, y: 0 }} pointerEvents="none" start={{ x: 0, y: 0 }} style={styles.readyEdge} />
 
         <Pressable accessibilityRole="button" onPress={toggleConversation} style={({ pressed }) => [styles.speakButton, pressed && styles.pressed]}><MicrophoneIcon /><Text style={styles.speakButtonText}>{busy ? 'Stop' : 'Speak Now'}</Text></Pressable>
         <Text style={styles.startConversation}>{busy ? 'Conversation active' : 'Start Conversation'}</Text>
@@ -194,6 +196,7 @@ const styles = StyleSheet.create({
   microphoneActive: { backgroundColor: '#EEF5FF', shadowColor: BLUE, shadowOpacity: 0.4, shadowRadius: 30 },
   readyText: { color: BLUE, fontSize: 35, fontWeight: '700', letterSpacing: -0.8 },
   readyHint: { color: '#7EB1FF', fontSize: 12, fontWeight: '600', marginTop: 7 },
+  readyEdge: { height: 2, marginTop: 28, shadowColor: '#27D6EB', shadowOpacity: 0.72, shadowRadius: 8, width: '92%' },
   speakButton: { alignItems: 'center', backgroundColor: BLUE, borderRadius: 28, flexDirection: 'row', height: 62, justifyContent: 'center', marginTop: 31, width: '88%' },
   speakButtonText: { color: WHITE, fontSize: 21, fontWeight: '600', marginLeft: 12 },
   startConversation: { color: BLUE, fontSize: 15, marginTop: 14 },
