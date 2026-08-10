@@ -24,6 +24,7 @@ import { DestinationSheet } from '../menu/DestinationSheet';
 const BLUE = '#145CF6';
 const LIGHT_BLUE = '#A9D3FF';
 const WHITE = '#FFFFFF';
+const BLACK = '#03060D';
 
 const LANGUAGES = [
   'English', 'Spanish', 'Brazilian Portuguese', 'French', 'German', 'Italian',
@@ -159,14 +160,14 @@ export function SpeakHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { backgroundColor: WHITE, flex: 1 },
+  page: { backgroundColor: BLACK, flex: 1 },
   safe: { flex: 1 },
   header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8 },
   brand: { alignItems: 'center', flexDirection: 'row' },
   brandBars: { alignItems: 'center', flexDirection: 'row', gap: 4, marginRight: 10 },
   brandBar: { backgroundColor: BLUE, borderRadius: 3, width: 3 },
-  brandName: { color: BLUE, fontSize: 27, fontWeight: '700' },
-  tagline: { color: BLUE, fontSize: 11, marginTop: -2 },
+  brandName: { color: WHITE, fontSize: 27, fontWeight: '700' },
+  tagline: { color: '#8CB8FF', fontSize: 11, marginTop: -2 },
   livingRing: { alignItems: 'center', borderColor: BLUE, borderWidth: 2, justifyContent: 'center', shadowColor: BLUE, shadowOpacity: 0.24, shadowRadius: 14 },
   content: { alignItems: 'center', flex: 1, paddingHorizontal: 24, paddingTop: 38 },
   title: { color: BLUE, fontSize: 39, fontWeight: '600', letterSpacing: -1.5 },
@@ -179,8 +180,8 @@ const styles = StyleSheet.create({
   blueChevron: { color: WHITE, fontSize: 23 },
   swap: { color: BLUE, fontSize: 34, fontWeight: '700' },
   microphoneArea: { alignItems: 'center', marginTop: 52 },
-  microphoneCore: { alignItems: 'center', backgroundColor: WHITE, borderRadius: 116, height: 230, justifyContent: 'center', width: 230 },
-  microphoneActive: { backgroundColor: '#F2F7FF', shadowColor: BLUE, shadowOpacity: 0.35, shadowRadius: 25 },
+  microphoneCore: { alignItems: 'center', backgroundColor: BLACK, borderRadius: 116, height: 230, justifyContent: 'center', width: 230 },
+  microphoneActive: { backgroundColor: '#071A42', shadowColor: BLUE, shadowOpacity: 0.55, shadowRadius: 30 },
   stateLabel: { color: BLUE, fontSize: 13, fontWeight: '600', marginTop: 12 },
   speakButton: { alignItems: 'center', backgroundColor: BLUE, borderRadius: 28, flexDirection: 'row', height: 62, justifyContent: 'center', marginTop: 31, width: '88%' },
   speakButtonText: { color: WHITE, fontSize: 21, fontWeight: '600', marginLeft: 12 },
@@ -192,17 +193,17 @@ const styles = StyleSheet.create({
   plusButton: { alignItems: 'center', flex: 1, justifyContent: 'center' },
   plus: { color: BLUE, fontSize: 47, fontWeight: '300' },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end' },
-  sheet: { backgroundColor: WHITE, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '70%', padding: 22 },
+  sheet: { backgroundColor: '#07101F', borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '70%', padding: 22 },
   sheetTitle: { color: BLUE, fontSize: 24, fontWeight: '700', marginBottom: 10 },
   sheetRow: { borderBottomColor: '#DCE8FF', borderBottomWidth: 1, justifyContent: 'center', minHeight: 52 },
-  sheetRowText: { color: BLUE, fontSize: 17 },
+  sheetRowText: { color: WHITE, fontSize: 17 },
   toolsBackdrop: { alignItems: 'center', flex: 1, justifyContent: 'flex-end', padding: 24 },
-  toolsCard: { backgroundColor: WHITE, borderColor: BLUE, borderRadius: 28, borderWidth: 1, padding: 22, width: '100%' },
+  toolsCard: { backgroundColor: '#07101F', borderColor: BLUE, borderRadius: 28, borderWidth: 1, padding: 22, width: '100%' },
   toolsTitle: { color: BLUE, fontSize: 22, fontWeight: '700' },
   cameraTool: { alignItems: 'center', backgroundColor: '#EAF3FF', borderRadius: 22, flexDirection: 'row', marginTop: 18, minHeight: 62, paddingHorizontal: 20 },
   cameraText: { color: BLUE, fontSize: 18, fontWeight: '600', marginLeft: 14 },
   errorBackdrop: { alignItems: 'center', flex: 1, justifyContent: 'center', padding: 24 },
-  errorCard: { alignItems: 'center', backgroundColor: WHITE, borderColor: BLUE, borderRadius: 24, borderWidth: 1, padding: 24, width: '100%' },
+  errorCard: { alignItems: 'center', backgroundColor: '#07101F', borderColor: BLUE, borderRadius: 24, borderWidth: 1, padding: 24, width: '100%' },
   errorTitle: { color: BLUE, fontSize: 23, fontWeight: '700' },
   errorBody: { color: BLUE, fontSize: 15, lineHeight: 22, marginTop: 10, textAlign: 'center' },
   errorAction: { alignItems: 'center', backgroundColor: BLUE, borderRadius: 22, marginTop: 20, padding: 14, width: '100%' },
