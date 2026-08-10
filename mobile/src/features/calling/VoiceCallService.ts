@@ -499,6 +499,10 @@ class CleanVoiceCallService {
     this.updateState({ status: call.role === 'caller' ? 'ringing' : 'connecting' });
     await room.connect(call.livekitUrl, call.token, { autoSubscribe: true, maxRetries: 3 });
     for (const participant of room.remoteParticipants.values()) {
+      if (participant.identity === `translator:${call.callId}` && [...participant.audioTrackPublications.values()].some((publication) => publication.trackName === `translation-to-${call.role}`)) {
+        call.translationEnabled = true;
+        this.updateState({ interpreterEnabled: true });
+      }
       for (const publication of participant.audioTrackPublications.values()) {
         publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName, publication.kind));
       }
