@@ -1,10 +1,5 @@
 import { AndroidAudioTypePresets, AudioSession } from '@livekit/react-native';
-import {
-  getCameraPermissionsAsync,
-  getMicrophonePermissionsAsync,
-  requestCameraPermissionsAsync,
-  requestMicrophonePermissionsAsync,
-} from 'expo-camera';
+import { Camera } from 'expo-camera';
 import type { CountryCode } from 'libphonenumber-js';
 import { AudioPresets, ConnectionState, Room, RoomEvent, Track } from 'livekit-client';
 import InCallManager from 'react-native-incall-manager';
@@ -250,14 +245,14 @@ class CleanVoiceCallService {
   }
 
   async requestMediaPermissions(video: boolean) {
-    const currentMicrophone = await getMicrophonePermissionsAsync();
-    const microphone = currentMicrophone.granted ? currentMicrophone : await requestMicrophonePermissionsAsync();
+    const currentMicrophone = await Camera.getMicrophonePermissionsAsync();
+    const microphone = currentMicrophone.granted ? currentMicrophone : await Camera.requestMicrophonePermissionsAsync();
     if (!microphone.granted) {
       throw new VoiceCallError('microphone_denied', 'Allow microphone access in Settings to place this call.');
     }
     if (!video) return;
-    const currentCamera = await getCameraPermissionsAsync();
-    const camera = currentCamera.granted ? currentCamera : await requestCameraPermissionsAsync();
+    const currentCamera = await Camera.getCameraPermissionsAsync();
+    const camera = currentCamera.granted ? currentCamera : await Camera.requestCameraPermissionsAsync();
     if (!camera.granted) {
       throw new VoiceCallError('camera_denied', 'Allow camera access in Settings to place a video call.');
     }
