@@ -530,17 +530,19 @@ class CleanVoiceCallService {
       // alive, not concurrently with disconnect — racing them can leave the native audio
       // capture engine in a state where the next call's setMicrophoneEnabled(true) silently
       // produces no audio, since permission is already granted and nothing errors.
+      await room.localParticipant.setCameraEnabled(false).catch(() => undefined);
       await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
-      await room.disconnect().catch(() => undefined);
-      for (const publication of room.localParticipant.audioTrackPublications.values()) {
+      const localPublications = [...room.localParticipant.audioTrackPublications.values(), ...room.localParticipant.videoTrackPublications.values()];
+      for (const publication of localPublications) {
         if (publication.track) await room.localParticipant.unpublishTrack(publication.track).catch(() => undefined);
       }
       for (const participant of room.remoteParticipants.values()) {
-        for (const publication of participant.audioTrackPublications.values()) {
+        for (const publication of participant.trackPublications.values()) {
           publication.track?.detach();
           if (publication.isSubscribed) publication.setSubscribed(false);
         }
       }
+      await room.disconnect().catch(() => undefined);
     }
     await AudioSession.stopAudioSession().catch(() => undefined);
     InCallManager.setForceSpeakerphoneOn(null);
