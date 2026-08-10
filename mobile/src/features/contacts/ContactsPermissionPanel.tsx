@@ -163,7 +163,17 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
   };
 
   const beginVoiceCall = async (callerLanguage: string, recipientLanguage: string, options: CallLaunchOptions = STANDARD_VOICE_CALL) => {
-    if (options.video) await VoiceCallService.requestMediaPermissions(true);
+    if (options.video) {
+      try {
+        await VoiceCallService.requestMediaPermissions(true);
+      } catch (error) {
+        Alert.alert('Camera and Microphone Required', error instanceof Error ? error.message : 'Allow camera and microphone access to place a video call.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+        ]);
+        return;
+      }
+    }
     const registeredPhone = await getRegisteredPhoneNumber().catch(() => null);
     const fallbackRegion = phoneRegionFromE164(registeredPhone) ?? deviceDefaultPhoneRegion();
     const firstValidPhone = contact.phoneNumbers.find((item) => {
