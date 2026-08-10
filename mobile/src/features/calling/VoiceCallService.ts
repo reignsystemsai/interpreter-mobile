@@ -457,6 +457,7 @@ class CleanVoiceCallService {
       if (this.room !== room) return;
       if (track.kind === Track.Kind.Video) {
         this.updateState({ remoteVideoAvailable: true });
+        if (call.role === 'recipient' && !this.state.videoEnabled) void this.enableVideo();
         return;
       }
       if (track.kind !== Track.Kind.Audio) return;
