@@ -1,7 +1,12 @@
 import { AndroidAudioTypePresets, AudioSession } from '@livekit/react-native';
+import {
+  getCameraPermissionsAsync,
+  getMicrophonePermissionsAsync,
+  requestCameraPermissionsAsync,
+  requestMicrophonePermissionsAsync,
+} from 'expo-camera';
 import type { CountryCode } from 'libphonenumber-js';
 import { AudioPresets, ConnectionState, Room, RoomEvent, Track } from 'livekit-client';
-import { PermissionsAndroid, Platform } from 'react-native';
 import InCallManager from 'react-native-incall-manager';
 
 import { API_BASE_URL } from '../../config/runtime';
@@ -240,8 +245,23 @@ class CleanVoiceCallService {
   async enableVideo() {
     const room = this.room;
     if (!room || room.state !== ConnectionState.Connected) return;
+    await this.requestMediaPermissions(true);
     await room.localParticipant.setCameraEnabled(true, { facingMode: 'user' });
     this.updateState({ cameraFacing: 'front', videoEnabled: true });
+  }
+
+  async requestMediaPermissions(video: boolean) {
+    const currentMicrophone = await getMicrophonePermissionsAsync();
+    const microphone = currentMicrophone.granted ? currentMicrophone : await requestMicrophonePermissionsAsync();
+    if (!microphone.granted) {
+      throw new VoiceCallError('microphone_denied', 'Allow microphone access in Settings to place this call.');
+    }
+    if (!video) return;
+    const currentCamera = await getCameraPermissionsAsync();
+    const camera = currentCamera.granted ? currentCamera : await requestCameraPermissionsAsync();
+    if (!camera.granted) {
+      throw new VoiceCallError('camera_denied', 'Allow camera access in Settings to place a video call.');
+    }
   }
 
   async disableVideo() {
@@ -414,15 +434,9 @@ class CleanVoiceCallService {
     callback?.();
   }
 
-  private async requestMicrophone() {
-    if (Platform.OS !== 'android') return;
-    const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
-    if (result !== PermissionsAndroid.RESULTS.GRANTED) throw new VoiceCallError('microphone_denied', 'Microphone access is required for voice calls.');
-  }
-
   private async connect(call: ActiveCall) {
     if (!call.livekitUrl || !call.token) throw new VoiceCallError('missing_token', 'Unable to connect. Please try again.');
-    await this.requestMicrophone();
+    await this.requestMediaPermissions(call.callMode === 'video');
     // Other features (in-person interpreter mode, voice previews) can leave the shared native
     // audio session claimed. Force a clean reset before configuring it for this call.
     await AudioSession.stopAudioSession().catch(() => undefined);

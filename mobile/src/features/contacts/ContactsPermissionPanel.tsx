@@ -163,6 +163,7 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
   };
 
   const beginVoiceCall = async (callerLanguage: string, recipientLanguage: string, options: CallLaunchOptions = STANDARD_VOICE_CALL) => {
+    if (options.video) await VoiceCallService.requestMediaPermissions(true);
     const registeredPhone = await getRegisteredPhoneNumber().catch(() => null);
     const fallbackRegion = phoneRegionFromE164(registeredPhone) ?? deviceDefaultPhoneRegion();
     const firstValidPhone = contact.phoneNumbers.find((item) => {
