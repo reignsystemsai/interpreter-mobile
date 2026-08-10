@@ -3,6 +3,7 @@ import { VideoView } from '@livekit/react-native';
 import { Track } from 'livekit-client';
 import { Modal, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 
+import { SpeakBottomBar, SpeakMark } from '../../components/SpeakNavigation';
 import { VoiceCallService, type VoiceCallState } from './VoiceCallService';
 
 const BLUE = '#145CF6';
@@ -71,11 +72,11 @@ export function VoiceCallSurface() {
 
   return <Modal animationType="fade" onRequestClose={() => void VoiceCallService.endCall()} visible>
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}><Text style={styles.status}>{outgoingLabel}</Text><Text style={styles.timer}>{connectedAt.current ? formatDuration(duration) : callLabel}</Text></View>
+      <View style={styles.header}><SpeakMark compact /><Text style={styles.contactName}>{state.remoteLabel || 'Speak contact'}</Text><Text style={styles.status}>{outgoingLabel}</Text><Text style={styles.timer}>{connectedAt.current ? formatDuration(duration) : callLabel}</Text></View>
 
       <View style={styles.stage}>
-        {remoteVideoTrack ? <VideoView objectFit="cover" style={StyleSheet.absoluteFill} videoTrack={remoteVideoTrack as never} /> : <View style={styles.avatar}><Text style={styles.avatarText}>{initial}</Text></View>}
-        <Text style={[styles.name, videoVisible && styles.nameOnVideo]}>{state.remoteLabel || 'Speak contact'}</Text>
+        {remoteVideoTrack ? <VideoView objectFit="cover" style={styles.remoteVideo} videoTrack={remoteVideoTrack as never} /> : <View style={styles.avatar}><Text style={styles.avatarText}>{initial}</Text></View>}
+        {!videoVisible ? <Text style={styles.name}>{state.remoteLabel || 'Speak contact'}</Text> : null}
         {localVideoTrack ? <VideoView mirror objectFit="cover" style={styles.localVideo} videoTrack={localVideoTrack as never} /> : null}
       </View>
 
@@ -95,16 +96,19 @@ export function VoiceCallSurface() {
         </View>
         <Pressable onPress={() => void VoiceCallService.endCall()} style={styles.end}><Text style={styles.endText}>End Call</Text></Pressable>
       </>}
+      <SpeakBottomBar onHome={() => undefined} onSpeak={() => void VoiceCallService.toggleInterpreter()} onUtilities={() => void VoiceCallService.toggleSpeaker()} />
     </SafeAreaView>
   </Modal>;
 }
 
 const styles = StyleSheet.create({
   safe: { backgroundColor: WHITE, flex: 1 },
-  header: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 10 },
+  header: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 2 },
+  contactName: { color: BLUE, fontSize: 23, fontWeight: '800', marginTop: 2 },
   status: { color: BLUE, fontSize: 15, fontWeight: '700' },
   timer: { color: BLUE, fontSize: 13, marginTop: 4 },
   stage: { alignItems: 'center', backgroundColor: '#F3F7FF', borderColor: '#D6E4FF', borderRadius: 34, borderWidth: 1, flex: 1, justifyContent: 'center', margin: 22, overflow: 'hidden', shadowColor: BLUE, shadowOpacity: 0.1, shadowRadius: 22 },
+  remoteVideo: { height: '100%', width: '100%' },
   avatar: { alignItems: 'center', borderColor: BLUE, borderRadius: 78, borderWidth: 3, height: 156, justifyContent: 'center', shadowColor: BLUE, shadowOpacity: 0.22, shadowRadius: 22, width: 156 },
   avatarText: { color: BLUE, fontSize: 62, fontWeight: '600' },
   name: { color: '#102A56', fontSize: 26, fontWeight: '700', marginTop: 22 },
