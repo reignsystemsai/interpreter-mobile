@@ -41,7 +41,7 @@ async function createVoiceToken({ identity, roomName }) {
     roomJoin: true,
     canPublish: true,
     canPublishData: false,
-    canPublishSources: [TrackSource.MICROPHONE],
+    canPublishSources: [TrackSource.MICROPHONE, TrackSource.CAMERA],
     canSubscribe: true
   });
   return token.toJwt();
