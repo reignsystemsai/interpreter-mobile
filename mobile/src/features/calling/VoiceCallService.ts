@@ -476,7 +476,7 @@ class CleanVoiceCallService {
         call.translationEnabled = true;
         this.updateState({ interpreterEnabled: true });
       }
-      publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName, publication.kind));
+      publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName, publication.kind, publication.source));
       if (call.translationEnabled) this.applySubscriptionPolicy(call);
     });
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
@@ -487,7 +487,7 @@ class CleanVoiceCallService {
         return;
       }
       if (track.kind !== Track.Kind.Audio) return;
-      if (!this.shouldSubscribe(call, participant.identity, publication.trackName, track.kind)) {
+      if (!this.shouldSubscribe(call, participant.identity, publication.trackName, track.kind, publication.source)) {
         publication.setSubscribed(false);
         return;
       }
@@ -520,7 +520,7 @@ class CleanVoiceCallService {
         this.updateState({ interpreterEnabled: true });
       }
       for (const publication of participant.audioTrackPublications.values()) {
-        publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName, publication.kind));
+        publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName, publication.kind, publication.source));
       }
     }
     if (this.room !== room || this.callContext !== call) throw new VoiceCallError('call_ended', 'Call ended.');
@@ -537,11 +537,11 @@ class CleanVoiceCallService {
     await AudioSession.selectAudioOutput('earpiece').catch(() => undefined);
   }
 
-  private shouldSubscribe(call: ActiveCall, participantIdentity: string, trackName: string, kind: Track.Kind) {
+  private shouldSubscribe(call: ActiveCall, participantIdentity: string, trackName: string, kind: Track.Kind, source: Track.Source) {
     const translator = participantIdentity === `translator:${call.callId}`;
     if (kind !== Track.Kind.Audio) return !translator;
     if (translator) return call.translationEnabled && trackName === `translation-to-${call.role}`;
-    return !call.translationEnabled;
+    return !call.translationEnabled && source === Track.Source.Microphone;
   }
 
   private applySubscriptionPolicy(call: ActiveCall) {
@@ -549,7 +549,7 @@ class CleanVoiceCallService {
     if (!room) return;
     for (const participant of room.remoteParticipants.values()) {
       for (const publication of participant.trackPublications.values()) {
-        publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName, publication.kind));
+        publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName, publication.kind, publication.source));
       }
     }
   }
