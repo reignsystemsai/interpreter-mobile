@@ -216,6 +216,7 @@ async function offerCallNotificationsAfterFirstCall() {
 export function VoiceCallHost() {
   useEffect(() => {
     backendMediaAdapter.start();
+    VoiceCallService.setCanonicalEndHandler((callId) => CallingShellHost.endCall(callId));
     let completedConnectedCall = false;
     let previousStatus = VoiceCallService.getState().status;
     let previousCallId = VoiceCallService.getState().callId;

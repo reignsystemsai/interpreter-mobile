@@ -75,6 +75,7 @@ class CleanVoiceCallService {
   // Call IDs whose call-data state is owned by CallingShellHost rather than by this
   // service's own backend calls (see acceptIncomingCall).
   private canonicalCallIds = new Set<string>();
+  private canonicalEndHandler: ((callId: string) => Promise<void>) | null = null;
   private onMediaConnected: (() => void) | null = null;
 
   getState() {
@@ -258,6 +259,10 @@ class CleanVoiceCallService {
     await this.setInterpreterEnabled(!this.state.interpreterEnabled);
   }
 
+  setCanonicalEndHandler(handler: (callId: string) => Promise<void>) {
+    this.canonicalEndHandler = handler;
+  }
+
   async setInterpreterEnabled(enabled: boolean, voiceGender: 'female' | 'male' = 'male') {
     const call = this.callContext;
     if (!call || !['ringing', 'connecting', 'connected', 'reconnecting'].includes(this.state.status)) return;
@@ -269,7 +274,13 @@ class CleanVoiceCallService {
   }
 
   async endCall() {
-    await this.resetVoiceCall({ notifyBackend: true });
+    const callId = this.callContext?.callId ?? null;
+    const canonical = Boolean(callId && this.canonicalCallIds.has(callId));
+    this.updateState({ status: 'ending' });
+    if (canonical && callId && this.canonicalEndHandler) {
+      await this.canonicalEndHandler(callId).catch(() => undefined);
+    }
+    await this.resetVoiceCall({ notifyBackend: !canonical });
   }
 
   // Media-only entry point for calls whose data/state lives in CallingShellHost.
