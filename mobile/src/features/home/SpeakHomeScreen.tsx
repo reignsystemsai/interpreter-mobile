@@ -38,10 +38,10 @@ function PhoneIcon() {
   return <Svg height={30} viewBox="0 0 32 32" width={30}><Path d="M8.2 4.8 12 4l3.1 7.1-2.8 2.2c1.6 3.2 4.1 5.7 7.3 7.3l2.2-2.8L29 21l-.8 3.8c-.4 2-2.2 3.4-4.3 3.2C13.4 27 5 18.6 4 8.1 3.8 6 5.2 4.2 7.2 3.8" fill="none" stroke={BLUE} strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} /></Svg>;
 }
 
-function MicrophoneIcon() {
-  return <Svg height={96} viewBox="0 0 96 96" width={96}>
-    <Path d="M34 20a14 14 0 0 1 28 0v29a14 14 0 0 1-28 0V20Z" fill="none" stroke={BLUE} strokeWidth={7} />
-    <Path d="M22 46v4a26 26 0 0 0 52 0v-4M48 76v14M35 90h26" fill="none" stroke={BLUE} strokeLinecap="round" strokeWidth={7} />
+function MicrophoneIcon({ color = WHITE, size = 27 }: { color?: string; size?: number }) {
+  return <Svg height={size} viewBox="0 0 96 96" width={size}>
+    <Path d="M34 20a14 14 0 0 1 28 0v29a14 14 0 0 1-28 0V20Z" fill="none" stroke={color} strokeWidth={7} />
+    <Path d="M22 46v4a26 26 0 0 0 52 0v-4M48 76v14M35 90h26" fill="none" stroke={color} strokeLinecap="round" strokeWidth={7} />
   </Svg>;
 }
 
@@ -128,8 +128,7 @@ export function SpeakHomeScreen() {
         </View>
 
         <View style={styles.microphoneArea}>
-          <LivingRing size={248}><View style={[styles.microphoneCore, (listening || speaking) && styles.microphoneActive]}><MicrophoneIcon /></View></LivingRing>
-          <Text accessibilityLiveRegion="polite" style={styles.stateLabel}>{statusLabel}</Text>
+          <LivingRing size={232}><View style={[styles.microphoneCore, (listening || speaking) && styles.microphoneActive]}><Text accessibilityLiveRegion="polite" style={styles.readyText}>{statusLabel}</Text><Text style={styles.readyHint}>{busy ? 'Live interpretation' : 'Tap Speak Now'}</Text></View></LivingRing>
         </View>
 
         <Pressable accessibilityRole="button" onPress={toggleConversation} style={({ pressed }) => [styles.speakButton, pressed && styles.pressed]}><WaveIcon /><Text style={styles.speakButtonText}>{busy ? 'Stop' : 'Speak Now'}</Text></Pressable>
@@ -180,9 +179,10 @@ const styles = StyleSheet.create({
   blueChevron: { color: WHITE, fontSize: 23 },
   swap: { color: BLUE, fontSize: 34, fontWeight: '700' },
   microphoneArea: { alignItems: 'center', marginTop: 52 },
-  microphoneCore: { alignItems: 'center', backgroundColor: BLACK, borderRadius: 116, height: 230, justifyContent: 'center', width: 230 },
+  microphoneCore: { alignItems: 'center', backgroundColor: BLACK, borderRadius: 108, height: 216, justifyContent: 'center', width: 216 },
   microphoneActive: { backgroundColor: '#071A42', shadowColor: BLUE, shadowOpacity: 0.55, shadowRadius: 30 },
-  stateLabel: { color: BLUE, fontSize: 13, fontWeight: '600', marginTop: 12 },
+  readyText: { color: WHITE, fontSize: 35, fontWeight: '700', letterSpacing: -0.8 },
+  readyHint: { color: '#7EB1FF', fontSize: 12, fontWeight: '600', marginTop: 7 },
   speakButton: { alignItems: 'center', backgroundColor: BLUE, borderRadius: 28, flexDirection: 'row', height: 62, justifyContent: 'center', marginTop: 31, width: '88%' },
   speakButtonText: { color: WHITE, fontSize: 21, fontWeight: '600', marginLeft: 12 },
   startConversation: { color: BLUE, fontSize: 15, marginTop: 14 },
