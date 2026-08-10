@@ -27,11 +27,11 @@ export function CallingOverlay({ onClose, onOpenSpeakTools, onOpenUtilities, vis
 }
 
 const styles = StyleSheet.create({
-  page: { backgroundColor: '#FFFFFF', flex: 1, paddingHorizontal: 18 },
+  page: { backgroundColor: '#020713', flex: 1, paddingHorizontal: 18 },
   header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 8 },
   headerButton: { alignItems: 'center', height: 38, justifyContent: 'center', width: 38 },
-  title: { color: '#102A56', fontSize: 31, fontWeight: '700' },
-  subtitle: { color: '#5277B8', fontSize: 13, marginTop: 2 },
+  title: { color: '#F8FBFF', fontSize: 31, fontWeight: '700' },
+  subtitle: { color: '#4EAFFF', fontSize: 13, marginTop: 2 },
   close: { color: BLUE, fontSize: 34, fontWeight: '300' },
   content: { flex: 1 },
 });
