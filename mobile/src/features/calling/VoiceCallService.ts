@@ -447,11 +447,21 @@ class CleanVoiceCallService {
       this.markConnected();
     });
     room.on(RoomEvent.ParticipantDisconnected, (participant) => {
-      if (participant.identity === `translator:${call.callId}`) return;
+      if (participant.identity === `translator:${call.callId}`) {
+        call.translationEnabled = false;
+        this.updateState({ interpreterEnabled: false });
+        this.applySubscriptionPolicy(call);
+        return;
+      }
       if (this.room === room) void this.resetVoiceCall({ notifyBackend: true });
     });
     room.on(RoomEvent.TrackPublished, (publication, participant) => {
+      if (participant.identity === `translator:${call.callId}` && publication.kind === Track.Kind.Audio && publication.trackName === `translation-to-${call.role}`) {
+        call.translationEnabled = true;
+        this.updateState({ interpreterEnabled: true });
+      }
       publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName, publication.kind));
+      if (call.translationEnabled) this.applySubscriptionPolicy(call);
     });
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
       if (this.room !== room) return;
