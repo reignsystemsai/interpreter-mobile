@@ -236,8 +236,6 @@ class CleanVoiceCallService {
 
   async toggleSpeaker() {
     const enabled = !this.state.speakerEnabled;
-    InCallManager.setForceSpeakerphoneOn(enabled);
-    InCallManager.setSpeakerphoneOn(enabled);
     await AudioSession.selectAudioOutput(enabled ? 'speaker' : 'earpiece').catch(() => undefined);
     this.updateState({ speakerEnabled: enabled });
   }
@@ -449,9 +447,6 @@ class CleanVoiceCallService {
     });
     await AudioSession.setDefaultRemoteAudioTrackVolume(1);
     await AudioSession.startAudioSession();
-    InCallManager.start({ auto: true, media: 'audio' });
-    InCallManager.setForceSpeakerphoneOn(false);
-    InCallManager.setSpeakerphoneOn(false);
     const room = new Room({
       adaptiveStream: true,
       audioCaptureDefaults: AUDIO_CAPTURE,
@@ -581,7 +576,6 @@ class CleanVoiceCallService {
       await room.disconnect().catch(() => undefined);
     }
     await AudioSession.stopAudioSession().catch(() => undefined);
-    InCallManager.setForceSpeakerphoneOn(null);
     InCallManager.stop();
   }
 }
