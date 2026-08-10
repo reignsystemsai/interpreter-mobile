@@ -255,13 +255,17 @@ class CleanVoiceCallService {
   }
 
   async toggleInterpreter() {
+    await this.setInterpreterEnabled(!this.state.interpreterEnabled);
+  }
+
+  async setInterpreterEnabled(enabled: boolean, voiceGender: 'female' | 'male' = 'male') {
     const call = this.callContext;
     if (!call || !['ringing', 'connecting', 'connected', 'reconnecting'].includes(this.state.status)) return;
-    const enabled = !this.state.interpreterEnabled;
     const deviceId = await getDeviceId();
-    await this.request<{ interpreterEnabled: boolean }>(`/api/v1/call-sessions/${encodeURIComponent(call.callId)}/interpreter`, { deviceId, enabled });
+    await this.request<{ interpreterEnabled: boolean }>(`/api/v1/call-sessions/${encodeURIComponent(call.callId)}/interpreter`, { deviceId, enabled, voiceGender });
     call.translationEnabled = enabled;
     this.updateState({ interpreterEnabled: enabled });
+    this.applySubscriptionPolicy(call);
   }
 
   async endCall() {
@@ -406,8 +410,8 @@ class CleanVoiceCallService {
     await AudioSession.stopAudioSession().catch(() => undefined);
     await AudioSession.configureAudio({
       android: {
-        audioTypeOptions: { ...AndroidAudioTypePresets.communication, forceHandleAudioRouting: true },
-        preferredOutputList: ['bluetooth', 'headset', 'speaker', 'earpiece'],
+        audioTypeOptions: { ...AndroidAudioTypePresets.communication, forceHandleAudioRouting: false },
+        preferredOutputList: ['bluetooth', 'headset', 'earpiece', 'speaker'],
       },
       ios: { defaultOutput: 'earpiece' },
     });
@@ -436,7 +440,7 @@ class CleanVoiceCallService {
       if (this.room === room) void this.resetVoiceCall({ notifyBackend: true });
     });
     room.on(RoomEvent.TrackPublished, (publication, participant) => {
-      publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName));
+      publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName, publication.kind));
     });
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
       if (this.room !== room) return;
@@ -445,18 +449,13 @@ class CleanVoiceCallService {
         return;
       }
       if (track.kind !== Track.Kind.Audio) return;
-      if (!this.shouldSubscribe(call, participant.identity, publication.trackName)) {
+      if (!this.shouldSubscribe(call, participant.identity, publication.trackName, track.kind)) {
         publication.setSubscribed(false);
         return;
       }
       console.info('[VoiceCall] remote audio subscribed');
       if (participant.identity === `translator:${call.callId}`) {
-        for (const human of room.remoteParticipants.values()) {
-          if (human.identity === participant.identity) continue;
-          for (const humanPublication of human.audioTrackPublications.values()) {
-            (humanPublication.track as { setVolume?: (volume: number) => void } | undefined)?.setVolume?.(0.18);
-          }
-        }
+        this.applySubscriptionPolicy(call);
         this.updateState({ interpreterEnabled: true });
       }
       this.markConnected();
@@ -467,12 +466,7 @@ class CleanVoiceCallService {
         return;
       }
       if (participant.identity !== `translator:${call.callId}`) return;
-      for (const human of room.remoteParticipants.values()) {
-        for (const humanPublication of human.audioTrackPublications.values()) {
-          (humanPublication.track as { setVolume?: (volume: number) => void } | undefined)?.setVolume?.(1);
-        }
-      }
-      this.updateState({ interpreterEnabled: false });
+      if (!call.translationEnabled) this.updateState({ interpreterEnabled: false });
     });
     room.on(RoomEvent.Reconnecting, () => {
       if (this.room === room) this.updateState({ status: 'reconnecting' });
@@ -484,7 +478,7 @@ class CleanVoiceCallService {
     await room.connect(call.livekitUrl, call.token, { autoSubscribe: true, maxRetries: 3 });
     for (const participant of room.remoteParticipants.values()) {
       for (const publication of participant.audioTrackPublications.values()) {
-        publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName));
+        publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName, publication.kind));
       }
     }
     if (this.room !== room || this.callContext !== call) throw new VoiceCallError('call_ended', 'Call ended.');
@@ -501,9 +495,21 @@ class CleanVoiceCallService {
     await AudioSession.selectAudioOutput('earpiece').catch(() => undefined);
   }
 
-  private shouldSubscribe(call: ActiveCall, participantIdentity: string, trackName: string) {
-    if (participantIdentity !== `translator:${call.callId}`) return true;
-    return trackName === `translation-to-${call.role}`;
+  private shouldSubscribe(call: ActiveCall, participantIdentity: string, trackName: string, kind: Track.Kind) {
+    const translator = participantIdentity === `translator:${call.callId}`;
+    if (kind !== Track.Kind.Audio) return !translator;
+    if (translator) return call.translationEnabled && trackName === `translation-to-${call.role}`;
+    return !call.translationEnabled;
+  }
+
+  private applySubscriptionPolicy(call: ActiveCall) {
+    const room = this.room;
+    if (!room) return;
+    for (const participant of room.remoteParticipants.values()) {
+      for (const publication of participant.trackPublications.values()) {
+        publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName, publication.kind));
+      }
+    }
   }
 
   private async releaseRoom(room: Room | null) {
