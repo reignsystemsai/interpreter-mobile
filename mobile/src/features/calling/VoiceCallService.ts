@@ -12,11 +12,13 @@ export type VoiceCallRole = 'caller' | 'recipient' | null;
 export type VoiceCallState = {
   callId: string | null;
   error: string;
+  cameraFacing: 'front' | 'back';
   muted: boolean;
   speakerEnabled: boolean;
   remoteLabel: string;
   role: VoiceCallRole;
   status: VoiceCallStatus;
+  videoEnabled: boolean;
 };
 
 type ActiveCall = {
@@ -56,7 +58,7 @@ export class VoiceCallError extends Error {
   }
 }
 
-const INITIAL_STATE: VoiceCallState = { callId: null, error: '', muted: false, remoteLabel: '', role: null, speakerEnabled: false, status: 'idle' };
+const INITIAL_STATE: VoiceCallState = { callId: null, cameraFacing: 'front', error: '', muted: false, remoteLabel: '', role: null, speakerEnabled: false, status: 'idle', videoEnabled: false };
 const AUDIO_CAPTURE = { autoGainControl: true, channelCount: 1, echoCancellation: true, noiseSuppression: true } as const;
 const CALL_TIMEOUT_MS = 45_000;
 
@@ -220,6 +222,30 @@ class CleanVoiceCallService {
     InCallManager.setSpeakerphoneOn(enabled);
     await AudioSession.selectAudioOutput(enabled ? 'speaker' : 'earpiece').catch(() => undefined);
     this.updateState({ speakerEnabled: enabled });
+  }
+
+  async enableVideo() {
+    const room = this.room;
+    if (!room || room.state !== ConnectionState.Connected) return;
+    await room.localParticipant.setCameraEnabled(true, { facingMode: 'user' });
+    this.updateState({ cameraFacing: 'front', videoEnabled: true });
+  }
+
+  async disableVideo() {
+    const room = this.room;
+    if (!room) return;
+    await room.localParticipant.setCameraEnabled(false);
+    this.updateState({ videoEnabled: false });
+  }
+
+  async switchCamera() {
+    const room = this.room;
+    if (!room || !this.state.videoEnabled) return;
+    const nextFacing = this.state.cameraFacing === 'front' ? 'back' : 'front';
+    const publication = room.localParticipant.getTrackPublication(Track.Source.Camera);
+    const cameraTrack = publication?.track as { restartTrack?: (options: { facingMode: 'environment' | 'user' }) => Promise<void> } | undefined;
+    await cameraTrack?.restartTrack?.({ facingMode: nextFacing === 'front' ? 'user' : 'environment' });
+    this.updateState({ cameraFacing: nextFacing });
   }
 
   async endCall() {
