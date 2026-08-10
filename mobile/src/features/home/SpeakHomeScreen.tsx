@@ -21,7 +21,7 @@ import { VoiceCallService } from '../calling/VoiceCallService';
 import { useLanguagePreferences } from '../languages/LanguagePreferencesProvider';
 import { AppMenu, type MenuDestination } from '../menu/AppMenu';
 import { DestinationSheet } from '../menu/DestinationSheet';
-import { CameraInterpreterModal } from './CameraInterpreterModal';
+import { SpeakCameraModal } from './CameraInterpreterModal';
 
 const BLUE = '#145CF6';
 const LIGHT_BLUE = '#A9D3FF';
@@ -119,6 +119,11 @@ export function SpeakHomeScreen() {
     else void start();
   };
 
+  const openCamera = () => {
+    if (busy) stop();
+    setOverlay('camera');
+  };
+
   const destination = overlay && !['calling', 'camera', 'languageOne', 'languageTwo', 'menu', 'speakTools'].includes(overlay) ? overlay as MenuDestination : null;
 
   return <View style={styles.page}>
@@ -152,7 +157,7 @@ export function SpeakHomeScreen() {
     </SafeAreaView>
 
     <CallingOverlay onClose={() => setOverlay(null)} visible={overlay === 'calling'} />
-    <CameraInterpreterModal languageOne={languageOne} languageTwo={languageTwo} onClose={() => setOverlay(null)} visible={overlay === 'camera'} />
+    <SpeakCameraModal onClose={() => setOverlay(null)} visible={overlay === 'camera'} />
     <AppMenu onClose={() => setOverlay(null)} onNavigate={setOverlay} visible={overlay === 'menu'} />
     <DestinationSheet destination={destination} onClose={() => setOverlay(null)} />
 
@@ -161,7 +166,7 @@ export function SpeakHomeScreen() {
     </Modal>
 
     <Modal animationType="fade" onRequestClose={() => setOverlay(null)} transparent visible={overlay === 'speakTools'}>
-      <BlurView intensity={35} style={styles.toolsBackdrop} tint="dark"><Pressable onPress={() => setOverlay(null)} style={StyleSheet.absoluteFill} /><View style={styles.toolsCard}><Text style={styles.toolsTitle}>Speak tools</Text><Pressable accessibilityRole="button" onPress={() => setOverlay('camera')} style={styles.cameraTool}><CameraIcon /><Text style={styles.cameraText}>Camera Interpreter</Text></Pressable></View></BlurView>
+      <BlurView intensity={35} style={styles.toolsBackdrop} tint="dark"><Pressable onPress={() => setOverlay(null)} style={StyleSheet.absoluteFill} /><View style={styles.toolsCard}><Text style={styles.toolsTitle}>Speak tools</Text><Pressable accessibilityRole="button" onPress={openCamera} style={styles.cameraTool}><CameraIcon /><Text style={styles.cameraText}>Camera</Text></Pressable></View></BlurView>
     </Modal>
 
     <Modal animationType="fade" onRequestClose={stop} transparent visible={status === 'failed'}><BlurView intensity={42} style={styles.errorBackdrop} tint="light"><View style={styles.errorCard}><Text style={styles.errorTitle}>Couldn’t Connect</Text><Text style={styles.errorBody}>{errorMessage || 'Interpreter could not connect. Please try again.'}</Text><Pressable onPress={() => void start()} style={styles.errorAction}><Text style={styles.errorActionText}>Try Again</Text></Pressable><Pressable onPress={stop}><Text style={styles.errorCancel}>Cancel</Text></Pressable></View></BlurView></Modal>
