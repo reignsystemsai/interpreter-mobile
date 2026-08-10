@@ -13,6 +13,7 @@ export type VoiceCallState = {
   callId: string | null;
   error: string;
   muted: boolean;
+  speakerEnabled: boolean;
   remoteLabel: string;
   role: VoiceCallRole;
   status: VoiceCallStatus;
@@ -55,7 +56,7 @@ export class VoiceCallError extends Error {
   }
 }
 
-const INITIAL_STATE: VoiceCallState = { callId: null, error: '', muted: false, remoteLabel: '', role: null, status: 'idle' };
+const INITIAL_STATE: VoiceCallState = { callId: null, error: '', muted: false, remoteLabel: '', role: null, speakerEnabled: false, status: 'idle' };
 const AUDIO_CAPTURE = { autoGainControl: true, channelCount: 1, echoCancellation: true, noiseSuppression: true } as const;
 const CALL_TIMEOUT_MS = 45_000;
 
@@ -155,7 +156,7 @@ class CleanVoiceCallService {
       token: null,
       translationEnabled: false,
     };
-    this.setState({ callId: incoming.callId, error: '', muted: false, remoteLabel: this.callContext.remoteLabel, role: 'recipient', status: 'ringing' });
+    this.setState({ ...INITIAL_STATE, callId: incoming.callId, remoteLabel: this.callContext.remoteLabel, role: 'recipient', status: 'ringing' });
     this.startCallStatusPolling(incoming.callId);
     InCallManager.turnScreenOn();
     InCallManager.setKeepScreenOn(true);
@@ -211,6 +212,14 @@ class CleanVoiceCallService {
     const nextMuted = !this.state.muted;
     await room.localParticipant.setMicrophoneEnabled(!nextMuted, AUDIO_CAPTURE);
     this.updateState({ muted: nextMuted });
+  }
+
+  async toggleSpeaker() {
+    const enabled = !this.state.speakerEnabled;
+    InCallManager.setForceSpeakerphoneOn(enabled);
+    InCallManager.setSpeakerphoneOn(enabled);
+    await AudioSession.selectAudioOutput(enabled ? 'speaker' : 'earpiece').catch(() => undefined);
+    this.updateState({ speakerEnabled: enabled });
   }
 
   async endCall() {
@@ -300,7 +309,7 @@ class CleanVoiceCallService {
     const label = this.state.remoteLabel;
     const role = this.state.role;
     await this.resetVoiceCall({ notifyBackend: true });
-    this.setState({ callId: null, error: message, muted: false, remoteLabel: label, role, status: 'failed' });
+    this.setState({ ...INITIAL_STATE, error: message, remoteLabel: label, role, status: 'failed' });
   }
 
   private startTimeout() {
