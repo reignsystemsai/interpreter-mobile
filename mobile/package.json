@@ -25,6 +25,7 @@
     "expo-device": "~8.0.10",
     "expo-linear-gradient": "~15.0.0",
     "expo-linking": "~8.0.0",
+    "expo-media-library": "~18.2.1",
     "expo-notifications": "~0.32.17",
     "expo-router": "~6.0.0",
     "expo-secure-store": "~15.0.8",

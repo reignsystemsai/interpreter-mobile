@@ -53,6 +53,13 @@
           "cameraPermission": "Allow Speak to use the camera for in-person and video interpretation."
         }
       ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Speak to save photos you capture.",
+          "savePhotosPermission": "Allow Speak to save photos you capture."
+        }
+      ],
       "expo-secure-store",
       [
         "expo-contacts",
