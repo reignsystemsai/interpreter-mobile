@@ -219,7 +219,8 @@ router.post("/:callId/transition", async (req, res) => {
   if (current.error) return callError(res, 502, "call_state_unavailable", "Unable to update the call.");
   if (!current.data) return callError(res, 404, "call_not_found", "This call is no longer available.");
   if (!authorizeParticipant(current.data, deviceId)) return callError(res, 403, "not_call_participant", "Unable to update the call.");
-  if (!isValidTransition(current.data.status, status)) {
+  const forceTerminal = status === "ended" || status === "failed";
+  if (!forceTerminal && !isValidTransition(current.data.status, status)) {
     return callError(res, 409, "invalid_call_state", `Cannot transition call status from "${current.data.status}" to "${status}".`);
   }
 
@@ -228,6 +229,7 @@ router.post("/:callId/transition", async (req, res) => {
     const resolved = resolveSpeakErrorResponse(error, "Unable to update the call.");
     return callError(res, resolved.status, resolved.code, resolved.message);
   }
+  if (forceTerminal) await stopCallTranslation(callId).catch(() => false);
   return res.status(200).json(toCallRecordJson(data));
 });
 

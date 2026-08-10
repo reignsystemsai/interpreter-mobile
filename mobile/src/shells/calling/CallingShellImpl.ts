@@ -80,7 +80,10 @@ export class CallingShellImpl implements CallingShell {
 
   async createCall(input: { callerDeviceId: string; recipientPhoneNumber: string; callerLanguage: string; recipientLanguage: string }): Promise<CallSession> {
     if (this.session && !isTerminalStatus(this.session.status)) {
-      throw new CallingError('ACTIVE_CALL_EXISTS', 'A call is already active on this device.');
+      const previousCallId = this.session.callId;
+      await this.deps.callData.updateCallStatus(previousCallId, 'ended').catch(() => undefined);
+      this.session = null;
+      this.notify();
     }
     const operationId = this.beginOperation();
 
@@ -172,7 +175,7 @@ export class CallingShellImpl implements CallingShell {
       // The backend already considers this call over (e.g. the other side ended or
       // declined it first) — that is the outcome we wanted anyway, so clear local
       // state instead of leaving a stale session that blocks a new call.
-      if (error.code !== 'INVALID_CALL_STATE') throw error;
+      console.info('[CallingShell] released local call while backend reconciles', { callId, code: error.code });
     }
 
     this.commit(operationId, null);
