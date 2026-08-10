@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { useAudioPlayer } from 'expo-audio';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
@@ -25,6 +26,7 @@ const BLUE = '#145CF6';
 const LIGHT_BLUE = '#A9D3FF';
 const WHITE = '#FFFFFF';
 const BLACK = '#03060D';
+const SPEAK_SOUND = 'data:audio/wav;base64,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';
 
 const LANGUAGES = [
   'English', 'Spanish', 'Brazilian Portuguese', 'French', 'German', 'Italian',
@@ -78,6 +80,7 @@ export function SpeakHomeScreen() {
   const { languageOne, languageTwo, setLanguageOne, setLanguageTwo } = useLanguagePreferences();
   const [overlay, setOverlay] = useState<Overlay>(null);
   const { errorMessage, isActive, start, status, stop } = useRealtimeInterpreter(languageOne, languageTwo);
+  const activationPlayer = useAudioPlayer({ uri: SPEAK_SOUND });
   const busy = isActive || ['requesting_permission', 'creating_session', 'connecting', 'connected', 'reconnecting'].includes(status);
   const listening = ['detecting', 'listening'].includes(status);
   const speaking = ['translating', 'speaking'].includes(status);
@@ -110,6 +113,7 @@ export function SpeakHomeScreen() {
 
   const toggleConversation = () => {
     Vibration.vibrate(12);
+    void activationPlayer.seekTo(0).then(() => activationPlayer.play()).catch(() => undefined);
     if (busy) stop();
     else void start();
   };
