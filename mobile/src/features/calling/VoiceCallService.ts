@@ -358,10 +358,13 @@ class CleanVoiceCallService {
         audioTypeOptions: { ...AndroidAudioTypePresets.communication, forceHandleAudioRouting: true },
         preferredOutputList: ['bluetooth', 'headset', 'speaker', 'earpiece'],
       },
-      ios: { defaultOutput: 'speaker' },
+      ios: { defaultOutput: 'earpiece' },
     });
     await AudioSession.setDefaultRemoteAudioTrackVolume(1);
     await AudioSession.startAudioSession();
+    InCallManager.start({ auto: true, media: 'audio' });
+    InCallManager.setForceSpeakerphoneOn(false);
+    InCallManager.setSpeakerphoneOn(false);
     const room = new Room({
       adaptiveStream: true,
       audioCaptureDefaults: AUDIO_CAPTURE,
@@ -400,7 +403,7 @@ class CleanVoiceCallService {
       if (this.room === room) void this.resetVoiceCall({ notifyBackend: true });
     });
     this.updateState({ status: call.role === 'caller' ? 'ringing' : 'connecting' });
-    await room.connect(call.livekitUrl, call.token, { autoSubscribe: false, maxRetries: 3 });
+    await room.connect(call.livekitUrl, call.token, { autoSubscribe: true, maxRetries: 3 });
     for (const participant of room.remoteParticipants.values()) {
       for (const publication of participant.audioTrackPublications.values()) {
         publication.setSubscribed(this.shouldSubscribe(call, participant.identity, publication.trackName));
@@ -417,8 +420,7 @@ class CleanVoiceCallService {
     const humanParticipantConnected = [...room.remoteParticipants.values()].some((participant) => participant.identity !== `translator:${call.callId}`);
     if (humanParticipantConnected) this.markConnected();
     else this.updateState({ status: call.role === 'caller' ? 'ringing' : 'connecting' });
-    if (Platform.OS === 'android') await AudioSession.selectAudioOutput('speaker');
-    else await AudioSession.selectAudioOutput('force_speaker');
+    await AudioSession.selectAudioOutput('earpiece').catch(() => undefined);
   }
 
   private shouldSubscribe(call: ActiveCall, participantIdentity: string, trackName: string) {
@@ -453,6 +455,8 @@ class CleanVoiceCallService {
       }
     }
     await AudioSession.stopAudioSession().catch(() => undefined);
+    InCallManager.setForceSpeakerphoneOn(null);
+    InCallManager.stop();
   }
 }
 
