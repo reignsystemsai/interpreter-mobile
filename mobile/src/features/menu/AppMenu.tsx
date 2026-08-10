@@ -51,7 +51,7 @@ export function AppMenu({ onClose, onNavigate, visible }: {
   const { isGuest, signOut, user } = useAuth();
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
-      <BlurView experimentalBlurMethod="dimezisBlurView" intensity={48} style={styles.backdrop} tint="light">
+      <BlurView experimentalBlurMethod="dimezisBlurView" intensity={48} style={styles.backdrop} tint="dark">
       <Pressable accessibilityLabel="Close menu" onPress={onClose} style={StyleSheet.absoluteFill} />
       <View style={styles.page}>
         <Pressable accessibilityLabel="Close menu" accessibilityRole="button" hitSlop={12} onPress={onClose} style={styles.close}>
@@ -92,17 +92,17 @@ export function AppMenu({ onClose, onNavigate, visible }: {
 
 const BLUE = '#075BFF';
 const styles = StyleSheet.create({
-  backdrop: { alignItems: 'flex-end', backgroundColor: 'rgba(9,28,64,0.14)', flex: 1, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 26 },
-  page: { backgroundColor: 'rgba(248,251,255,0.68)', borderColor: 'rgba(255,255,255,0.94)', borderRadius: 32, borderWidth: 1, maxHeight: '94%', shadowColor: '#164995', shadowOffset: { height: 10, width: 0 }, shadowOpacity: 0.20, shadowRadius: 30, width: '92%' },
+  backdrop: { alignItems: 'flex-end', backgroundColor: 'rgba(0,4,12,0.54)', flex: 1, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 26 },
+  page: { backgroundColor: 'rgba(4,16,38,0.82)', borderColor: 'rgba(45,156,255,0.48)', borderRadius: 32, borderWidth: 1, maxHeight: '94%', shadowColor: '#19D7FF', shadowOffset: { height: 0, width: 0 }, shadowOpacity: 0.22, shadowRadius: 26, width: '92%' },
   close: { alignItems: 'center', elevation: 10, height: 54, justifyContent: 'center', position: 'absolute', right: 12, top: 10, width: 54, zIndex: 20 },
   closeText: { color: BLUE, fontSize: 42, fontWeight: '300', lineHeight: 45 },
   content: { paddingBottom: 30, paddingHorizontal: 28, paddingTop: 76 },
-  section: { borderBottomColor: '#E5EAF2', borderBottomWidth: 1, marginBottom: 25, paddingBottom: 12 },
-  sectionLabel: { color: '#667399', fontSize: 14, fontWeight: '700', marginBottom: 10 },
+  section: { borderBottomColor: 'rgba(62,157,255,0.2)', borderBottomWidth: 1, marginBottom: 25, paddingBottom: 12 },
+  sectionLabel: { color: '#7794BA', fontSize: 14, fontWeight: '700', marginBottom: 10 },
   row: { alignItems: 'center', flexDirection: 'row', minHeight: 58 },
   icon: { color: BLUE, fontSize: 25, textAlign: 'center', width: 44 },
-  label: { color: '#101828', flex: 1, fontSize: 18, marginLeft: 8 },
-  chevron: { color: '#65718A', fontSize: 34, fontWeight: '300' },
+  label: { color: '#F8FBFF', flex: 1, fontSize: 18, marginLeft: 8 },
+  chevron: { color: '#4EAFFF', fontSize: 34, fontWeight: '300' },
   logout: { alignItems: 'center', flexDirection: 'row', minHeight: 58 },
   logoutIcon: { color: '#FF315D', fontSize: 27, textAlign: 'center', width: 44 },
   logoutText: { color: '#FF315D', fontSize: 18, marginLeft: 8 },
