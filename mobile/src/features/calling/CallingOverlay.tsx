@@ -24,10 +24,10 @@ export function CallingOverlay({ onClose, visible }: { onClose: () => void; visi
 }
 
 const styles = StyleSheet.create({
-  page: { backgroundColor: '#03060D', flex: 1, paddingHorizontal: 22 },
+  page: { backgroundColor: '#FFFFFF', flex: 1, paddingHorizontal: 22 },
   header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 18 },
-  title: { color: '#FFFFFF', fontSize: 31, fontWeight: '700' },
-  subtitle: { color: '#75A9FF', fontSize: 13, marginTop: 2 },
+  title: { color: '#102A56', fontSize: 31, fontWeight: '700' },
+  subtitle: { color: '#5277B8', fontSize: 13, marginTop: 2 },
   close: { color: BLUE, fontSize: 38, fontWeight: '300' },
   content: { flex: 1 },
 });

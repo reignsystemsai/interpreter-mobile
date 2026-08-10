@@ -12,7 +12,7 @@ import {
 import { BlurView } from 'expo-blur';
 import { useAudioPlayer } from 'expo-audio';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Circle, Line, Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import { useRealtimeInterpreter } from '../../hooks/useRealtimeInterpreter';
 import { recordAppReady } from '../../services/performance';
@@ -26,7 +26,6 @@ import { SpeakCameraModal } from './CameraInterpreterModal';
 const BLUE = '#145CF6';
 const LIGHT_BLUE = '#A9D3FF';
 const WHITE = '#FFFFFF';
-const BLACK = '#03060D';
 const SPEAK_SOUND = 'data:audio/wav;base64,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';
 
 const LANGUAGES = [
@@ -46,10 +45,6 @@ function MicrophoneIcon({ color = WHITE, size = 27 }: { color?: string; size?: n
     <Path d="M34 20a14 14 0 0 1 28 0v29a14 14 0 0 1-28 0V20Z" fill="none" stroke={color} strokeWidth={7} />
     <Path d="M22 46v4a26 26 0 0 0 52 0v-4M48 76v14M35 90h26" fill="none" stroke={color} strokeLinecap="round" strokeWidth={7} />
   </Svg>;
-}
-
-function WaveIcon() {
-  return <Svg height={26} viewBox="0 0 38 26" width={38}>{[5, 11, 17, 23, 29, 35].map((x, index) => <Line key={x} stroke={WHITE} strokeLinecap="round" strokeWidth={2.4} x1={x} x2={x} y1={index % 2 ? 4 : 8} y2={index % 2 ? 22 : 18} />)}</Svg>;
 }
 
 function CameraIcon() {
@@ -174,14 +169,14 @@ export function SpeakHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { backgroundColor: BLACK, flex: 1 },
+  page: { backgroundColor: WHITE, flex: 1 },
   safe: { flex: 1 },
   header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8 },
   brand: { alignItems: 'center', flexDirection: 'row' },
   brandBars: { alignItems: 'center', flexDirection: 'row', gap: 4, marginRight: 10 },
   brandBar: { backgroundColor: BLUE, borderRadius: 3, width: 3 },
-  brandName: { color: WHITE, fontSize: 27, fontWeight: '700' },
-  tagline: { color: '#8CB8FF', fontSize: 11, marginTop: -2 },
+  brandName: { color: BLUE, fontSize: 27, fontWeight: '700' },
+  tagline: { color: '#5277B8', fontSize: 11, marginTop: -2 },
   livingRing: { alignItems: 'center', borderColor: BLUE, borderWidth: 2, justifyContent: 'center', shadowColor: BLUE, shadowOpacity: 0.24, shadowRadius: 14 },
   outerBand: { borderColor: 'rgba(20,92,246,0.46)', borderWidth: 1.5, position: 'absolute', shadowColor: BLUE, shadowOpacity: 0.55, shadowRadius: 20 },
   outerBandSoft: { borderColor: 'rgba(71,139,255,0.22)', borderWidth: 1 },
@@ -196,9 +191,9 @@ const styles = StyleSheet.create({
   blueChevron: { color: WHITE, fontSize: 23 },
   swap: { color: BLUE, fontSize: 34, fontWeight: '700' },
   microphoneArea: { alignItems: 'center', marginTop: 52 },
-  microphoneCore: { alignItems: 'center', backgroundColor: BLACK, borderRadius: 108, height: 216, justifyContent: 'center', width: 216 },
-  microphoneActive: { backgroundColor: '#071A42', shadowColor: BLUE, shadowOpacity: 0.55, shadowRadius: 30 },
-  readyText: { color: WHITE, fontSize: 35, fontWeight: '700', letterSpacing: -0.8 },
+  microphoneCore: { alignItems: 'center', backgroundColor: WHITE, borderRadius: 108, height: 216, justifyContent: 'center', width: 216 },
+  microphoneActive: { backgroundColor: '#EEF5FF', shadowColor: BLUE, shadowOpacity: 0.4, shadowRadius: 30 },
+  readyText: { color: BLUE, fontSize: 35, fontWeight: '700', letterSpacing: -0.8 },
   readyHint: { color: '#7EB1FF', fontSize: 12, fontWeight: '600', marginTop: 7 },
   speakButton: { alignItems: 'center', backgroundColor: BLUE, borderRadius: 28, flexDirection: 'row', height: 62, justifyContent: 'center', marginTop: 31, width: '88%' },
   speakButtonText: { color: WHITE, fontSize: 21, fontWeight: '600', marginLeft: 12 },
@@ -210,17 +205,17 @@ const styles = StyleSheet.create({
   plusButton: { alignItems: 'center', flex: 1, justifyContent: 'center' },
   plus: { color: BLUE, fontSize: 47, fontWeight: '300' },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#07101F', borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '70%', padding: 22 },
+  sheet: { backgroundColor: WHITE, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '70%', padding: 22 },
   sheetTitle: { color: BLUE, fontSize: 24, fontWeight: '700', marginBottom: 10 },
   sheetRow: { borderBottomColor: '#DCE8FF', borderBottomWidth: 1, justifyContent: 'center', minHeight: 52 },
-  sheetRowText: { color: WHITE, fontSize: 17 },
+  sheetRowText: { color: BLUE, fontSize: 17 },
   toolsBackdrop: { alignItems: 'center', flex: 1, justifyContent: 'flex-end', padding: 24 },
-  toolsCard: { backgroundColor: '#07101F', borderColor: BLUE, borderRadius: 28, borderWidth: 1, padding: 22, width: '100%' },
+  toolsCard: { backgroundColor: WHITE, borderColor: '#B9D1FF', borderRadius: 28, borderWidth: 1, padding: 22, shadowColor: BLUE, shadowOpacity: 0.12, shadowRadius: 24, width: '100%' },
   toolsTitle: { color: BLUE, fontSize: 22, fontWeight: '700' },
   cameraTool: { alignItems: 'center', backgroundColor: '#EAF3FF', borderRadius: 22, flexDirection: 'row', marginTop: 18, minHeight: 62, paddingHorizontal: 20 },
   cameraText: { color: BLUE, fontSize: 18, fontWeight: '600', marginLeft: 14 },
   errorBackdrop: { alignItems: 'center', flex: 1, justifyContent: 'center', padding: 24 },
-  errorCard: { alignItems: 'center', backgroundColor: '#07101F', borderColor: BLUE, borderRadius: 24, borderWidth: 1, padding: 24, width: '100%' },
+  errorCard: { alignItems: 'center', backgroundColor: WHITE, borderColor: '#B9D1FF', borderRadius: 24, borderWidth: 1, padding: 24, width: '100%' },
   errorTitle: { color: BLUE, fontSize: 23, fontWeight: '700' },
   errorBody: { color: BLUE, fontSize: 15, lineHeight: 22, marginTop: 10, textAlign: 'center' },
   errorAction: { alignItems: 'center', backgroundColor: BLUE, borderRadius: 22, marginTop: 20, padding: 14, width: '100%' },

@@ -7,7 +7,6 @@ import { VoiceCallService, type VoiceCallState } from './VoiceCallService';
 
 const BLUE = '#145CF6';
 const WHITE = '#FFFFFF';
-const BLACK = '#03060D';
 
 const LABELS: Record<Exclude<VoiceCallState['status'], 'idle'>, string> = {
   preparing: 'Calling…',
@@ -101,14 +100,14 @@ export function VoiceCallSurface() {
 }
 
 const styles = StyleSheet.create({
-  safe: { backgroundColor: BLACK, flex: 1 },
+  safe: { backgroundColor: WHITE, flex: 1 },
   header: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 10 },
   status: { color: BLUE, fontSize: 15, fontWeight: '700' },
   timer: { color: BLUE, fontSize: 13, marginTop: 4 },
-  stage: { alignItems: 'center', backgroundColor: '#07101F', borderColor: '#17366C', borderRadius: 34, borderWidth: 1, flex: 1, justifyContent: 'center', margin: 22, overflow: 'hidden' },
+  stage: { alignItems: 'center', backgroundColor: '#F3F7FF', borderColor: '#D6E4FF', borderRadius: 34, borderWidth: 1, flex: 1, justifyContent: 'center', margin: 22, overflow: 'hidden', shadowColor: BLUE, shadowOpacity: 0.1, shadowRadius: 22 },
   avatar: { alignItems: 'center', borderColor: BLUE, borderRadius: 78, borderWidth: 3, height: 156, justifyContent: 'center', shadowColor: BLUE, shadowOpacity: 0.22, shadowRadius: 22, width: 156 },
   avatarText: { color: BLUE, fontSize: 62, fontWeight: '600' },
-  name: { color: WHITE, fontSize: 26, fontWeight: '700', marginTop: 22 },
+  name: { color: '#102A56', fontSize: 26, fontWeight: '700', marginTop: 22 },
   nameOnVideo: { backgroundColor: 'rgba(255,255,255,0.88)', borderRadius: 18, bottom: 18, left: 18, marginTop: 0, paddingHorizontal: 14, paddingVertical: 8, position: 'absolute' },
   localVideo: { borderColor: WHITE, borderRadius: 18, borderWidth: 2, height: 150, position: 'absolute', right: 15, top: 15, width: 108 },
   interpreter: { borderColor: BLUE, borderRadius: 24, borderWidth: 2, marginHorizontal: 24, paddingHorizontal: 18, paddingVertical: 13 },
@@ -117,9 +116,9 @@ const styles = StyleSheet.create({
   interpreterTitleActive: { color: WHITE },
   interpreterHint: { color: BLUE, fontSize: 12, marginTop: 2 },
   controls: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', paddingHorizontal: 22, paddingTop: 16 },
-  control: { alignItems: 'center', backgroundColor: '#0B1830', borderColor: '#17366C', borderRadius: 24, borderWidth: 1, justifyContent: 'center', minHeight: 52, minWidth: 82, paddingHorizontal: 15 },
+  control: { alignItems: 'center', backgroundColor: '#EDF4FF', borderColor: '#D0E1FF', borderRadius: 24, borderWidth: 1, justifyContent: 'center', minHeight: 52, minWidth: 82, paddingHorizontal: 15 },
   controlActive: { backgroundColor: BLUE },
-  controlText: { color: WHITE, fontSize: 13, fontWeight: '700' },
+  controlText: { color: '#174EA6', fontSize: 13, fontWeight: '700' },
   controlTextActive: { color: WHITE },
   end: { alignItems: 'center', alignSelf: 'center', backgroundColor: '#E53935', borderRadius: 27, justifyContent: 'center', marginBottom: 18, marginTop: 16, minHeight: 54, width: '62%' },
   endText: { color: WHITE, fontSize: 17, fontWeight: '700' },
