@@ -67,7 +67,11 @@ function LivingRing({ children, size }: { children: ReactNode; size: number }) {
     opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.68, 1] }),
     transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.985, 1.035] }) }],
   };
-  return <Animated.View style={[styles.livingRing, { borderRadius: size / 2, height: size, width: size }, animatedStyle]}>{children}</Animated.View>;
+  return <View style={{ alignItems: 'center', height: size, justifyContent: 'center', width: size }}>
+    <Animated.View pointerEvents="none" style={[styles.outerBand, { borderRadius: size * 0.61, height: size * 1.22, width: size * 1.22 }, animatedStyle]} />
+    <Animated.View pointerEvents="none" style={[styles.outerBand, styles.outerBandSoft, { borderRadius: size * 0.72, height: size * 1.44, width: size * 1.44 }, animatedStyle]} />
+    <Animated.View style={[styles.livingRing, { borderRadius: size / 2, height: size, width: size }, animatedStyle]}>{children}</Animated.View>
+  </View>;
 }
 
 export function SpeakHomeScreen() {
@@ -168,6 +172,8 @@ const styles = StyleSheet.create({
   brandName: { color: WHITE, fontSize: 27, fontWeight: '700' },
   tagline: { color: '#8CB8FF', fontSize: 11, marginTop: -2 },
   livingRing: { alignItems: 'center', borderColor: BLUE, borderWidth: 2, justifyContent: 'center', shadowColor: BLUE, shadowOpacity: 0.24, shadowRadius: 14 },
+  outerBand: { borderColor: 'rgba(20,92,246,0.46)', borderWidth: 1.5, position: 'absolute', shadowColor: BLUE, shadowOpacity: 0.55, shadowRadius: 20 },
+  outerBandSoft: { borderColor: 'rgba(71,139,255,0.22)', borderWidth: 1 },
   content: { alignItems: 'center', flex: 1, paddingHorizontal: 24, paddingTop: 38 },
   title: { color: BLUE, fontSize: 39, fontWeight: '600', letterSpacing: -1.5 },
   languages: { alignItems: 'center', flexDirection: 'row', gap: 10, marginTop: 28, width: '100%' },
