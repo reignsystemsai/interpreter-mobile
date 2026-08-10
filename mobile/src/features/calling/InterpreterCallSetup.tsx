@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { SpeakMark } from '../../components/SpeakNavigation';
 import type { InterpreterContact } from '../contacts/ContactsProvider';
 
 const BLUE = '#1463FF';
@@ -35,14 +36,14 @@ export function InterpreterCallSetup({ contact, creating, initialCallerLanguage,
   };
 
   return <View style={styles.page}>
-    <Pressable onPress={onBack}><Text style={styles.back}>‹ {contact.displayName}</Text></Pressable>
+    <View style={styles.setupHeader}><Pressable onPress={onBack} style={styles.backButton}><Text style={styles.back}>‹</Text></Pressable><SpeakMark compact /><View style={styles.backButton} /></View>
     <Text style={styles.eyebrow}>INTERPRETER</Text>
-    <Text style={styles.title}>How do you want to connect?</Text>
+    <Text style={styles.title}>Set up your interpreted call</Text>
 
     <Text style={styles.label}>Call type</Text>
     <View style={styles.segment}>
-      <Choice active={callType === 'voice'} label="Voice Call" onPress={() => setCallType('voice')} />
-      <Choice active={callType === 'video'} label="Video Call" onPress={() => setCallType('video')} />
+      <Choice active={callType === 'voice'} label="Voice" onPress={() => setCallType('voice')} />
+      <Choice active={callType === 'video'} label="Video" onPress={() => setCallType('video')} />
     </View>
 
     <Text style={styles.label}>Translated voice</Text>
@@ -56,7 +57,7 @@ export function InterpreterCallSetup({ contact, creating, initialCallerLanguage,
     <Pressable onPress={() => setLanguageTarget('recipient')} style={styles.languageRow}><Text style={styles.languageCaption}>{contact.displayName} hears</Text><Text style={styles.languageValue}>{recipientLanguage}  ›</Text></Pressable>
     <Pressable onPress={() => { const first = callerLanguage; setCallerLanguage(recipientLanguage); setRecipientLanguage(first); }} style={styles.swap}><Text style={styles.swapText}>Swap language direction ⇄</Text></Pressable>
 
-    <Pressable disabled={creating} onPress={() => onStart({ callType, callerLanguage, recipientLanguage, voiceGender })} style={[styles.start, creating && styles.disabled]}><Text style={styles.startText}>{creating ? 'Starting…' : `Start Interpreter ${callType === 'video' ? 'Video' : 'Call'}`}</Text></Pressable>
+    <Pressable disabled={creating} onPress={() => onStart({ callType, callerLanguage, recipientLanguage, voiceGender })} style={[styles.start, creating && styles.disabled]}><Text style={styles.startText}>{creating ? 'Starting…' : 'Start interpreted call'}</Text></Pressable>
 
     <Modal animationType="slide" onRequestClose={() => setLanguageTarget(null)} transparent visible={languageTarget !== null}>
       <View style={styles.backdrop}><Pressable onPress={() => setLanguageTarget(null)} style={StyleSheet.absoluteFill} /><View style={styles.sheet}><Text style={styles.sheetTitle}>Choose language</Text><ScrollView>{LANGUAGES.map((language) => <Pressable key={language} onPress={() => chooseLanguage(language)} style={styles.sheetRow}><Text style={styles.sheetText}>{language}</Text></Pressable>)}</ScrollView></View></View>
@@ -70,9 +71,11 @@ function Choice({ active, label, onPress }: { active: boolean; label: string; on
 
 const styles = StyleSheet.create({
   page: { backgroundColor: '#FFFFFF', flex: 1, paddingTop: 4 },
-  back: { color: BLUE, fontSize: 16, fontWeight: '700', paddingVertical: 8 },
-  eyebrow: { color: BLUE, fontSize: 12, fontWeight: '800', letterSpacing: 2.4, marginTop: 18 },
-  title: { color: '#102A56', fontSize: 30, fontWeight: '800', letterSpacing: -0.8, lineHeight: 36, marginTop: 7 },
+  setupHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  backButton: { alignItems: 'center', height: 40, justifyContent: 'center', width: 40 },
+  back: { color: BLUE, fontSize: 30, fontWeight: '500' },
+  eyebrow: { color: BLUE, fontSize: 20, fontWeight: '800', letterSpacing: 0.2, marginTop: 4, textAlign: 'center' },
+  title: { color: '#60779B', fontSize: 13, fontWeight: '500', marginTop: 3, textAlign: 'center' },
   label: { color: '#60779B', fontSize: 12, fontWeight: '800', letterSpacing: 1.1, marginBottom: 8, marginTop: 24, textTransform: 'uppercase' },
   segment: { backgroundColor: '#F2F6FD', borderColor: '#D7E5FA', borderRadius: 19, borderWidth: 1, flexDirection: 'row', gap: 6, padding: 5 },
   choice: { alignItems: 'center', borderRadius: 14, flex: 1, paddingHorizontal: 10, paddingVertical: 13 },
