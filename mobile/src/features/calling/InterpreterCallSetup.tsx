@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { SpeakMark } from '../../components/SpeakNavigation';
 import type { InterpreterContact } from '../contacts/ContactsProvider';
+import { SpeakInterpreterSetupView } from './SpeakInterpreterSetupView';
 
 const BLUE = '#1463FF';
 const WHITE = '#FFFFFF';
@@ -35,38 +35,26 @@ export function InterpreterCallSetup({ contact, creating, initialCallerLanguage,
     setLanguageTarget(null);
   };
 
-  return <View style={styles.page}>
-    <View style={styles.setupHeader}><Pressable onPress={onBack} style={styles.backButton}><Text style={styles.back}>‹</Text></Pressable><SpeakMark compact /><View style={styles.backButton} /></View>
-    <Text style={styles.eyebrow}>INTERPRETER</Text>
-    <Text style={styles.title}>Set up your interpreted call</Text>
-
-    <Text style={styles.label}>Call type</Text>
-    <View style={styles.segment}>
-      <Choice active={callType === 'voice'} label="Voice" onPress={() => setCallType('voice')} />
-      <Choice active={callType === 'video'} label="Video" onPress={() => setCallType('video')} />
-    </View>
-
-    <Text style={styles.label}>Translated voice</Text>
-    <View style={styles.segment}>
-      <Choice active={voiceGender === 'male'} label="Male" onPress={() => setVoiceGender('male')} />
-      <Choice active={voiceGender === 'female'} label="Female" onPress={() => setVoiceGender('female')} />
-    </View>
-
-    <Text style={styles.label}>Languages</Text>
-    <Pressable onPress={() => setLanguageTarget('caller')} style={styles.languageRow}><Text style={styles.languageCaption}>You speak</Text><Text style={styles.languageValue}>{callerLanguage}  ›</Text></Pressable>
-    <Pressable onPress={() => setLanguageTarget('recipient')} style={styles.languageRow}><Text style={styles.languageCaption}>{contact.displayName} hears</Text><Text style={styles.languageValue}>{recipientLanguage}  ›</Text></Pressable>
-    <Pressable onPress={() => { const first = callerLanguage; setCallerLanguage(recipientLanguage); setRecipientLanguage(first); }} style={styles.swap}><Text style={styles.swapText}>Swap language direction ⇄</Text></Pressable>
-
-    <Pressable disabled={creating} onPress={() => onStart({ callType, callerLanguage, recipientLanguage, voiceGender })} style={[styles.start, creating && styles.disabled]}><Text style={styles.startText}>{creating ? 'Starting…' : 'Start interpreted call'}</Text></Pressable>
+  return <>
+    <SpeakInterpreterSetupView
+      callType={callType}
+      callerLanguage={callerLanguage}
+      creating={creating}
+      onBack={onBack}
+      onCall={() => onStart({ callType, callerLanguage, recipientLanguage, voiceGender })}
+      onCallerLanguage={() => setLanguageTarget('caller')}
+      onCallType={setCallType}
+      onRecipientLanguage={() => setLanguageTarget('recipient')}
+      onSwap={() => { const first = callerLanguage; setCallerLanguage(recipientLanguage); setRecipientLanguage(first); }}
+      onVoiceGender={setVoiceGender}
+      recipientLanguage={recipientLanguage}
+      voiceGender={voiceGender}
+    />
 
     <Modal animationType="slide" onRequestClose={() => setLanguageTarget(null)} transparent visible={languageTarget !== null}>
       <View style={styles.backdrop}><Pressable onPress={() => setLanguageTarget(null)} style={StyleSheet.absoluteFill} /><View style={styles.sheet}><Text style={styles.sheetTitle}>Choose language</Text><ScrollView>{LANGUAGES.map((language) => <Pressable key={language} onPress={() => chooseLanguage(language)} style={styles.sheetRow}><Text style={styles.sheetText}>{language}</Text></Pressable>)}</ScrollView></View></View>
     </Modal>
-  </View>;
-}
-
-function Choice({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
-  return <Pressable onPress={onPress} style={[styles.choice, active && styles.choiceActive]}><Text style={[styles.choiceText, active && styles.choiceTextActive]}>{label}</Text></Pressable>;
+  </>;
 }
 
 const styles = StyleSheet.create({
