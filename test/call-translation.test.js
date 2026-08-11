@@ -73,6 +73,15 @@ test("server creates exactly two translation directions and stops them with the 
   assert.match(calls, /await stopCallTranslation\(row\.id\)/);
 });
 
+test("dialing reconciles stale active_calls without globally blocking calls", () => {
+  const calls = read("src", "server", "routes", "calls.js");
+  assert.match(calls, /await expireUnansweredCalls\(admin\)/);
+  assert.match(calls, /await releaseOpenCallsForDevice\(admin, callerDeviceId\)/);
+  assert.match(calls, /await countHumanParticipants\(row\.room_name\) >= 2/);
+  assert.match(calls, /await finishCall\(admin, row, "expired"\)/);
+  assert.doesNotMatch(calls, /callerOpen\.data \|\| recipientOpen\.data/);
+});
+
 test("both call directions continuously reach their independent translation sessions", () => {
   const bridge = read("src", "server", "translation", "translation-bridge.js");
   assert.doesNotMatch(bridge, /SELF_PLAYBACK_COOLDOWN_MS|shouldSuppressInput|isPlaybackActive/);

@@ -2,7 +2,7 @@ const crypto = require("node:crypto");
 const express = require("express");
 
 const { normalizeE164 } = require("../devices");
-const { createVoiceRoom, createVoiceToken, deleteVoiceRoom, isLiveKitConfigured } = require("../livekit");
+const { countHumanParticipants, createVoiceRoom, createVoiceToken, deleteVoiceRoom, isLiveKitConfigured } = require("../livekit");
 const { sendIncomingVoiceCallPush } = require("../push");
 const { getSupabaseAdmin, isSupabaseConfigured } = require("../supabase");
 const { outputLanguageCode } = require("../translation/languages");
@@ -10,6 +10,8 @@ const { startCallTranslation, stopCallTranslation } = require("../translation/tr
 
 const router = express.Router();
 const OPEN_STATUSES = ["calling", "ringing", "accepted"];
+const ACCEPT_CONNECTION_GRACE_MS = 30_000;
+const UNANSWERED_CALL_TIMEOUT_MS = 90_000;
 
 function cleanText(value, maxLength = 160) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
@@ -29,6 +31,46 @@ async function finishCall(admin, row, status) {
   if (result.error) throw result.error;
   await stopCallTranslation(row.id).catch(() => undefined);
   await deleteVoiceRoom(row.room_name);
+}
+
+async function loadOpenCallsForDevice(admin, deviceId) {
+  return admin
+    .from("active_calls")
+    .select("*")
+    .in("status", OPEN_STATUSES)
+    .or(`caller_device_id.eq.${deviceId},recipient_device_id.eq.${deviceId}`)
+    .order("created_at", { ascending: false });
+}
+
+async function expireUnansweredCalls(admin) {
+  const cutoff = new Date(Date.now() - UNANSWERED_CALL_TIMEOUT_MS).toISOString();
+  const result = await admin
+    .from("active_calls")
+    .select("*")
+    .in("status", ["calling", "ringing"])
+    .lt("created_at", cutoff);
+  if (result.error) throw result.error;
+  for (const row of result.data ?? []) await finishCall(admin, row, "expired");
+}
+
+async function releaseOpenCallsForDevice(admin, deviceId) {
+  const result = await loadOpenCallsForDevice(admin, deviceId);
+  if (result.error) throw result.error;
+  for (const row of result.data ?? []) await finishCall(admin, row, "ended");
+}
+
+async function recipientHasActiveCall(admin, deviceId) {
+  const result = await loadOpenCallsForDevice(admin, deviceId);
+  if (result.error) throw result.error;
+  for (const row of result.data ?? []) {
+    if (row.status !== "accepted") return true;
+    const acceptedAt = Date.parse(row.accepted_at ?? row.created_at);
+    if (!Number.isFinite(acceptedAt) || Date.now() - acceptedAt < ACCEPT_CONNECTION_GRACE_MS) return true;
+    if (await countHumanParticipants(row.room_name) >= 2) return true;
+    await finishCall(admin, row, "expired");
+    console.info("[VoiceCall] released abandoned accepted call", { callId: row.id });
+  }
+  return false;
 }
 
 router.get("/incoming", async (req, res) => {
@@ -83,6 +125,12 @@ router.post("/start", async (req, res) => {
   }
 
   const admin = getSupabaseAdmin();
+  try {
+    await expireUnansweredCalls(admin);
+  } catch (error) {
+    console.error("[VoiceCall] stale-call cleanup failed", { reason: error instanceof Error ? error.message : "unknown" });
+    return callError(res, 502, "call_state_unavailable", "Unable to start the call.");
+  }
   const [callerResult, recipientResult] = await Promise.all([
     admin.from("device_installations").select("id,device_id,phone_number_e164,platform").eq("device_id", callerDeviceId).eq("enabled", true).maybeSingle(),
     admin.from("device_installations").select("id,device_id,phone_number_e164,platform,push_token").eq("phone_number_e164", recipientPhoneNumber).eq("enabled", true).order("last_seen_at", { ascending: false }).limit(1).maybeSingle()
@@ -97,12 +145,16 @@ router.post("/start", async (req, res) => {
     return callError(res, 409, "same_device", "Choose another Interpreter device.");
   }
 
-  const [callerOpen, recipientOpen] = await Promise.all([
-    admin.from("active_calls").select("id").in("status", OPEN_STATUSES).or(`caller_device_id.eq.${callerDeviceId},recipient_device_id.eq.${callerDeviceId}`).limit(1).maybeSingle(),
-    admin.from("active_calls").select("id").in("status", OPEN_STATUSES).or(`caller_device_id.eq.${recipientResult.data.device_id},recipient_device_id.eq.${recipientResult.data.device_id}`).limit(1).maybeSingle()
-  ]);
-  if (callerOpen.error || recipientOpen.error) return callError(res, 502, "call_state_unavailable", "Unable to start the call.");
-  if (callerOpen.data || recipientOpen.data) return callError(res, 409, "device_busy", "One of the devices is already in a call.");
+  try {
+    // A new outbound dial explicitly replaces any call the caller abandoned.
+    await releaseOpenCallsForDevice(admin, callerDeviceId);
+    if (await recipientHasActiveCall(admin, recipientResult.data.device_id)) {
+      return callError(res, 409, "device_busy", "This person is already in a call.");
+    }
+  } catch (error) {
+    console.error("[VoiceCall] active-call reconciliation failed", { reason: error instanceof Error ? error.message : "unknown" });
+    return callError(res, 502, "call_state_unavailable", "Unable to start the call.");
+  }
 
   const roomName = `voice-${crypto.randomUUID()}`;
   let row;

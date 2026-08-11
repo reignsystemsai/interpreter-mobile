@@ -29,6 +29,17 @@ async function deleteVoiceRoom(roomName) {
   }
 }
 
+async function countHumanParticipants(roomName) {
+  if (typeof roomName !== "string" || !roomName) return 0;
+  try {
+    const participants = await roomService().listParticipants(roomName);
+    return participants.filter((participant) => !participant.identity?.startsWith("translator:")).length;
+  } catch (error) {
+    if (/not found/i.test(error instanceof Error ? error.message : "")) return 0;
+    throw error;
+  }
+}
+
 async function createVoiceToken({ identity, roomName }) {
   if (!isLiveKitConfigured()) throw new Error("LiveKit is not configured");
   const token = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, {
@@ -65,4 +76,4 @@ async function createTranslationToken({ callId, roomName }) {
   return token.toJwt();
 }
 
-module.exports = { createTranslationToken, createVoiceRoom, createVoiceToken, deleteVoiceRoom, isLiveKitConfigured, liveKitHttpUrl };
+module.exports = { countHumanParticipants, createTranslationToken, createVoiceRoom, createVoiceToken, deleteVoiceRoom, isLiveKitConfigured, liveKitHttpUrl };
