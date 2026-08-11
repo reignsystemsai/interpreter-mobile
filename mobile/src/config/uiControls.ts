@@ -8,7 +8,7 @@ export const UI_CONTROLS = {
   layout: {
     compactHeightBreakpoint: 780,
     screen: {
-      paddingTop: 0,
+      paddingTop: 20,
       paddingHorizontal: 24,
       paddingHorizontalCompact: 18,
       paddingBottom: 22,
