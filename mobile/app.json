@@ -2,11 +2,17 @@
   "expo": {
     "name": "interpreter",
     "slug": "interpreter-ai",
-    "owner": "www.interpreter.ai",
+    "owner": "speakai",
     "version": "1.1.0",
     "icon": "./assets/interpreter-mark-clean.png",
     "orientation": "portrait",
     "scheme": "interpreterai",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/151f64e9-74cf-4482-8ebe-a5dedb489afd"
+    },
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
