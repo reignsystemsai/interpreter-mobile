@@ -43,15 +43,15 @@ test("translation audio and speaker roles remain directionally isolated", () => 
 });
 
 test("mobile subscribes only to its translated track and never carries an OpenAI key", () => {
-  const mobile = read("mobile", "src", "features", "calling", "VoiceCallService.ts");
-  assert.match(mobile, /autoSubscribe: false/);
+  const mobile = read("mobile", "src", "features", "calling", "SpeakCallEngine.ts");
+  assert.match(mobile, /applySubscriptionPolicy/);
   assert.match(mobile, /translation-to-\$\{call\.role\}/);
   assert.match(mobile, /participant\.identity === `translator:\$\{call\.callId\}`/);
   assert.doesNotMatch(mobile, /OPENAI_API_KEY|api\.openai\.com/);
 });
 
 test("call languages are selected after the contact and passed explicitly to the call", () => {
-  const home = read("mobile", "app", "index.tsx");
+  const home = read("mobile", "src", "features", "home", "SpeakHomeScreen.tsx");
   const overlay = read("mobile", "src", "features", "calling", "CallingOverlay.tsx");
   const selector = read("mobile", "src", "features", "calling", "CallLanguageSelection.tsx");
   const contacts = read("mobile", "src", "features", "contacts", "ContactsPermissionPanel.tsx");
@@ -60,7 +60,7 @@ test("call languages are selected after the contact and passed explicitly to the
   assert.match(selector, /I speak/);
   assert.match(selector, /They speak/);
   assert.match(selector, /Start Voice Call/);
-  assert.match(contacts, /startVoiceCall\(\{ callerLanguage,[\s\S]*recipientLanguage \}\)/);
+  assert.match(contacts, /speakCallEngine\.placeCall\(\{[\s\S]*callerLanguage,[\s\S]*recipientLanguage/);
 });
 
 test("server creates exactly two translation directions and stops them with the call", () => {
@@ -81,7 +81,7 @@ test("both call directions continuously reach their independent translation sess
 });
 
 test("call audio session uses the proven explicit start and stop lifecycle", () => {
-  const mobile = read("mobile", "src", "features", "calling", "VoiceCallService.ts");
+  const mobile = read("mobile", "src", "features", "calling", "SpeakCallEngine.ts");
   assert.match(mobile, /await AudioSession\.startAudioSession\(\)/);
   assert.match(mobile, /await AudioSession\.stopAudioSession\(\)/);
 });
