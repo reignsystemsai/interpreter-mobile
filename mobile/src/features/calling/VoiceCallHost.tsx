@@ -4,7 +4,7 @@ import { AppState } from 'react-native';
 
 import { API_BASE_URL } from '../../config/runtime';
 import { getDeviceId, restoreAndRefreshDeviceRegistration } from '../../services/deviceRegistration';
-import { speakCallEngine, type SpeakCallMode } from './SpeakCallEngine';
+import { speakCallEngine } from './SpeakCallEngine';
 import { VoiceCallSurface } from './VoiceCallSurface';
 
 const handledCallIds = new Set<string>();
@@ -18,24 +18,16 @@ Notifications.setNotificationHandler({
   }),
 });
 
-function asCallMode(value: unknown): SpeakCallMode {
-  return value === 'video' || value === 'interpreter' ? value : 'voice';
-}
-
-function presentIncoming(callId: string, callerPhoneNumber: string, callMode: SpeakCallMode) {
+function presentIncoming(callId: string, callerPhoneNumber: string) {
   if (handledCallIds.has(callId)) return;
-  const presented = speakCallEngine.receiveIncomingCall({ callId, callerPhoneNumber, callMode });
+  const presented = speakCallEngine.receiveIncomingCall({ callId, callerPhoneNumber });
   if (presented) handledCallIds.add(callId);
 }
 
 function handleIncoming(notification?: Notifications.Notification) {
   const data = notification?.request.content.data;
   if (data?.type !== 'incoming_voice_call' || typeof data.callId !== 'string') return;
-  presentIncoming(
-    data.callId,
-    typeof data.callerPhoneNumber === 'string' ? data.callerPhoneNumber : 'Speak caller',
-    asCallMode(data.callType),
-  );
+  presentIncoming(data.callId, typeof data.callerPhoneNumber === 'string' ? data.callerPhoneNumber : 'Speak caller');
 }
 
 async function pollIncomingCall() {
@@ -43,9 +35,9 @@ async function pollIncomingCall() {
   const deviceId = await getDeviceId();
   const response = await fetch(`${API_BASE_URL}/api/v1/calls/incoming?deviceId=${encodeURIComponent(deviceId)}`);
   if (!response.ok) return;
-  const payload = (await response.json()) as { incoming?: boolean; callId?: string; callerPhoneNumber?: string; callMode?: SpeakCallMode };
+  const payload = (await response.json()) as { incoming?: boolean; callId?: string; callerPhoneNumber?: string };
   if (payload.incoming && payload.callId) {
-    presentIncoming(payload.callId, payload.callerPhoneNumber || 'Speak caller', asCallMode(payload.callMode));
+    presentIncoming(payload.callId, payload.callerPhoneNumber || 'Speak caller');
   }
 }
 

@@ -14,12 +14,11 @@ function roomService() {
 }
 
 async function createVoiceRoom(roomName) {
-  // Two people plus one private translation participant.
-  await roomService().createRoom({ name: roomName, emptyTimeout: 120, departureTimeout: 15, maxParticipants: 3 });
+  await roomService().createRoom({ name: roomName, emptyTimeout: 60, departureTimeout: 10, maxParticipants: 2 });
 }
 
 async function deleteVoiceRoom(roomName) {
-  if (typeof roomName !== "string" || !roomName.startsWith("voice-")) return false;
+  if (typeof roomName !== "string" || !roomName.startsWith("speak-voice-")) return false;
   try {
     await roomService().deleteRoom(roomName);
     return true;
@@ -41,28 +40,10 @@ async function createVoiceToken({ identity, roomName }) {
     roomJoin: true,
     canPublish: true,
     canPublishData: false,
-    canPublishSources: [TrackSource.MICROPHONE, TrackSource.CAMERA],
-    canSubscribe: true
-  });
-  return token.toJwt();
-}
-
-async function createTranslationToken({ callId, roomName }) {
-  if (!isLiveKitConfigured()) throw new Error("LiveKit is not configured");
-  const token = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, {
-    identity: `translator:${callId}`,
-    name: "Interpreter",
-    ttl: "10m"
-  });
-  token.addGrant({
-    room: roomName,
-    roomJoin: true,
-    canPublish: true,
-    canPublishData: false,
     canPublishSources: [TrackSource.MICROPHONE],
     canSubscribe: true
   });
   return token.toJwt();
 }
 
-module.exports = { createTranslationToken, createVoiceRoom, createVoiceToken, deleteVoiceRoom, isLiveKitConfigured, liveKitHttpUrl };
+module.exports = { createVoiceRoom, createVoiceToken, deleteVoiceRoom, isLiveKitConfigured, liveKitHttpUrl };
