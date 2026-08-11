@@ -18,7 +18,7 @@ import { SpeakBottomBar, SpeakMark } from '../../components/SpeakNavigation';
 import { useRealtimeInterpreter } from '../../hooks/useRealtimeInterpreter';
 import { recordAppReady } from '../../services/performance';
 import { CallingOverlay } from '../calling/CallingOverlay';
-import { VoiceCallService } from '../calling/VoiceCallService';
+import { speakCallEngine } from '../calling/SpeakCallEngine';
 import { useLanguagePreferences } from '../languages/LanguagePreferencesProvider';
 import { AppMenu, type MenuDestination } from '../menu/AppMenu';
 import { DestinationSheet } from '../menu/DestinationSheet';
@@ -76,7 +76,7 @@ export function SpeakHomeScreen() {
   const speaking = ['translating', 'speaking'].includes(status);
 
   useEffect(() => { recordAppReady(); }, []);
-  useEffect(() => VoiceCallService.subscribe((call) => {
+  useEffect(() => speakCallEngine.subscribe((call) => {
     if (call.role === 'recipient' && call.status === 'ringing') {
       setOverlay(null);
       if (busy) stop();

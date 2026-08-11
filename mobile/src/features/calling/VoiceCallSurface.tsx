@@ -4,13 +4,13 @@ import { Track } from 'livekit-client';
 import { Modal, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 
 import { SpeakBottomBar, SpeakMark } from '../../components/SpeakNavigation';
-import { VoiceCallService, type VoiceCallState } from './VoiceCallService';
+import { speakCallEngine, type SpeakCallState } from './SpeakCallEngine';
 
 const BLUE = '#145CF6';
 const WHITE = '#FFFFFF';
 
-const LABELS: Record<Exclude<VoiceCallState['status'], 'idle'>, string> = {
-  preparing: 'Calling…',
+const LABELS: Record<Exclude<SpeakCallState['status'], 'idle'>, string> = {
+  calling: 'Calling…',
   ringing: 'Ringing…',
   connecting: 'Connecting…',
   reconnecting: 'Reconnecting…',
@@ -30,11 +30,11 @@ function Control({ active = false, disabled = false, label, onPress }: { active?
 }
 
 export function VoiceCallSurface() {
-  const [state, setState] = useState(VoiceCallService.getState());
+  const [state, setState] = useState(speakCallEngine.getState());
   const [duration, setDuration] = useState(0);
   const connectedAt = useRef<number | null>(null);
 
-  useEffect(() => VoiceCallService.subscribe(setState), []);
+  useEffect(() => speakCallEngine.subscribe(setState), []);
   useEffect(() => {
     if (state.status === 'connected') connectedAt.current ??= Date.now();
     if (['idle', 'ending', 'ended', 'failed'].includes(state.status)) {
@@ -49,7 +49,7 @@ export function VoiceCallSurface() {
     return () => clearInterval(timer);
   }, [state.status]);
 
-  const room = VoiceCallService.getRoom();
+  const room = speakCallEngine.getRoom();
   const localVideoTrack = state.videoEnabled ? room?.localParticipant.getTrackPublication(Track.Source.Camera)?.track : undefined;
   const remoteVideoTrack = useMemo(() => {
     if (!state.remoteVideoAvailable || !room) return undefined;
@@ -66,11 +66,13 @@ export function VoiceCallSurface() {
   const connected = ['connected', 'reconnecting'].includes(state.status);
   const videoVisible = Boolean(state.videoEnabled || state.remoteVideoAvailable);
   const initial = (state.remoteLabel || 'S').trim().slice(0, 1).toUpperCase();
-  const placingCall = ['preparing', 'ringing', 'connecting'].includes(state.status);
+  const placingCall = ['calling', 'ringing', 'connecting'].includes(state.status);
   const outgoingLabel = placingCall && state.callMode === 'video' ? 'Video Calling…' : placingCall && state.callMode === 'interpreter' ? 'Interpreter Calling…' : LABELS[state.status];
   const callLabel = state.callMode === 'video' ? 'Speak Video Call' : state.callMode === 'interpreter' ? 'Speak Interpreter' : 'Speak Call';
 
-  return <Modal animationType="fade" onRequestClose={() => void VoiceCallService.endCall()} visible>
+  const terminal = state.status === 'ended' || state.status === 'failed';
+
+  return <Modal animationType="fade" onRequestClose={() => void (terminal ? speakCallEngine.dismiss() : speakCallEngine.endCall())} visible>
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}><SpeakMark compact /><Text style={styles.contactName}>{state.remoteLabel || 'Speak contact'}</Text><Text style={styles.status}>{outgoingLabel}</Text><Text style={styles.timer}>{connectedAt.current ? formatDuration(duration) : callLabel}</Text></View>
 
@@ -81,22 +83,22 @@ export function VoiceCallSurface() {
       </View>
 
       {incoming ? <View style={styles.incomingActions}>
-        <Pressable onPress={() => void VoiceCallService.declineIncomingCall()} style={[styles.roundAction, styles.decline]}><Text style={styles.actionText}>Decline</Text></Pressable>
-        <Pressable onPress={() => void VoiceCallService.acceptIncomingCall()} style={[styles.roundAction, styles.answer]}><Text style={styles.actionText}>Answer</Text></Pressable>
+        <Pressable onPress={() => void speakCallEngine.declineCall()} style={[styles.roundAction, styles.decline]}><Text style={styles.actionText}>Decline</Text></Pressable>
+        <Pressable onPress={() => void speakCallEngine.answerCall()} style={[styles.roundAction, styles.answer]}><Text style={styles.actionText}>Answer</Text></Pressable>
       </View> : <>
-        <Pressable disabled={!connected} onPress={() => void VoiceCallService.toggleInterpreter()} style={[styles.interpreter, state.interpreterEnabled && styles.interpreterActive, !connected && styles.disabled]}>
+        <Pressable disabled={!connected} onPress={() => void speakCallEngine.toggleInterpreter()} style={[styles.interpreter, state.interpreterEnabled && styles.interpreterActive, !connected && styles.disabled]}>
           <Text style={[styles.interpreterTitle, state.interpreterEnabled && styles.interpreterTitleActive]}>Speak Interpreter {state.interpreterEnabled ? 'On' : 'Off'}</Text>
           <Text style={[styles.interpreterHint, state.interpreterEnabled && styles.interpreterTitleActive]}>{state.interpreterEnabled ? 'Live translation is active' : 'Tap to translate this call'}</Text>
         </Pressable>
         <View style={styles.controls}>
-          <Control active={state.muted} disabled={!connected} label={state.muted ? 'Unmute' : 'Mute'} onPress={() => void VoiceCallService.toggleMute()} />
-          <Control active={state.speakerEnabled} disabled={!connected} label="Speaker" onPress={() => void VoiceCallService.toggleSpeaker()} />
-          <Control active={state.videoEnabled} disabled={!connected} label={state.videoEnabled ? 'Video Off' : 'Video'} onPress={() => void (state.videoEnabled ? VoiceCallService.disableVideo() : VoiceCallService.enableVideo())} />
-          {state.videoEnabled ? <Control label="Flip" onPress={() => void VoiceCallService.switchCamera()} /> : null}
+          <Control active={state.muted} disabled={!connected} label={state.muted ? 'Unmute' : 'Mute'} onPress={() => void speakCallEngine.toggleMute()} />
+          <Control active={state.speakerEnabled} disabled={!connected} label="Speaker" onPress={() => void speakCallEngine.toggleSpeaker()} />
+          <Control active={state.videoEnabled} disabled={!connected} label={state.videoEnabled ? 'Video Off' : 'Video'} onPress={() => void speakCallEngine.toggleVideo()} />
+          {state.videoEnabled ? <Control label="Flip" onPress={() => void speakCallEngine.switchCamera()} /> : null}
         </View>
-        <Pressable onPress={() => void VoiceCallService.endCall()} style={styles.end}><Text style={styles.endText}>End Call</Text></Pressable>
+        <Pressable onPress={() => void (terminal ? speakCallEngine.dismiss() : speakCallEngine.endCall())} style={styles.end}><Text style={styles.endText}>{terminal ? 'Close' : 'End Call'}</Text></Pressable>
       </>}
-      <SpeakBottomBar onHome={() => undefined} onSpeak={() => void VoiceCallService.toggleInterpreter()} onUtilities={() => void VoiceCallService.toggleSpeaker()} />
+      <SpeakBottomBar onHome={() => undefined} onSpeak={() => void speakCallEngine.toggleInterpreter()} onUtilities={() => void speakCallEngine.toggleSpeaker()} />
     </SafeAreaView>
   </Modal>;
 }

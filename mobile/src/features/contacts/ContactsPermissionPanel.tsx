@@ -1,18 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as Contacts from 'expo-contacts';
 import type { CountryCode } from 'libphonenumber-js';
-import { Alert, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import { type InterpreterContact, useContacts } from './ContactsProvider';
 import { InterpreterCallSetup, type InterpreterCallOptions } from '../calling/InterpreterCallSetup';
-import { VoiceCallService } from '../calling/VoiceCallService';
+import { speakCallEngine } from '../calling/SpeakCallEngine';
 import { useLanguagePreferences } from '../languages/LanguagePreferencesProvider';
-import { backendMediaAdapter } from '../../shells/audio/BackendMediaAdapter';
-import { CallingShellHost } from '../../shells/calling/CallingShellHost';
 import {
   deviceDefaultPhoneRegion,
-  getDeviceId,
   getRegisteredPhoneNumber,
   lookupDeviceByPhone,
   normalizeE164,
@@ -121,26 +118,27 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
   };
 
   const startContactCall = async (phoneNumberE164: string, defaultRegion: CountryCode, callerLanguage: string, recipientLanguage: string, options: CallLaunchOptions = STANDARD_VOICE_CALL) => {
-    let createdCallId: string | null = null;
     try {
       const recipient = await lookupDeviceByPhone(phoneNumberE164, defaultRegion);
       if (!recipient.found) throw new Error('This person does not have Interpreter yet.');
-      const callerDeviceId = await getDeviceId();
-      const session = await CallingShellHost.createCall({ callerDeviceId, recipientPhoneNumber: phoneNumberE164, callerLanguage, recipientLanguage });
-      createdCallId = session.callId;
-      await backendMediaAdapter.connect(session.callId, contact.displayName, 'caller', options.interpreter ? 'interpreter' : options.video ? 'video' : 'voice');
-      if (options.interpreter) await VoiceCallService.setInterpreterEnabled(true, options.voiceGender);
-      if (options.video) await VoiceCallService.enableVideo();
+      await speakCallEngine.placeCall({
+        callerLanguage,
+        contactName: contact.displayName,
+        defaultRegion,
+        mode: options.interpreter ? 'interpreter' : options.video ? 'video' : 'voice',
+        phoneNumber: phoneNumberE164,
+        recipientLanguage,
+        voiceGender: options.voiceGender,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Please try again.';
       if (message === 'This person does not have Interpreter yet.') {
         Alert.alert('Invite to Interpreter', undefined, [
-          { text: 'Cancel', style: 'cancel', onPress: () => void VoiceCallService.resetVoiceCall({ notifyBackend: false }) },
-          { text: 'Invite to Interpreter', onPress: () => void invite().finally(() => VoiceCallService.resetVoiceCall({ notifyBackend: false })) },
+          { text: 'Cancel', style: 'cancel', onPress: () => void speakCallEngine.dismiss() },
+          { text: 'Invite to Interpreter', onPress: () => void invite().finally(() => speakCallEngine.dismiss()) },
         ]);
       } else {
-        if (createdCallId) void CallingShellHost.endCall(createdCallId).catch(() => undefined);
-        void VoiceCallService.disconnectMedia();
+        void speakCallEngine.dismiss();
         Alert.alert('Unable to connect', message);
       }
     }
@@ -163,7 +161,7 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
   const beginVoiceCall = async (callerLanguage: string, recipientLanguage: string, options: CallLaunchOptions = STANDARD_VOICE_CALL) => {
     if (options.video) {
       try {
-        await VoiceCallService.requestMediaPermissions(true);
+        await speakCallEngine.requestMediaPermissions(true);
       } catch (error) {
         Alert.alert('Camera and Microphone Required', error instanceof Error ? error.message : 'Allow camera and microphone access to place a video call.', [
           { text: 'Cancel', style: 'cancel' },
@@ -238,8 +236,8 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
       <Text style={styles.detailName}>{contact.displayName}</Text>
       <Text style={styles.userStatus}>iPhone contact</Text>
       <View style={styles.callGrid}>
-        <Pressable disabled={busy} onPress={() => { setLaunchingMode('voice'); setBusy(true); void beginVoiceCall(languageOne, languageTwo).finally(() => { setBusy(false); setLaunchingMode(null); }); }} style={styles.callButton}><CallIcon name="phone" /><Text style={styles.callLabel}>{launchingMode === 'voice' ? 'Calling…' : 'Call'}</Text></Pressable>
-        <Pressable disabled={busy} onPress={() => { setLaunchingMode('video'); setBusy(true); void beginVoiceCall(languageOne, languageTwo, { interpreter: false, video: true, voiceGender: 'male' }).finally(() => { setBusy(false); setLaunchingMode(null); }); }} style={styles.callButton}><CallIcon name="video" /><Text style={styles.callLabel}>{launchingMode === 'video' ? 'Video Calling…' : 'Video Call'}</Text></Pressable>
+        <Pressable disabled={busy} onPress={() => { Vibration.vibrate(35); setLaunchingMode('voice'); setBusy(true); void beginVoiceCall(languageOne, languageTwo).finally(() => { setBusy(false); setLaunchingMode(null); }); }} style={styles.callButton}><CallIcon name="phone" /><Text style={styles.callLabel}>{launchingMode === 'voice' ? 'Calling…' : 'Call'}</Text></Pressable>
+        <Pressable disabled={busy} onPress={() => { Vibration.vibrate(35); setLaunchingMode('video'); setBusy(true); void beginVoiceCall(languageOne, languageTwo, { interpreter: false, video: true, voiceGender: 'male' }).finally(() => { setBusy(false); setLaunchingMode(null); }); }} style={styles.callButton}><CallIcon name="video" /><Text style={styles.callLabel}>{launchingMode === 'video' ? 'Video Calling…' : 'Video Call'}</Text></Pressable>
         <Pressable disabled={busy} onPress={() => setShowInterpreterSetup(true)} style={[styles.callButton, styles.interpretButton]}><CallIcon name="interpret" /><Text style={[styles.callLabel, styles.interpretLabel]}>Speak Interpreter</Text></Pressable>
       </View>
       <PrimaryButton label="Invite to Speak" onPress={() => void invite().catch(() => Alert.alert('Unable to open invite'))} />
