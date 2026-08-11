@@ -25,6 +25,16 @@ pnpm exec expo config --type public
 
 Native WebRTC and audio routing are required, so Expo Go is not supported.
 
+## Fast UI updates on the preview app
+
+Layout values live in `src/config/uiControls.ts`. Changes merged into `main`
+are validated and published to the Expo `preview` channel by the **Publish
+mobile preview update** GitHub Action.
+
+After changing a layout value, merge the submission, wait for the Action to
+finish, then fully close and reopen an app installed from the EAS `preview`
+profile. Native dependency and app-version changes still require a new build.
+
 ## Build an installable Android APK
 
 ```powershell

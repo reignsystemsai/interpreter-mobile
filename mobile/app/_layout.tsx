@@ -8,12 +8,14 @@ import { AuthProvider } from '../src/features/account/AuthProvider';
 import { ContactsProvider } from '../src/features/contacts/ContactsProvider';
 import { VoiceCallHost } from '../src/features/calling/VoiceCallHost';
 import { LanguagePreferencesProvider } from '../src/features/languages/LanguagePreferencesProvider';
+import { ApplyAvailableUpdate } from '../src/components/ApplyAvailableUpdate';
 
 registerGlobals();
 
 export default function RootLayout() {
   return (
     <AuthProvider>
+      <ApplyAvailableUpdate />
       <LanguagePreferencesProvider>
         <ContactsProvider>
             <VoiceCallHost />
