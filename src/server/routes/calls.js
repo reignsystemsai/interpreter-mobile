@@ -19,6 +19,11 @@ function callError(res, status, code, message) {
   return res.status(status).json({ code, error: message });
 }
 
+function callModeForRow(row) {
+  if (row.translation_enabled) return "interpreter";
+  return typeof row.room_name === "string" && row.room_name.startsWith("video-") ? "video" : "voice";
+}
+
 async function loadCall(admin, callId) {
   return admin.from("active_calls").select("*").eq("id", callId).maybeSingle();
 }
@@ -37,7 +42,7 @@ router.get("/incoming", async (req, res) => {
   if (deviceId.length < 16) return callError(res, 400, "invalid_device", "Unable to check incoming calls.");
   const { data, error } = await getSupabaseAdmin()
     .from("active_calls")
-    .select("id,caller_phone_e164")
+    .select("id,caller_phone_e164,room_name,translation_enabled")
     .eq("recipient_device_id", deviceId)
     .eq("status", "ringing")
     .order("created_at", { ascending: false })
@@ -45,7 +50,7 @@ router.get("/incoming", async (req, res) => {
     .maybeSingle();
   if (error) return callError(res, 502, "call_state_unavailable", "Unable to check incoming calls.");
   if (!data) return res.status(200).json({ incoming: false });
-  return res.status(200).json({ incoming: true, callId: data.id, callerPhoneNumber: data.caller_phone_e164 });
+  return res.status(200).json({ incoming: true, callId: data.id, callerPhoneNumber: data.caller_phone_e164, callMode: callModeForRow(data) });
 });
 
 router.get("/:callId", async (req, res) => {
@@ -69,7 +74,9 @@ router.post("/start", async (req, res) => {
   }
   const callerDeviceId = cleanText(req.body?.callerDeviceId, 120);
   const recipientPhoneNumber = normalizeE164(req.body?.recipientPhoneNumber, req.body?.defaultRegion);
-  const translationEnabled = req.body?.translationMode === "realtime-translate";
+  const requestedCallType = cleanText(req.body?.callType, 20);
+  const callType = ["interpreter", "video", "voice"].includes(requestedCallType) ? requestedCallType : "voice";
+  const translationEnabled = callType === "interpreter" || req.body?.translationMode === "realtime-translate";
   const callerLanguageCode = outputLanguageCode(req.body?.callerLanguage) ?? "en";
   const recipientLanguageCode = outputLanguageCode(req.body?.recipientLanguage) ?? "es";
   if (callerDeviceId.length < 16 || !recipientPhoneNumber) {
@@ -83,6 +90,8 @@ router.post("/start", async (req, res) => {
   }
 
   const admin = getSupabaseAdmin();
+  const staleRingingCutoff = new Date(Date.now() - 90_000).toISOString();
+  await admin.from("active_calls").update({ status: "failed", ended_at: new Date().toISOString() }).eq("status", "ringing").lt("created_at", staleRingingCutoff);
   const [callerResult, recipientResult] = await Promise.all([
     admin.from("device_installations").select("id,device_id,phone_number_e164,platform").eq("device_id", callerDeviceId).eq("enabled", true).maybeSingle(),
     admin.from("device_installations").select("id,device_id,phone_number_e164,platform,push_token").eq("phone_number_e164", recipientPhoneNumber).eq("enabled", true).order("last_seen_at", { ascending: false }).limit(1).maybeSingle()
@@ -104,7 +113,7 @@ router.post("/start", async (req, res) => {
   if (callerOpen.error || recipientOpen.error) return callError(res, 502, "call_state_unavailable", "Unable to start the call.");
   if (callerOpen.data || recipientOpen.data) return callError(res, 409, "device_busy", "One of the devices is already in a call.");
 
-  const roomName = `voice-${crypto.randomUUID()}`;
+  const roomName = `${callType}-${crypto.randomUUID()}`;
   let row;
   try {
     await createVoiceRoom(roomName);
@@ -126,12 +135,14 @@ router.post("/start", async (req, res) => {
     console.info("[VoiceCall] caller token generated", { callId: row.id });
     const push = await sendIncomingVoiceCallPush(admin, {
       callId: row.id,
+      callType,
       callerPhoneNumber: callerResult.data.phone_number_e164,
       installationId: recipientResult.data.id
     }).catch(() => ({ accepted: false }));
     console.info("[VoiceCall] incoming push delivery", { accepted: push.accepted, callId: row.id });
     return res.status(201).json({
       callId: row.id,
+      callMode: callType,
       roomName,
       livekitUrl: process.env.LIVEKIT_URL,
       callerToken,
@@ -175,6 +186,7 @@ router.post("/:callId/accept", async (req, res) => {
     }
     return res.status(200).json({
       callId,
+      callMode: callModeForRow(row),
       roomName: row.room_name,
       livekitUrl: process.env.LIVEKIT_URL,
       recipientToken,
@@ -190,6 +202,31 @@ router.post("/:callId/accept", async (req, res) => {
       recipientUpgradeRequired ? "recipient_update_required" : "translation_unavailable",
       recipientUpgradeRequired ? "The other person needs the latest Interpreter update." : "The translation service is temporarily unavailable."
     );
+  }
+});
+
+router.post("/:callId/interpreter", async (req, res) => {
+  if (!isSupabaseConfigured() || !isLiveKitConfigured()) return callError(res, 503, "calling_unavailable", "Calling is temporarily unavailable.");
+  const callId = cleanText(req.params.callId, 80);
+  const deviceId = cleanText(req.body?.deviceId, 120);
+  const enabled = req.body?.enabled === true;
+  const voiceGender = req.body?.voiceGender === "female" ? "female" : "male";
+  const admin = getSupabaseAdmin();
+  const result = await loadCall(admin, callId);
+  const row = result.data;
+  if (result.error) return callError(res, 502, "call_state_unavailable", "Unable to update Interpreter.");
+  if (!row || ![row.caller_device_id, row.recipient_device_id].includes(deviceId)) return callError(res, 403, "not_call_participant", "Unable to update Interpreter.");
+  try {
+    if (enabled) {
+      await startCallTranslation({ callId, callerLanguage: row.caller_language_code, recipientLanguage: row.recipient_language_code, roomName: row.room_name, voiceGender });
+    } else {
+      await stopCallTranslation(callId);
+    }
+    await admin.from("active_calls").update({ translation_enabled: enabled }).eq("id", callId);
+    return res.status(200).json({ callId, interpreterEnabled: enabled });
+  } catch (error) {
+    console.error("[VoiceCall] interpreter update failed", { callId, reason: error instanceof Error ? error.message : "unknown" });
+    return callError(res, 502, "interpreter_unavailable", "Interpreter is temporarily unavailable.");
   }
 });
 
