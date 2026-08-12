@@ -4,7 +4,7 @@ import { Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInp
 
 import { type InterpreterContact, useContacts } from './ContactsProvider';
 import { CallError, CallService } from '../calling/CallService';
-import { deviceDefaultPhoneRegion, normalizeE164, normalizePhoneRegion } from '../../services/deviceRegistration';
+import { deviceDefaultPhoneRegion, lookupDeviceByPhone, normalizeE164, normalizePhoneRegion } from '../../services/deviceRegistration';
 
 const APP_DOWNLOAD_URL = 'https://interpreter.ai/download';
 const BLUE = '#075BFF';
@@ -53,7 +53,7 @@ export function ContactsPermissionPanel({ autoRequest = false, onBack }: { autoR
       <View style={styles.titleRow}><Text style={styles.title}>My Contacts</Text><Pressable accessibilityLabel="Reload device contacts" onPress={() => void refresh()} style={styles.reloadButton}><Text style={styles.reloadText}>Reload</Text></Pressable></View>
       <TextInput autoCapitalize="none" onChangeText={setQuery} placeholder="Search contacts" placeholderTextColor="#98A2B3" style={styles.search} value={query} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <ScrollView contentContainerStyle={styles.contactList} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.contactList} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         {loading ? <Text style={styles.empty}>Loading contacts…</Text> : visibleContacts.map((contact) => (
           <Pressable key={contact.id} onPress={() => setSelectedId(contact.id)} style={({ pressed }) => [styles.contactRow, pressed && styles.pressed]}>
             <View style={styles.avatar}><Text style={styles.avatarText}>{contact.displayName.slice(0, 1).toUpperCase()}</Text></View>
@@ -100,6 +100,15 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     }
     const phoneNumberE164 = normalizeE164(firstValidPhone.value, normalizePhoneRegion(firstValidPhone.countryCode) ?? region);
     try {
+      try {
+        const lookup = await lookupDeviceByPhone(phoneNumberE164, normalizePhoneRegion(firstValidPhone.countryCode) ?? region);
+        if (!lookup.found) {
+          Alert.alert('This contact is not on Interpreter yet.', 'Invite them to install Interpreter before starting a voice call.');
+          return;
+        }
+      } catch {
+        // Treat lookup errors as non-blocking and let call creation return a definitive result.
+      }
       await CallService.createCall(phoneNumberE164, contact.displayName);
     } catch (error) {
       Alert.alert('Unable to call', error instanceof CallError ? error.message : 'Please try again.');
