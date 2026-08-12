@@ -99,7 +99,7 @@ function makeShell(overrides?: { callData?: CallDataShell; deviceId?: string; id
   return { callData, shell: new CallingShellImpl({ callData, createId, deviceIdentity }) };
 }
 
-const CALLER_INPUT = { callerDeviceId: 'device-caller', callerLanguage: 'en', recipientLanguage: 'es', recipientPhoneNumber: '+15550000000' };
+const CALLER_INPUT = { callerDeviceId: 'device-caller', callerLanguage: 'en', recipientLanguage: 'es', recipientPhoneNumber: '+15550000000', recipientUserId: 'user-recipient' };
 
 test('outgoing call begins with recipientDeviceId null', async () => {
   const { shell } = makeShell();
