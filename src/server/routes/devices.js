@@ -66,7 +66,10 @@ router.post("/lookup", async (req, res) => {
     .maybeSingle();
   if (error) return res.status(500).json({ error: "Unable to look up this device." });
   if (!data) return res.status(200).json({ found: false });
-  return res.status(200).json({ found: true, installationId: data.id, deviceId: data.device_id, platform: data.platform });
+  const member = await getSupabaseAdmin().from("profiles").select("id").eq("phone", phoneNumberE164).maybeSingle();
+  if (member.error) return res.status(500).json({ error: "Unable to look up this member." });
+  if (!member.data) return res.status(200).json({ found: false });
+  return res.status(200).json({ found: true, installationId: data.id, deviceId: data.device_id, platform: data.platform, userId: member.data.id });
 });
 
 module.exports = router;
