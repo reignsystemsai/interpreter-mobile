@@ -78,7 +78,7 @@ export class CallingShellImpl implements CallingShell {
     };
   }
 
-  async createCall(input: { callerDeviceId: string; recipientPhoneNumber: string; callerLanguage: string; recipientLanguage: string }): Promise<CallSession> {
+  async createCall(input: { callerDeviceId: string; recipientPhoneNumber: string; recipientUserId: string; callerLanguage: string; recipientLanguage: string }): Promise<CallSession> {
     if (this.session && !isTerminalStatus(this.session.status)) {
       throw new CallingError('ACTIVE_CALL_EXISTS', 'A call is already active on this device.');
     }
@@ -94,6 +94,7 @@ export class CallingShellImpl implements CallingShell {
         callerDeviceId: input.callerDeviceId,
         recipientDeviceId: null,
         recipientPhoneNumber: input.recipientPhoneNumber,
+        recipientUserId: input.recipientUserId,
         callerLanguage: input.callerLanguage,
         recipientLanguage: input.recipientLanguage,
         callerParticipantIdentity,

@@ -10,6 +10,7 @@ type CallSessionPayload = {
   id: string;
   callerDeviceId: string;
   recipientDeviceId: string | null;
+  recipientUserId: string;
   recipientPhoneNumber: string;
   callerLanguage: string;
   recipientLanguage: string;
@@ -106,6 +107,7 @@ export class BackendCallDataShell implements CallDataShell {
       body: JSON.stringify({
         callerDeviceId: input.callerDeviceId,
         recipientPhoneNumber: input.recipientPhoneNumber,
+        recipientUserId: input.recipientUserId,
         callerLanguage: input.callerLanguage,
         recipientLanguage: input.recipientLanguage,
         callerParticipantIdentity: input.callerParticipantIdentity,

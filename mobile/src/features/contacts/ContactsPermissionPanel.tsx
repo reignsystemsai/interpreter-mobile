@@ -121,7 +121,7 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
       const recipient = await lookupDeviceByPhone(phoneNumberE164, defaultRegion);
       if (!recipient.found) throw new Error('This person does not have Interpreter yet.');
       const callerDeviceId = await getDeviceId();
-      const session = await CallingShellHost.createCall({ callerDeviceId, recipientPhoneNumber: phoneNumberE164, callerLanguage, recipientLanguage });
+      const session = await CallingShellHost.createCall({ callerDeviceId, recipientPhoneNumber: phoneNumberE164, recipientUserId: recipient.userId, callerLanguage, recipientLanguage });
       createdCallId = session.callId;
       await backendMediaAdapter.connect(session.callId, contact.displayName, 'caller');
     } catch (error) {

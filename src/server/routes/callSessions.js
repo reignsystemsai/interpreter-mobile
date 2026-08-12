@@ -69,6 +69,7 @@ router.post("/", async (req, res) => {
   if (!isSupabaseConfigured()) return callError(res, 503, "calling_unavailable", "Calling is temporarily unavailable.");
   const callerDeviceId = cleanText(req.body?.callerDeviceId, 120);
   const recipientPhoneNumber = cleanText(req.body?.recipientPhoneNumber, 32);
+  const recipientUserId = cleanText(req.body?.recipientUserId, 80);
   const callerLanguage = cleanText(req.body?.callerLanguage, 16);
   const recipientLanguage = cleanText(req.body?.recipientLanguage, 16);
   const callerParticipantIdentity = cleanText(req.body?.callerParticipantIdentity, 160);
@@ -76,6 +77,7 @@ router.post("/", async (req, res) => {
   if (
     callerDeviceId.length < 16 ||
     !recipientPhoneNumber ||
+    !recipientUserId ||
     !callerLanguage ||
     !recipientLanguage ||
     !callerParticipantIdentity ||
@@ -89,6 +91,7 @@ router.post("/", async (req, res) => {
   const { data, error } = await admin.rpc("speak_create_call", {
     p_caller_device_id: callerDeviceId,
     p_recipient_phone_number: recipientPhoneNumber,
+    p_recipient_user_id: recipientUserId,
     p_caller_language: callerLanguage,
     p_recipient_language: recipientLanguage,
     p_caller_participant_identity: callerParticipantIdentity,
