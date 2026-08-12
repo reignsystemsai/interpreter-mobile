@@ -63,6 +63,7 @@ export default function Phase3TestScreen() {
       const created = await CallingShellHost.createCall({
         callerDeviceId,
         recipientPhoneNumber: form.recipientPhoneNumber,
+        recipientUserId: 'phase3-recipient-user',
         callerLanguage: form.callerLanguage,
         recipientLanguage: form.recipientLanguage,
       });

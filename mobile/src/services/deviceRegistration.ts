@@ -148,9 +148,10 @@ export async function lookupDeviceByPhone(phoneNumber: string, defaultRegion = d
     found?: boolean;
     installationId?: string;
     platform?: 'ios' | 'android';
+    userId?: string;
   };
   if (!response.ok) throw new Error('Unable to check this contact right now.');
-  return payload.found && payload.installationId && payload.deviceId && payload.platform
-    ? { found: true as const, installationId: payload.installationId, deviceId: payload.deviceId, platform: payload.platform }
+  return payload.found && payload.installationId && payload.deviceId && payload.platform && payload.userId
+    ? { found: true as const, installationId: payload.installationId, deviceId: payload.deviceId, platform: payload.platform, userId: payload.userId }
     : { found: false as const };
 }

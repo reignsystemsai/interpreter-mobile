@@ -22,6 +22,7 @@ export interface CallDataShell {
   createCallRecord(input: {
     callerDeviceId: string;
     recipientDeviceId: string | null;
+    recipientUserId: string;
     recipientPhoneNumber: string;
     callerLanguage: string;
     recipientLanguage: string;
