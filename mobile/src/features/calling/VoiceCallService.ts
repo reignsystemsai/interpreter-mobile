@@ -6,6 +6,7 @@ import InCallManager from 'react-native-incall-manager';
 
 import { API_BASE_URL } from '../../config/runtime';
 import { getDeviceId } from '../../services/deviceRegistration';
+import { isLocalMicrophoneTrack, SpeakMicrophoneAudioProcessor } from './SpeakMicrophoneAudioProcessor';
 
 export type VoiceCallStatus = 'idle' | 'preparing' | 'ringing' | 'connecting' | 'connected' | 'reconnecting' | 'ending' | 'ended' | 'failed';
 export type VoiceCallRole = 'caller' | 'recipient' | null;
@@ -71,6 +72,7 @@ class CleanVoiceCallService {
   // service's own backend calls (see acceptIncomingCall).
   private canonicalCallIds = new Set<string>();
   private onMediaConnected: (() => void) | null = null;
+  private microphoneAudioProcessor = new SpeakMicrophoneAudioProcessor();
 
   getState() {
     return this.state;
@@ -393,6 +395,11 @@ class CleanVoiceCallService {
       console.info('[VoiceCall] remote audio subscribed');
       this.markConnected();
     });
+    room.on(RoomEvent.LocalTrackPublished, (publication) => {
+      if (publication.kind === Track.Kind.Audio && isLocalMicrophoneTrack(publication.track)) {
+        void this.microphoneAudioProcessor.attach(publication.track);
+      }
+    });
     room.on(RoomEvent.Reconnecting, () => {
       if (this.room === room) this.updateState({ status: 'reconnecting' });
     });
@@ -409,6 +416,11 @@ class CleanVoiceCallService {
     if (this.room !== room || this.callContext !== call) throw new VoiceCallError('call_ended', 'Call ended.');
     console.info(`[VoiceCall] ${call.role} connected`);
     await room.localParticipant.setMicrophoneEnabled(true, AUDIO_CAPTURE);
+    const microphonePublication = [...room.localParticipant.audioTrackPublications.values()]
+      .find((publication) => isLocalMicrophoneTrack(publication.track));
+    if (microphonePublication?.track && isLocalMicrophoneTrack(microphonePublication.track)) {
+      await this.microphoneAudioProcessor.attach(microphonePublication.track);
+    }
     console.info('[VoiceCall] microphone published');
     if (this.callTimer && room.remoteParticipants.size > 0) {
       clearTimeout(this.callTimer);
@@ -452,6 +464,7 @@ class CleanVoiceCallService {
         }
       }
     }
+    await this.microphoneAudioProcessor.dispose();
     await AudioSession.stopAudioSession().catch(() => undefined);
   }
 }
