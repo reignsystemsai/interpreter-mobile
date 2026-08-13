@@ -1,12 +1,30 @@
 import { useEffect, useState, type PropsWithChildren } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import type { Session } from '@supabase/supabase-js';
 
+import { API_BASE_URL } from '../../config/runtime';
 import { authenticatedRequest } from '../../services/api';
 import { deviceDefaultPhoneRegion, normalizeE164, registerDeviceInstallation } from '../../services/deviceRegistration';
+import { supabase } from '../../services/supabase';
 import { useAuth } from './AuthProvider';
 
 type AccountResponse = { profile?: { full_name?: string | null; phone?: string | null } | null };
 type RegistrationFailure = 'AUTH' | 'PROFILE_WRITE' | 'DEVICE_BIND' | 'ROUTE';
+
+async function requestWithSession<T>(path: string, session: Session, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+      ...init?.headers,
+    },
+  });
+  const payload = (await response.json().catch(() => ({}))) as T & { error?: string };
+  if (!response.ok) throw new Error(payload.error || `Request failed (${response.status}).`);
+  return payload;
+}
 
 export function CallableIdentityGate({ children }: PropsWithChildren) {
   const { configured, initializing, session, user } = useAuth();
@@ -16,6 +34,7 @@ export function CallableIdentityGate({ children }: PropsWithChildren) {
   const [phone, setPhone] = useState('');
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<RegistrationFailure | null>(null);
+  const [failureMessage, setFailureMessage] = useState('');
 
   useEffect(() => {
     if (initializing) return;
@@ -41,21 +60,35 @@ export function CallableIdentityGate({ children }: PropsWithChildren) {
     }
     setSaving(true);
     setFailure(null);
+    setFailureMessage('');
     try {
-      if (!user || session?.user.id !== user.id || !session.access_token) throw new Error('AUTH');
+      const client = supabase;
+      if (!client) throw new Error('AUTH');
+      const { data: currentSession } = await client.auth.getSession();
+      let activeSession = currentSession.session;
+      if (!activeSession) {
+        const { data, error } = await client.auth.signInAnonymously();
+        if (error) {
+          setFailure('AUTH');
+          setFailureMessage(error.message);
+          return;
+        }
+        activeSession = data.session;
+      }
+      if (!activeSession?.user.id || !activeSession.access_token) throw new Error('AUTH');
       try {
-        await authenticatedRequest('/api/v1/account/me', { method: 'PATCH', body: JSON.stringify({ fullName, phone: phoneE164 }) });
+        await requestWithSession('/api/v1/account/me', activeSession, { method: 'PATCH', body: JSON.stringify({ fullName, phone: phoneE164 }) });
       } catch {
         throw new Error('PROFILE_WRITE');
       }
       try {
-        await registerDeviceInstallation(phoneE164);
+        await registerDeviceInstallation(phoneE164, deviceDefaultPhoneRegion(), activeSession.access_token);
       } catch {
         throw new Error('DEVICE_BIND');
       }
       let confirmed: AccountResponse;
       try {
-        confirmed = await authenticatedRequest<AccountResponse>('/api/v1/account/me');
+        confirmed = await requestWithSession<AccountResponse>('/api/v1/account/me', activeSession);
       } catch {
         throw new Error('ROUTE');
       }
@@ -83,7 +116,7 @@ export function CallableIdentityGate({ children }: PropsWithChildren) {
     <Text style={styles.body}>Your name and mobile number let other Interpreter users call this device.</Text>
     <TextInput autoCapitalize="words" onChangeText={setName} placeholder="Name" style={styles.input} value={name} />
     <TextInput keyboardType="phone-pad" onChangeText={setPhone} placeholder="Mobile phone number" style={styles.input} value={phone} />
-    {failure ? <Text style={styles.failure}>Registration failed: {failure}</Text> : null}
+    {failure ? <Text style={styles.failure}>Registration failed: {failure}{failureMessage ? ` - ${failureMessage}` : ''}</Text> : null}
     <Pressable accessibilityRole="button" disabled={saving} onPress={() => void save()} style={[styles.button, saving && styles.disabled]}><Text style={styles.buttonText}>{saving ? 'Saving...' : 'Continue'}</Text></Pressable>
   </View>;
 }
