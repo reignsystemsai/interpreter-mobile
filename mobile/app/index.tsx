@@ -25,7 +25,6 @@ import { useDemoAudioLevel } from '../src/hooks/useDemoAudioLevel';
 import { useRealtimeInterpreter } from '../src/hooks/useRealtimeInterpreter';
 import { recordAppReady } from '../src/services/performance';
 import { ContactsPermissionPanel } from '../src/features/contacts/ContactsPermissionPanel';
-import { useAuth } from '../src/features/account/AuthProvider';
 import { AppMenu, type MenuDestination } from '../src/features/menu/AppMenu';
 import { DestinationSheet } from '../src/features/menu/DestinationSheet';
 import { useLanguagePreferences } from '../src/features/languages/LanguagePreferencesProvider';
@@ -128,16 +127,11 @@ export default function InterpreterScreen() {
   const [genderTwo, setGenderTwo] = useState<Gender>('male');
   const [languageSide, setLanguageSide] = useState<LanguageSide>('one');
   const [overlay, setOverlay] = useState<Overlay>(null);
-  const { recoveryMode } = useAuth();
   const { errorMessage, isActive, start, status, stop } = useRealtimeInterpreter(languageOne, languageTwo);
 
   useEffect(() => {
     recordAppReady();
   }, []);
-
-  useEffect(() => {
-    if (recoveryMode) setOverlay('account');
-  }, [recoveryMode]);
 
   const statusText = useMemo(() => {
     if (['requesting_permission', 'creating_session', 'connecting', 'connected'].includes(status)) return 'Connecting...';

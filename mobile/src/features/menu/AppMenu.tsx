@@ -1,8 +1,6 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 
-import { useAuth } from '../account/AuthProvider';
-
 export type MenuDestination =
   | 'account'
   | 'membership'
@@ -50,7 +48,6 @@ export function AppMenu({ onClose, onNavigate, visible }: {
   onNavigate: (destination: MenuDestination) => void;
   visible: boolean;
 }) {
-  const { isGuest, signOut, user } = useAuth();
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
       <BlurView experimentalBlurMethod="dimezisBlurView" intensity={48} style={styles.backdrop} tint="light">
@@ -63,7 +60,7 @@ export function AppMenu({ onClose, onNavigate, visible }: {
           {SECTIONS.map((section) => (
             <View key={section.label} style={styles.section}>
               <Text style={styles.sectionLabel}>{section.label}</Text>
-              {section.items.filter((item) => !isGuest || !['membership', 'billing'].includes(item.destination)).map((item) => (
+              {section.items.map((item) => (
                 <Pressable
                   key={item.destination}
                   accessibilityRole="button"
@@ -77,14 +74,6 @@ export function AppMenu({ onClose, onNavigate, visible }: {
               ))}
             </View>
           ))}
-          {user && !isGuest ? (
-            <Pressable
-              onPress={() => void signOut().then(onClose)}
-              style={({ pressed }) => [styles.logout, pressed && styles.pressed]}
-            >
-              <Text style={styles.logoutIcon}>↪</Text><Text style={styles.logoutText}>Log Out</Text>
-            </Pressable>
-          ) : null}
         </ScrollView>
       </View>
       </BlurView>

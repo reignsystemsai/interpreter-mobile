@@ -66,25 +66,23 @@ playback ends to reduce speaker echo and self-triggering.
 
 ## Accounts, Interpreter Pro, and notifications
 
-The app includes a modular Supabase authentication, RevenueCat subscription,
-and Expo notification foundation. These features fail closed while configuration
-is absent; the live interpreter continues to use the production backend.
+The app includes a modular RevenueCat subscription and Expo notification
+foundation. These features fail closed while configuration is absent; the live
+interpreter continues to use the production backend.
 
 Set only public mobile values in the EAS environment:
 
 ```text
-SUPABASE_URL
-SUPABASE_PUBLISHABLE_KEY
 LIVEKIT_URL
 EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY
 EXPO_PUBLIC_LEGAL_REVIEW_APPROVED=false
 ```
 
-The active Expo config copies only the Supabase URL, publishable key, and LiveKit
-URL into public app configuration. Never place `SUPABASE_SECRET_KEY`,
-`LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, RevenueCat webhook authorization, or the
-OpenAI API key in Expo configuration. Configure Google Play and RevenueCat products
-with IDs `interpreter_pro_monthly` and `interpreter_unlimited_monthly`.
+The active Expo config copies only the LiveKit URL and public app configuration
+values into the frontend bundle. Never place `LIVEKIT_API_KEY`,
+`LIVEKIT_API_SECRET`, RevenueCat webhook authorization, or the OpenAI API key in
+Expo configuration. Configure Google Play and RevenueCat products with IDs
+`interpreter_pro_monthly` and `interpreter_unlimited_monthly`.
 
 Account creation and customer-facing legal links stay disabled while
 `EXPO_PUBLIC_LEGAL_REVIEW_APPROVED` is false. Change it only after final Terms and
@@ -115,7 +113,7 @@ devices and a deployed backend containing the Phase 4 server bridge.
    interruption and reconnects or offers **Retry interpretation** while keeping
    the call alive when possible.
 7. End the call and confirm the transcript panel disappears. Transcript content
-   must not appear in call history or Supabase.
+   must not appear in call history or a stored account backend.
 
 If interpretation cannot start or its allowance is exhausted, the call falls
 back to direct participant audio rather than ending the LiveKit call.

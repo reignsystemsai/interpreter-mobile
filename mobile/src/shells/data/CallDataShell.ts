@@ -1,7 +1,5 @@
 import type { CallStatus } from './CallSession';
 
-// Supabase call-record contract only — no implementation yet.
-// Supabase is never responsible for iOS microphone permission state.
 export type CallRecord = {
   id: string;
   callerDeviceId: string;

@@ -1,5 +1,4 @@
 import { API_BASE_URL } from '../config/runtime';
-import { supabase } from './supabase';
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number, readonly payload: Record<string, unknown>) {
@@ -9,14 +8,11 @@ export class ApiError extends Error {
 }
 
 export async function authenticatedRequest<T>(path: string, init?: RequestInit) {
-  const session = (await supabase?.auth.getSession())?.data.session;
-  if (!session?.access_token) throw new Error('Unable to connect. Please try again.');
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.access_token}`,
       ...init?.headers,
     },
   });
