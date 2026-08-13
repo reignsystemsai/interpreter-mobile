@@ -8,13 +8,8 @@ import { type InterpreterContact, useContacts } from './ContactsProvider';
 import { CallLanguageSelection, type CallLanguage } from '../calling/CallLanguageSelection';
 import { CallService } from '../calling/CallService';
 import {
-  deviceDefaultPhoneRegion,
-  getRegisteredPhoneNumber,
-  normalizeE164,
-  normalizePhoneRegion,
-  phoneRegionFromE164,
-  registerDeviceInstallation,
-} from '../../services/deviceRegistration';
+  parsePhoneNumberFromString,
+} from 'libphonenumber-js';
 
 const APP_DOWNLOAD_URL = 'https://interpreter.ai/download';
 const BLUE = '#075BFF';
@@ -91,7 +86,6 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
   const [numberPromptVisible, setNumberPromptVisible] = useState(false);
   const [ownPhoneNumber, setOwnPhoneNumber] = useState('');
   const [pendingContactPhone, setPendingContactPhone] = useState('');
-  const [pendingContactRegion, setPendingContactRegion] = useState<CountryCode>(deviceDefaultPhoneRegion());
   const [pendingCallerLanguage, setPendingCallerLanguage] = useState<CallLanguage>('English');
   const [pendingRecipientLanguage, setPendingRecipientLanguage] = useState<CallLanguage>('Spanish');
   const [registrationError, setRegistrationError] = useState('');
@@ -111,9 +105,8 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     }
   };
 
-  const startContactCall = async (phoneNumberE164: string, defaultRegion: CountryCode, callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => {
+  const startContactCall = async (phoneNumberE164: string, callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => {
     try {
-      void defaultRegion;
       void callerLanguage;
       void recipientLanguage;
       await CallService.createCall(phoneNumberE164, contact.displayName);
@@ -129,26 +122,12 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     }
   };
 
-  const choosePhoneForCall = async (phoneNumberE164: string, region: CountryCode, callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => {
-    const registeredPhone = await getRegisteredPhoneNumber().catch(() => null);
-    if (!registeredPhone) {
-      setPendingContactPhone(phoneNumberE164);
-      setPendingContactRegion(region);
-      setPendingCallerLanguage(callerLanguage);
-      setPendingRecipientLanguage(recipientLanguage);
-      setNumberPromptVisible(true);
-      return;
-    }
-    await startContactCall(phoneNumberE164, region, callerLanguage, recipientLanguage);
+  const choosePhoneForCall = async (phoneNumberE164: string, callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => {
+    await startContactCall(phoneNumberE164, callerLanguage, recipientLanguage);
   };
 
   const beginVoiceCall = async (callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => {
-    const registeredPhone = await getRegisteredPhoneNumber().catch(() => null);
-    const fallbackRegion = phoneRegionFromE164(registeredPhone) ?? deviceDefaultPhoneRegion();
-    const firstValidPhone = contact.phoneNumbers.find((item) => {
-      const region = normalizePhoneRegion(item.countryCode) ?? fallbackRegion;
-      return Boolean(normalizeE164(item.value, region));
-    });
+    const firstValidPhone = contact.phoneNumbers.find((item) => Boolean(parsePhoneNumberFromString(item.value, item.countryCode as CountryCode)?.isValid()));
     if (!firstValidPhone) {
       Alert.alert('This contact has no phone number saved.', undefined, [
         { text: 'Cancel', style: 'cancel' },
@@ -156,19 +135,17 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
       ]);
       return;
     }
-    const region = normalizePhoneRegion(firstValidPhone.countryCode) ?? fallbackRegion;
-    const phoneNumberE164 = normalizeE164(firstValidPhone.value, region);
+    const phoneNumberE164 = parsePhoneNumberFromString(firstValidPhone.value, firstValidPhone.countryCode as CountryCode)?.number ?? '';
     if (!phoneNumberE164) return;
-    await choosePhoneForCall(phoneNumberE164, region, callerLanguage, recipientLanguage);
+    await choosePhoneForCall(phoneNumberE164, callerLanguage, recipientLanguage);
   };
 
   const registerAndCall = async () => {
     setBusy(true);
     setRegistrationError('');
     try {
-      await registerDeviceInstallation(ownPhoneNumber);
+      void ownPhoneNumber; void pendingContactPhone; void pendingCallerLanguage; void pendingRecipientLanguage;
       setNumberPromptVisible(false);
-      await startContactCall(pendingContactPhone, pendingContactRegion, pendingCallerLanguage, pendingRecipientLanguage);
     } catch (error) {
       setRegistrationError(error instanceof Error ? error.message : 'Unable to register this phone number.');
     } finally {
