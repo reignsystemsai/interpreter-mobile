@@ -28,6 +28,8 @@ Deno.serve(async (request) => {
   if (!supabaseUrl || !supabaseKey || !livekitUrl || !livekitApiKey || !livekitApiSecret) return json({ error: 'Token service is not configured.' }, 500);
 
   const supabase = createClient(supabaseUrl, supabaseKey);
+  const { data: device } = await supabase.from('speak_profiles').select('device_id').eq('device_id', deviceId).maybeSingle();
+  if (!device) return json({ error: 'CALL TOKEN' }, 403);
   const { data: call, error: callError } = await supabase.from('app_calls').select('id, caller_device_id, recipient_device_id, status').eq('id', callId).maybeSingle();
   if (callError) return json({ error: 'CALL TOKEN' }, 500);
   if (!call || (call.caller_device_id !== deviceId && call.recipient_device_id !== deviceId)) return json({ error: 'CALL TOKEN' }, 403);
