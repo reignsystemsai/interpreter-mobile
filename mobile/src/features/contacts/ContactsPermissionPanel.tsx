@@ -6,7 +6,7 @@ import Svg, { Path, Rect } from 'react-native-svg';
 
 import { type InterpreterContact, useContacts } from './ContactsProvider';
 import { CallLanguageSelection, type CallLanguage } from '../calling/CallLanguageSelection';
-import { VoiceCallService } from '../calling/VoiceCallService';
+import { CallService } from '../calling/CallService';
 import {
   deviceDefaultPhoneRegion,
   getRegisteredPhoneNumber,
@@ -113,18 +113,15 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
 
   const startContactCall = async (phoneNumberE164: string, defaultRegion: CountryCode, callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => {
     try {
-      await VoiceCallService.startVoiceCall({
-        callerLanguage,
-        contactName: contact.displayName,
-        defaultRegion,
-        phoneNumber: phoneNumberE164,
-        recipientLanguage,
-      });
+      void defaultRegion;
+      void callerLanguage;
+      void recipientLanguage;
+      await CallService.createCall(phoneNumberE164, contact.displayName);
     } catch (error) {
       if (error instanceof Error && error.message === 'This person does not have Interpreter yet.') {
         Alert.alert('Invite to Interpreter', undefined, [
-          { text: 'Cancel', style: 'cancel', onPress: () => void VoiceCallService.resetVoiceCall({ notifyBackend: false }) },
-          { text: 'Invite to Interpreter', onPress: () => void invite().finally(() => VoiceCallService.resetVoiceCall({ notifyBackend: false })) },
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Invite to Interpreter', onPress: () => void invite() },
         ]);
       } else {
         Alert.alert('Unable to connect', error instanceof Error ? error.message : 'Please try again.');

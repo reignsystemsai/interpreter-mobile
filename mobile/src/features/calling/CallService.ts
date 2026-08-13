@@ -1,18 +1,24 @@
 import { AndroidAudioTypePresets, AudioSession } from '@livekit/react-native';
-import { AudioPresets, Room, RoomEvent, Track } from 'livekit-client';
+import { AudioPresets, Room, RoomEvent, Track, type VideoTrack } from 'livekit-client';
 import { AppState, PermissionsAndroid, Platform } from 'react-native';
 import InCallManager from 'react-native-incall-manager';
 
 import { API_BASE_URL } from '../../config/runtime';
 import { getDeviceId } from '../../services/deviceRegistration';
 
-export type CallStatus = 'idle' | 'ringing' | 'connecting' | 'connected' | 'ended';
+export type CallStatus = 'idle' | 'ringing' | 'connecting' | 'connected' | 'reconnecting' | 'ended';
 export type CallRole = 'caller' | 'recipient' | null;
 export type CallState = {
+  cameraEnabled: boolean;
   callId: string | null;
+  connectedAt: number | null;
   error: string;
+  localVideoTrack: VideoTrack | null;
+  muted: boolean;
   remoteLabel: string;
+  remoteVideoTrack: VideoTrack | null;
   role: CallRole;
+  speakerEnabled: boolean;
   status: CallStatus;
 };
 
@@ -34,7 +40,19 @@ export class CallError extends Error {
   }
 }
 
-const INITIAL_STATE: CallState = { callId: null, error: '', remoteLabel: '', role: null, status: 'idle' };
+const INITIAL_STATE: CallState = {
+  cameraEnabled: false,
+  callId: null,
+  connectedAt: null,
+  error: '',
+  localVideoTrack: null,
+  muted: false,
+  remoteLabel: '',
+  remoteVideoTrack: null,
+  role: null,
+  speakerEnabled: false,
+  status: 'idle',
+};
 const AUDIO_CAPTURE = { autoGainControl: true, channelCount: 1, echoCancellation: true, noiseSuppression: true } as const;
 const POLL_INTERVAL_MS = 2_000;
 
@@ -103,7 +121,7 @@ class BasicCallService {
 
   presentIncoming(callId: string, callerPhoneNumber: string) {
     if (this.state.status !== 'idle') return false;
-    this.setState({ callId, error: '', remoteLabel: callerPhoneNumber, role: 'recipient', status: 'ringing' });
+    this.setState({ ...INITIAL_STATE, callId, remoteLabel: callerPhoneNumber, role: 'recipient', status: 'ringing' });
     InCallManager.startRingtone('_DEFAULT_');
     return true;
   }
@@ -140,6 +158,39 @@ class BasicCallService {
     InCallManager.stopRingback();
     InCallManager.stopRingtone();
     await this.hangup({ notifyBackend: true, endpoint: 'end' });
+  }
+
+  async toggleMute() {
+    const room = this.room;
+    if (!room) throw new CallError('call_not_connected', 'Connect the call before changing mute.');
+    const muted = !this.state.muted;
+    await room.localParticipant.setMicrophoneEnabled(!muted, AUDIO_CAPTURE);
+    this.update({ muted });
+  }
+
+  async toggleSpeaker() {
+    if (!this.room) throw new CallError('call_not_connected', 'Connect the call before changing audio output.');
+    const speakerEnabled = !this.state.speakerEnabled;
+    const output = Platform.OS === 'ios'
+      ? speakerEnabled ? 'force_speaker' : 'default'
+      : speakerEnabled ? 'speaker' : 'earpiece';
+    await AudioSession.selectAudioOutput(output);
+    this.update({ speakerEnabled });
+  }
+
+  async toggleCamera() {
+    const room = this.room;
+    if (!room) throw new CallError('call_not_connected', 'Connect the call before starting the camera.');
+    const cameraEnabled = !this.state.cameraEnabled;
+    if (cameraEnabled && Platform.OS === 'android') {
+      const permission = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+      if (permission !== PermissionsAndroid.RESULTS.GRANTED) throw new CallError('camera_permission_denied', 'Camera access is required to share video.');
+    }
+    await room.localParticipant.setCameraEnabled(cameraEnabled);
+    const localVideoTrack = cameraEnabled
+      ? [...room.localParticipant.videoTrackPublications.values()].find((publication) => publication.track)?.track as VideoTrack | null ?? null
+      : null;
+    this.update({ cameraEnabled, localVideoTrack });
   }
 
   private async hangup({ endpoint = 'end', notifyBackend }: { endpoint?: 'decline' | 'end'; notifyBackend: boolean }) {
@@ -180,12 +231,16 @@ class BasicCallService {
       if (this.room !== room) return;
       InCallManager.stopRingback();
       InCallManager.stopRingtone();
-      this.update({ status: 'connected' });
+      this.update({ connectedAt: this.state.connectedAt ?? Date.now(), status: 'connected' });
     };
 
     room.on(RoomEvent.ParticipantConnected, markConnected);
     room.on(RoomEvent.TrackSubscribed, (track) => {
       if (track.kind === Track.Kind.Audio) markConnected();
+      if (track.kind === Track.Kind.Video && this.room === room) this.update({ remoteVideoTrack: track as VideoTrack });
+    });
+    room.on(RoomEvent.TrackUnsubscribed, (track) => {
+      if (track.kind === Track.Kind.Video && this.room === room) this.update({ remoteVideoTrack: null });
     });
     room.on(RoomEvent.ParticipantDisconnected, () => {
       if (this.room === room) void this.hangup({ notifyBackend: true });
@@ -193,11 +248,17 @@ class BasicCallService {
     room.on(RoomEvent.Disconnected, () => {
       if (this.room === room) void this.hangup({ notifyBackend: true });
     });
+    room.on(RoomEvent.Reconnecting, () => {
+      if (this.room === room) this.update({ status: 'reconnecting' });
+    });
+    room.on(RoomEvent.Reconnected, () => {
+      if (this.room === room) markConnected();
+    });
 
     await room.connect(call.livekitUrl, call.token, { autoSubscribe: true, maxRetries: 3 });
     if (this.room !== room || this.call !== call) throw new CallError('call_ended', 'Call ended.');
     await room.localParticipant.setMicrophoneEnabled(true, AUDIO_CAPTURE);
-    if (Platform.OS === 'android') await AudioSession.selectAudioOutput('speaker');
+    if (Platform.OS === 'android') await AudioSession.selectAudioOutput('earpiece');
     if (room.remoteParticipants.size > 0) markConnected();
     else this.update({ status: 'connecting' });
     this.connectingCallId = null;
@@ -208,6 +269,7 @@ class BasicCallService {
     this.room = null;
     if (room) {
       room.removeAllListeners();
+      await room.localParticipant.setCameraEnabled(false).catch(() => undefined);
       await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
       await room.disconnect().catch(() => undefined);
     }
