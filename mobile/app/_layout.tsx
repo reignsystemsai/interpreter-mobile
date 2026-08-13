@@ -5,8 +5,8 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { AuthProvider } from '../src/features/account/AuthProvider';
+import { CallOverlay } from '../src/features/calling/CallOverlay';
 import { ContactsProvider } from '../src/features/contacts/ContactsProvider';
-import { VoiceCallHost } from '../src/features/calling/VoiceCallHost';
 import { LanguagePreferencesProvider } from '../src/features/languages/LanguagePreferencesProvider';
 import { ApplyAvailableUpdate } from '../src/components/ApplyAvailableUpdate';
 
@@ -18,7 +18,7 @@ export default function RootLayout() {
       <ApplyAvailableUpdate />
       <LanguagePreferencesProvider>
         <ContactsProvider>
-            <VoiceCallHost />
+            <CallOverlay />
             <StatusBar backgroundColor="#FFFFFF" style="dark" />
             <Stack
               screenOptions={{

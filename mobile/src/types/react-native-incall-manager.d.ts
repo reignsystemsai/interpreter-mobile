@@ -11,7 +11,7 @@ declare module 'react-native-incall-manager' {
     setSpeakerphoneOn(enabled: boolean): void;
     start(options?: StartOptions): void;
     startRingback(ringback: string): void;
-    startRingtone(ringtone: string, vibratePattern: number | number[], iosCategory: string, seconds: number): void;
+    startRingtone(ringtone: string, vibratePattern?: number | number[], iosCategory?: string, seconds?: number): void;
     stop(): void;
     stopRingback(): void;
     stopRingtone(): void;

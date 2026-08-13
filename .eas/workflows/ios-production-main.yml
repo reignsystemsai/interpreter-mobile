@@ -1,0 +1,24 @@
+name: iOS Production Main
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_ios:
+    name: Build iOS Production
+    type: build
+    environment: production
+    params:
+      platform: ios
+      profile: production
+
+  submit_testflight:
+    name: Submit to TestFlight
+    needs: [build_ios]
+    type: submit
+    environment: production
+    params:
+      build_id: ${{ needs.build_ios.outputs.build_id }}
+      profile: production
