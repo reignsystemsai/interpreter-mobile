@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as Contacts from 'expo-contacts';
 import type { CountryCode } from 'libphonenumber-js';
-import { Alert, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import { type InterpreterContact, useContacts } from './ContactsProvider';
 import { CallLanguageSelection, type CallLanguage } from '../calling/CallLanguageSelection';
 import { CallService } from '../calling/CallService';
+import { CallingSetup } from '../calling/CallingSetup';
+import { getCallableIdentity } from '../calling/CallableIdentity';
 import {
   parsePhoneNumberFromString,
 } from 'libphonenumber-js';
@@ -81,14 +83,9 @@ function permissionLabel(permission: ReturnType<typeof useContacts>['permission'
 }
 
 function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterContact; onBack: () => void; onRefresh: () => Promise<void> }) {
-  const [busy, setBusy] = useState(false);
   const [showLanguageSelection, setShowLanguageSelection] = useState(true);
-  const [numberPromptVisible, setNumberPromptVisible] = useState(false);
-  const [ownPhoneNumber, setOwnPhoneNumber] = useState('');
+  const [setupVisible, setSetupVisible] = useState(false);
   const [pendingContactPhone, setPendingContactPhone] = useState('');
-  const [pendingCallerLanguage, setPendingCallerLanguage] = useState<CallLanguage>('English');
-  const [pendingRecipientLanguage, setPendingRecipientLanguage] = useState<CallLanguage>('Spanish');
-  const [registrationError, setRegistrationError] = useState('');
 
   const invite = async () => {
     await Share.share({ message: `Download Interpreter so I can speak to you in your language.\n\n${APP_DOWNLOAD_URL}` });
@@ -109,6 +106,11 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     try {
       void callerLanguage;
       void recipientLanguage;
+      if (!await getCallableIdentity()) {
+        setPendingContactPhone(phoneNumberE164);
+        setSetupVisible(true);
+        return;
+      }
       await CallService.createCall(phoneNumberE164, contact.displayName);
     } catch (error) {
       if (error instanceof Error && error.message === 'This person does not have Interpreter yet.') {
@@ -140,17 +142,11 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     await choosePhoneForCall(phoneNumberE164, callerLanguage, recipientLanguage);
   };
 
-  const registerAndCall = async () => {
-    setBusy(true);
-    setRegistrationError('');
-    try {
-      void ownPhoneNumber; void pendingContactPhone; void pendingCallerLanguage; void pendingRecipientLanguage;
-      setNumberPromptVisible(false);
-    } catch (error) {
-      setRegistrationError(error instanceof Error ? error.message : 'Unable to register this phone number.');
-    } finally {
-      setBusy(false);
-    }
+  const continueAfterSetup = () => {
+    const phone = pendingContactPhone;
+    setPendingContactPhone('');
+    setSetupVisible(false);
+    if (phone) void CallService.createCall(phone, contact.displayName).catch((error) => Alert.alert('Unable to connect', error instanceof Error ? error.message : 'Please try again.'));
   };
 
   if (showLanguageSelection) return <>
@@ -160,18 +156,7 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
       onContactPress={() => setShowLanguageSelection(false)}
       onStart={(callerLanguage, recipientLanguage) => void beginVoiceCall(callerLanguage, recipientLanguage)}
     />
-    <Modal animationType="fade" onRequestClose={() => setNumberPromptVisible(false)} transparent visible={numberPromptVisible}>
-      <View style={styles.numberBackdrop}>
-        <View accessibilityViewIsModal style={styles.numberCard}>
-          <Text style={styles.numberTitle}>Your phone number</Text>
-          <Text style={styles.numberBody}>Enter it once so this device can receive Interpreter calls.</Text>
-          <TextInput keyboardType="phone-pad" onChangeText={setOwnPhoneNumber} placeholder="Include country code, e.g. +57" style={styles.input} value={ownPhoneNumber} />
-          {registrationError ? <Text style={styles.error}>{registrationError}</Text> : null}
-          <PrimaryButton disabled={busy} label={busy ? 'Saving…' : 'Continue'} onPress={() => void registerAndCall()} />
-          <SecondaryButton label="Not Now" onPress={() => setNumberPromptVisible(false)} />
-        </View>
-      </View>
-    </Modal>
+    <CallingSetup onCancel={() => setSetupVisible(false)} onComplete={continueAfterSetup} visible={setupVisible} />
   </>;
 
   return <>
@@ -193,18 +178,7 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
       </View>
       <SecondaryButton label="Edit in Contacts" onPress={() => void editNativeContact()} />
     </ScrollView>
-    <Modal animationType="fade" onRequestClose={() => setNumberPromptVisible(false)} transparent visible={numberPromptVisible}>
-      <View style={styles.numberBackdrop}>
-        <View accessibilityViewIsModal style={styles.numberCard}>
-          <Text style={styles.numberTitle}>Your phone number</Text>
-          <Text style={styles.numberBody}>Enter it once so this device can receive Interpreter calls.</Text>
-          <TextInput keyboardType="phone-pad" onChangeText={setOwnPhoneNumber} placeholder="Include country code, e.g. +57" style={styles.input} value={ownPhoneNumber} />
-          {registrationError ? <Text style={styles.error}>{registrationError}</Text> : null}
-          <PrimaryButton disabled={busy} label={busy ? 'Saving…' : 'Continue'} onPress={() => void registerAndCall()} />
-          <SecondaryButton label="Not Now" onPress={() => setNumberPromptVisible(false)} />
-        </View>
-      </View>
-    </Modal>
+    <CallingSetup onCancel={() => setSetupVisible(false)} onComplete={continueAfterSetup} visible={setupVisible} />
   </>;
 }
 
