@@ -15,10 +15,10 @@ const json = (body: Record<string, unknown>, status = 200) => new Response(JSON.
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
-
-  const authorization = request.headers.get('Authorization');
-  const token = authorization?.replace(/^Bearer\s+/i, '').trim();
-  if (!token) return json({ error: 'Authorization required.' }, 401);
+  const body = await request.json().catch(() => null) as { call_id?: unknown; device_id?: unknown } | null;
+  const callId = typeof body?.call_id === 'string' ? body.call_id.trim() : '';
+  const deviceId = typeof body?.device_id === 'string' ? body.device_id.trim() : '';
+  if (!callId || !deviceId) return json({ error: 'call_id and device_id are required.' }, 400);
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -28,23 +28,12 @@ Deno.serve(async (request) => {
   if (!supabaseUrl || !supabaseKey || !livekitUrl || !livekitApiKey || !livekitApiSecret) return json({ error: 'Token service is not configured.' }, 500);
 
   const supabase = createClient(supabaseUrl, supabaseKey);
-  const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-  if (userError || !user) return json({ error: 'Invalid authorization.' }, 401);
+  const { data: call, error: callError } = await supabase.from('app_calls').select('id, caller_device_id, recipient_device_id, status').eq('id', callId).maybeSingle();
+  if (callError) return json({ error: 'CALL TOKEN' }, 500);
+  if (!call || (call.caller_device_id !== deviceId && call.recipient_device_id !== deviceId)) return json({ error: 'CALL TOKEN' }, 403);
+  if (call.status === 'declined' || call.status === 'ended') return json({ error: 'CALL TOKEN' }, 409);
 
-  const body = await request.json().catch(() => null) as { callId?: unknown } | null;
-  const callId = typeof body?.callId === 'string' ? body.callId.trim() : '';
-  if (!callId) return json({ error: 'callId is required.' }, 400);
-
-  const { data: call, error: callError } = await supabase
-    .from('app_calls')
-    .select('id, caller_user_id, recipient_user_id, status')
-    .eq('id', callId)
-    .maybeSingle();
-  if (callError) return json({ error: 'Call lookup failed.' }, 500);
-  if (!call || (call.caller_user_id !== user.id && call.recipient_user_id !== user.id)) return json({ error: 'Call access denied.' }, 403);
-  if (call.status === 'declined' || call.status === 'ended') return json({ error: 'Call is no longer active.' }, 409);
-
-  const participantToken = new AccessToken(livekitApiKey, livekitApiSecret, { identity: user.id, ttl: '10m' });
+  const participantToken = new AccessToken(livekitApiKey, livekitApiSecret, { identity: deviceId, ttl: '10m' });
   participantToken.addGrant({ canPublish: true, canSubscribe: true, room: call.id, roomJoin: true });
   return json({ participant_token: await participantToken.toJwt(), server_url: livekitUrl });
 });
