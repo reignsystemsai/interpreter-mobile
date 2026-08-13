@@ -100,7 +100,11 @@ class SpeakCallService {
     } catch (roomError) {
       throw new Error(`CALL ROOM\n${roomError instanceof Error ? roomError.message : 'Unable to join the call room.'}`);
     }
-    await room.localParticipant.setMicrophoneEnabled(true, AUDIO);
+    try {
+      await room.localParticipant.setMicrophoneEnabled(true, AUDIO);
+    } catch (audioError) {
+      throw new Error(`CALL AUDIO\n${audioError instanceof Error ? audioError.message : 'Unable to start call audio.'}`);
+    }
     InCallManager.stopRingback();
     InCallManager.stopRingtone();
     this.set({ connectedAt: Date.now(), status: 'connected' });

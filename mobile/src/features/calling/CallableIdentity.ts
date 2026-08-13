@@ -7,19 +7,12 @@ const DEVICE_ID_KEY = 'interpreter.calling.device_id';
 const SETUP_COMPLETE_KEY = 'interpreter.calling.setup_complete';
 const DISPLAY_NAME_KEY = 'interpreter.calling.display_name';
 const PHONE_E164_KEY = 'interpreter.calling.phone_e164';
+let registeredDeviceId: string | null = null;
 
 export function normalizePhone(phone: string) {
   const parsed = parsePhoneNumberFromString(phone);
   if (!parsed || !parsed.isValid()) throw new Error('Enter a valid phone number with country code.');
   return parsed.number;
-}
-
-export async function getCallableIdentity() {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return null;
-  const { data, error } = await supabase.from('speak_profiles').select('user_id').eq('user_id', session.user.id).maybeSingle();
-  if (error) throw error;
-  return data ? { phoneE164: '', userId: session.user.id } : null;
 }
 
 export async function getLocalCallableIdentity() {
@@ -51,6 +44,7 @@ export async function createCallableIdentity(displayName: string, phone: string)
 export async function ensureCallableIdentity() {
   const localIdentity = await getLocalCallableIdentity();
   if (!localIdentity) throw new Error('CALL PROFILE\nCalling setup is required.');
+  if (registeredDeviceId === localIdentity.deviceId) return localIdentity;
   const { data, error } = await supabase.functions.invoke('register-calling-device', {
     body: {
       device_id: localIdentity.deviceId,
@@ -59,5 +53,6 @@ export async function ensureCallableIdentity() {
     },
   });
   if (error || !data?.device_id) throw new Error('CALL PROFILE\nUnable to save the calling profile.');
+  registeredDeviceId = localIdentity.deviceId;
   return localIdentity;
 }
