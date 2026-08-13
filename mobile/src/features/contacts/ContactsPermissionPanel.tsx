@@ -8,7 +8,7 @@ import { type InterpreterContact, useContacts } from './ContactsProvider';
 import { CallLanguageSelection, type CallLanguage } from '../calling/CallLanguageSelection';
 import { CallService } from '../calling/CallService';
 import { CallingSetup } from '../calling/CallingSetup';
-import { getCallableIdentity } from '../calling/CallableIdentity';
+import { ensureCallableIdentity, getLocalCallableIdentity } from '../calling/CallableIdentity';
 import {
   parsePhoneNumberFromString,
 } from 'libphonenumber-js';
@@ -106,11 +106,12 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     try {
       void callerLanguage;
       void recipientLanguage;
-      if (!await getCallableIdentity()) {
+      if (!await getLocalCallableIdentity()) {
         setPendingContactPhone(phoneNumberE164);
         setSetupVisible(true);
         return;
       }
+      await ensureCallableIdentity();
       await CallService.createCall(phoneNumberE164, contact.displayName);
     } catch (error) {
       if (error instanceof Error && error.message === 'This person does not have Interpreter yet.') {
@@ -146,7 +147,7 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     const phone = pendingContactPhone;
     setPendingContactPhone('');
     setSetupVisible(false);
-    if (phone) void CallService.createCall(phone, contact.displayName).catch((error) => Alert.alert('Unable to connect', error instanceof Error ? error.message : 'Please try again.'));
+    if (phone) void ensureCallableIdentity().then(() => CallService.createCall(phone, contact.displayName)).catch((error) => Alert.alert('Unable to connect', error instanceof Error ? error.message : 'Please try again.'));
   };
 
   if (showLanguageSelection) return <>
