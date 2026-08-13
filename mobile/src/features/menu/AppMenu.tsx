@@ -8,6 +8,7 @@ export type MenuDestination =
   | 'membership'
   | 'billing'
   | 'settings'
+  | 'call_ui_preview'
   | 'languages'
   | 'notifications'
   | 'interpreter_calls'
@@ -29,6 +30,7 @@ const SECTIONS: Array<{ label: string; items: MenuItem[] }> = [
     label: 'PREFERENCES',
     items: [
       { destination: 'settings', icon: '⚙', label: 'Settings' },
+      { destination: 'call_ui_preview', icon: '☎', label: 'Call Screen Preview' },
       { destination: 'languages', icon: '◎', label: 'Languages' },
       { destination: 'notifications', icon: '♧', label: 'Notifications' },
     ],

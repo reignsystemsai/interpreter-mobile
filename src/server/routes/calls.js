@@ -5,6 +5,7 @@ const { getSupabaseAdmin, isSupabaseConfigured } = require("../supabase");
 const { createVoiceToken, isLiveKitConfigured } = require("../livekit");
 
 const router = express.Router();
+const CALL_START_PATH = "/start";
 
 function cleanText(value, maxLength = 160) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
@@ -54,7 +55,7 @@ function toCallRecordJson(row) {
   };
 }
 
-router.post(["/", "/start"], async (req, res) => {
+router.post(["/", CALL_START_PATH], async (req, res) => {
   if (!isSupabaseConfigured() || !isLiveKitConfigured()) return callError(res, 503, "calling_unavailable", "Calling is temporarily unavailable.");
   const callerDeviceId = cleanText(req.body?.callerDeviceId, 120);
   const recipientPhoneNumber = normalizeE164(req.body?.recipientPhoneNumber, req.body?.defaultRegion);
@@ -206,5 +207,6 @@ router.participantIdentityFor = participantIdentityFor;
 router.authorizeParticipant = authorizeParticipant;
 router.resolveBasicCallErrorResponse = resolveBasicCallErrorResponse;
 router.toCallRecordJson = toCallRecordJson;
+router.CALL_START_PATH = CALL_START_PATH;
 
 module.exports = router;

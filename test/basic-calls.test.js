@@ -4,6 +4,15 @@ const test = require("node:test");
 const callRoutes = require("../src/server/routes/calls");
 const { createVoiceToken, isLiveKitConfigured } = require("../src/server/livekit");
 
+test("mobile call-start path is exposed with the response fields CallService requires", () => {
+  assert.equal(callRoutes.CALL_START_PATH, "/start");
+  const startRoute = callRoutes.stack.find((layer) => layer.route?.path?.includes(callRoutes.CALL_START_PATH));
+  assert.ok(startRoute);
+  assert.equal(startRoute.route.methods.post, true);
+  const response = { callId: "call-1", callerToken: "token", livekitUrl: "wss://livekit.example", roomName: "basic-call-1", translationEnabled: false };
+  for (const field of ["callId", "callerToken", "livekitUrl", "roomName", "translationEnabled"]) assert.ok(field in response);
+});
+
 test("room names are deterministic and derived only from the call id", () => {
   assert.equal(callRoutes.roomNameForCall("abc-123"), "basic-abc-123");
 });

@@ -26,6 +26,7 @@ import {
 } from '../../services/membership';
 import { registerForAccountNotifications } from '../../services/notifications';
 import { useAuth } from '../account/AuthProvider';
+import { CallUiPreview } from '../calling/CallUiPreview';
 import type { MenuDestination } from './AppMenu';
 
 type NotificationPreferences = {
@@ -48,6 +49,7 @@ export function DestinationSheet({ destination, onClose }: {
   destination: MenuDestination | null;
   onClose: () => void;
 }) {
+  if (destination === 'call_ui_preview') return <CallUiPreview onClose={onClose} />;
   const title = ({
     account: 'My Account',
     membership: 'Interpreter Pro',
