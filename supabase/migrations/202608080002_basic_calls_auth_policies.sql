@@ -9,7 +9,7 @@ with check (
     from public.profiles as p
     where p.id = auth.uid()
       and regexp_replace(coalesce(p.phone, ''), '[^0-9]', '', 'g')
-          = regexp_replace(coalesce(new.caller_phone_e164, ''), '[^0-9]', '', 'g')
+          = regexp_replace(coalesce(caller_phone_e164, ''), '[^0-9]', '', 'g')
   )
 );
 
