@@ -190,11 +190,19 @@ export default function InterpreterScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Pressable
-            accessibilityLabel="Open contacts"
+            accessibilityLabel="Open calling setup"
             accessibilityRole="button"
             disabled={conversationRunning}
             hitSlop={12}
-            onPress={() => setOverlay('contacts')}
+            onPress={() => {
+              void getLocalCallableIdentity().then((identity) => {
+                if (!identity) {
+                  setShowCallingSetup(true);
+                } else {
+                  setOverlay('contacts');
+                }
+              });
+            }}
             style={({ pressed }) => [
               styles.phoneButton,
               conversationRunning && styles.disabled,
