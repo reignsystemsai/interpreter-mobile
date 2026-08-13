@@ -19,7 +19,7 @@
       }
     },
     "production": {
-      "environment": "preview",
+      "environment": "production",
       "env": {
         "EXPO_PUBLIC_MVP_DEVICE_PHONE_NUMBER": "+13055189384"
       }

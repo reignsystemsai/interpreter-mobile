@@ -8,11 +8,9 @@ export const API_BASE_URL = (
 const publicConfig = Constants.expoConfig?.extra ?? {};
 
 export const SUPABASE_URL =
-  typeof publicConfig.supabaseUrl === 'string' ? publicConfig.supabaseUrl.trim() : '';
+  process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() ?? '';
 export const SUPABASE_PUBLISHABLE_KEY =
-  typeof publicConfig.supabasePublishableKey === 'string'
-    ? publicConfig.supabasePublishableKey.trim()
-    : '';
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ?? '';
 export const LIVEKIT_URL =
   typeof publicConfig.livekitUrl === 'string' ? publicConfig.livekitUrl.trim() : '';
 export const REVENUECAT_ANDROID_API_KEY =
