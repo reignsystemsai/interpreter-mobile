@@ -7,13 +7,9 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { type InterpreterContact, useContacts } from './ContactsProvider';
 import { CallLanguageSelection, type CallLanguage } from '../calling/CallLanguageSelection';
 import { VoiceCallService } from '../calling/VoiceCallService';
-import { backendMediaAdapter } from '../../shells/audio/BackendMediaAdapter';
-import { CallingShellHost } from '../../shells/calling/CallingShellHost';
 import {
   deviceDefaultPhoneRegion,
-  getDeviceId,
   getRegisteredPhoneNumber,
-  lookupDeviceByPhone,
   normalizeE164,
   normalizePhoneRegion,
   phoneRegionFromE164,
@@ -116,25 +112,22 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
   };
 
   const startContactCall = async (phoneNumberE164: string, defaultRegion: CountryCode, callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => {
-    let createdCallId: string | null = null;
     try {
-      const recipient = await lookupDeviceByPhone(phoneNumberE164, defaultRegion);
-      if (!recipient.found) throw new Error('This person does not have Interpreter yet.');
-      const callerDeviceId = await getDeviceId();
-      const session = await CallingShellHost.createCall({ callerDeviceId, recipientPhoneNumber: phoneNumberE164, recipientUserId: recipient.userId, callerLanguage, recipientLanguage });
-      createdCallId = session.callId;
-      await backendMediaAdapter.connect(session.callId, contact.displayName, 'caller');
+      await VoiceCallService.startVoiceCall({
+        callerLanguage,
+        contactName: contact.displayName,
+        defaultRegion,
+        phoneNumber: phoneNumberE164,
+        recipientLanguage,
+      });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Please try again.';
-      if (message === 'This person does not have Interpreter yet.') {
+      if (error instanceof Error && error.message === 'This person does not have Interpreter yet.') {
         Alert.alert('Invite to Interpreter', undefined, [
           { text: 'Cancel', style: 'cancel', onPress: () => void VoiceCallService.resetVoiceCall({ notifyBackend: false }) },
           { text: 'Invite to Interpreter', onPress: () => void invite().finally(() => VoiceCallService.resetVoiceCall({ notifyBackend: false })) },
         ]);
       } else {
-        if (createdCallId) void CallingShellHost.endCall(createdCallId).catch(() => undefined);
-        void VoiceCallService.disconnectMedia();
-        Alert.alert('Unable to connect', message);
+        Alert.alert('Unable to connect', error instanceof Error ? error.message : 'Please try again.');
       }
     }
   };
