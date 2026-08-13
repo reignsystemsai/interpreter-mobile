@@ -1,1 +1,1 @@
-/// <reference types="expo/types" />
+eference types="expo/types" />

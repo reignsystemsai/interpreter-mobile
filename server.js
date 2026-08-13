@@ -2,12 +2,6 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const path = require("path");
-const accountRoutes = require("./src/server/routes/account");
-const contactRoutes = require("./src/server/routes/contacts");
-const notificationRoutes = require("./src/server/routes/notifications");
-const subscriptionRoutes = require("./src/server/routes/subscriptions");
-const deviceRoutes = require("./src/server/routes/devices");
-const { isSupabaseConfigured } = require("./src/server/supabase");
 require("dotenv").config();
 
 const app = express();
@@ -27,18 +21,11 @@ app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
-app.use("/api/v1/account", accountRoutes);
-app.use("/api/v1/contacts", contactRoutes);
-app.use("/api/v1/notifications", notificationRoutes);
-app.use("/api/v1/subscriptions", subscriptionRoutes);
-app.use("/api/v1/devices", deviceRoutes);
-
 app.get("/health", (req, res) => {
   res.status(200).json({
     ok: true,
     service: "interpreter-api",
     openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
-    accountServicesConfigured: isSupabaseConfigured(),
     timestamp: new Date().toISOString()
   });
 });

@@ -25,7 +25,6 @@ import {
   restoreMembership,
 } from '../../services/membership';
 import { registerForAccountNotifications } from '../../services/notifications';
-import { useAuth } from '../account/AuthProvider';
 import { CallUiPreview } from '../calling/CallUiPreview';
 import type { MenuDestination } from './AppMenu';
 
@@ -105,160 +104,31 @@ export function DestinationSheet({ destination, onClose }: {
 }
 
 function AccountContent() {
-  const { clearRecovery, configured, deleteAccount, isGuest, legalApproved, recoveryMode, sendPasswordReset, signIn, signUp, updatePassword, user } = useAuth();
-  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [accepted, setAccepted] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
-  const [profileName, setProfileName] = useState('');
-  const [profilePhone, setProfilePhone] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-
-  useEffect(() => {
-    if (!user || isGuest) return;
-    void authenticatedRequest<{ profile?: { full_name?: string; phone?: string } }>('/api/v1/account/me')
-      .then((account) => {
-        setProfileName(account.profile?.full_name ?? '');
-        setProfilePhone(account.profile?.phone ?? '');
-      })
-      .catch(() => undefined);
-  }, [isGuest, user]);
-
-  if (!configured) return <GuestAccountIntroduction />;
-  if (recoveryMode) {
-    const savePassword = async () => {
-      setBusy(true); setMessage('');
-      try {
-        await updatePassword(newPassword);
-        setNewPassword('');
-        setMessage('Your password has been updated.');
-      } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to update password.'); }
-      finally { setBusy(false); }
-    };
-    return (
-      <View>
-        <Text style={styles.intro}>Choose a new password for your Interpreter account.</Text>
-        <TextInput autoCapitalize="none" autoComplete="new-password" onChangeText={setNewPassword} placeholder="New password" secureTextEntry style={styles.input} value={newPassword} />
-        {message ? <Text style={styles.message}>{message}</Text> : null}
-        <PrimaryButton disabled={busy} label={busy ? 'Updating...' : 'Update Password'} onPress={() => void savePassword()} />
-        <SecondaryButton label="Cancel" onPress={clearRecovery} />
-      </View>
-    );
-  }
-  if (user && !isGuest) {
-    const saveProfile = async () => {
-      setBusy(true); setMessage('');
-      try {
-        await authenticatedRequest('/api/v1/account/me', {
-          method: 'PATCH',
-          body: JSON.stringify({ fullName: profileName, phone: profilePhone }),
-        });
-        setMessage('Account details saved.');
-      } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to save account.'); }
-      finally { setBusy(false); }
-    };
-    return (
-      <View>
-        <Card><Label>Email</Label><Text style={styles.value}>{user.email}</Text></Card>
-        <TextInput autoCapitalize="words" onChangeText={setProfileName} placeholder="Full name" style={styles.input} value={profileName} />
-        <TextInput keyboardType="phone-pad" onChangeText={setProfilePhone} placeholder="Phone number (optional)" style={styles.input} value={profilePhone} />
-        {message ? <Text style={styles.message}>{message}</Text> : null}
-        <PrimaryButton disabled={busy} label={busy ? 'Saving...' : 'Save Account'} onPress={() => void saveProfile()} />
-        <SecondaryButton label="Reset Password by Email" onPress={() => void sendPasswordReset(user.email ?? '').then(() => Alert.alert('Email sent', 'Check your inbox for password reset instructions.')).catch((error) => Alert.alert('Unable to send email', error instanceof Error ? error.message : 'Try again.'))} />
-        <Text style={styles.caption}>Your subscription must be canceled in Google Play before deleting your account.</Text>
-        <Pressable onPress={() => Alert.alert('Delete account?', 'This permanently deletes the Interpreter account but does not cancel Google Play subscriptions.', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Delete', style: 'destructive', onPress: () => void deleteAccount() },
-        ])} style={styles.dangerButton}><Text style={styles.dangerText}>Delete Account</Text></Pressable>
-      </View>
-    );
-  }
-
-  const submit = async () => {
-    setBusy(true); setMessage('');
-    try {
-      if (mode === 'signin') await signIn(email, password);
-      else if (mode === 'forgot') {
-        await sendPasswordReset(email);
-        setMessage('Check your email for a password reset link.');
-      } else {
-        if (!accepted) throw new Error('Accept the Terms and Privacy Notice to create an account.');
-        await signUp(email, password, fullName);
-        setMessage('Check your email to confirm your account.');
-      }
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to continue.');
-    } finally { setBusy(false); }
-  };
-
   return (
     <View>
-      <Text style={styles.intro}>{mode === 'signin' ? 'Sign in to manage your plan and preferences.' : mode === 'forgot' ? 'Enter your account email to reset your password.' : 'Create your Interpreter account.'}</Text>
-      {mode === 'signup' ? <TextInput autoCapitalize="words" onChangeText={setFullName} placeholder="Full name" style={styles.input} value={fullName} /> : null}
-      <TextInput autoCapitalize="none" autoComplete="email" keyboardType="email-address" onChangeText={setEmail} placeholder="Email" style={styles.input} value={email} />
-      {mode !== 'forgot' ? <TextInput autoCapitalize="none" autoComplete="password" onChangeText={setPassword} placeholder="Password" secureTextEntry style={styles.input} value={password} /> : null}
-      {mode === 'signup' ? (
-        <Pressable disabled={!legalApproved} onPress={() => setAccepted((current) => !current)} style={styles.acceptRow}>
-          <Text style={styles.checkbox}>{accepted ? '✓' : '○'}</Text>
-          <Text style={styles.acceptText}>{legalApproved ? 'I accept the Terms and Privacy Notice.' : 'Account creation is closed until legal review is complete.'}</Text>
-        </Pressable>
-      ) : null}
-      {message ? <Text style={styles.message}>{message}</Text> : null}
-      <PrimaryButton disabled={busy || (mode === 'signup' && !legalApproved)} label={busy ? 'Please wait...' : mode === 'signin' ? 'Sign In' : mode === 'forgot' ? 'Send Reset Link' : 'Create Account'} onPress={() => void submit()} />
-      {mode === 'signin' ? <Pressable onPress={() => { setMode('forgot'); setMessage(''); }} style={styles.linkButton}><Text style={styles.link}>Forgot password?</Text></Pressable> : null}
-      <Pressable onPress={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setMessage(''); }} style={styles.linkButton}>
-        <Text style={styles.link}>{mode === 'signin' ? 'Create an account' : 'Back to sign in'}</Text>
-      </Pressable>
+      <Text style={styles.intro}>Account management is disabled in this build.</Text>
+      <Text style={styles.cardBody}>This repository was cleaned of the previous Supabase account flow, so sign-in, profile syncing, and password recovery actions are unavailable until a new backend is configured.</Text>
+      <FriendlyNotice title="Ready for a fresh setup" body="The app shell remains intact while account services are removed." />
     </View>
   );
 }
 
 function MembershipContent() {
-  const { user } = useAuth();
-  const [packages, setPackages] = useState<PurchasesPackage[]>([]);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (!user || !membershipConfigured()) return;
-    void configureMembership(user.id).then(() => availablePackages()).then(setPackages).catch(() => setPackages([]));
-  }, [user]);
-
-  const purchase = async (productId?: string) => {
-    if (!user) return Alert.alert('Sign in required', 'Sign in under My Account before subscribing.');
-    const selected = packages.find((item) => item.product.identifier === productId);
-    if (!selected) return Alert.alert('Coming soon', 'Membership upgrades will be available soon.');
-    setBusy(true);
-    try { await purchaseMembership(selected); Alert.alert('Membership updated', 'Your entitlement is now active.'); }
-    catch (error) { Alert.alert('Purchase incomplete', error instanceof Error ? error.message : 'Unable to complete purchase.'); }
-    finally { setBusy(false); }
-  };
-
   return (
     <View>
-      <Text style={styles.intro}>Paid plans renew monthly after a 7-day free trial. Unused paid minutes roll over for one billing cycle, then expire.</Text>
-      {INTERPRETER_PLANS.map((plan) => (
-        <Card key={plan.id}>
-          <View style={styles.planHeader}><Text style={styles.planName}>{plan.name}</Text><Text style={styles.planPrice}>{plan.price}</Text></View>
-          <Text style={styles.allowance}>{plan.allowance}</Text>
-          {plan.features.map((feature) => <Text key={feature} style={styles.feature}>• {feature}</Text>)}
-          {plan.productId ? <PrimaryButton disabled={busy} label={`Choose ${plan.name}`} onPress={() => void purchase(plan.productId)} /> : null}
-        </Card>
-      ))}
-      {!membershipConfigured() ? <FriendlyNotice title="Memberships are coming soon" body="Your free Interpreter Minutes remain available. Upgrade options will appear here when purchasing opens." /> : null}
+      <Text style={styles.intro}>Paid plans are unavailable in this cleaned build.</Text>
+      <FriendlyNotice title="Membership service removed" body="Subscription access is disabled until a new backend is configured." />
     </View>
   );
 }
 
 function BillingContent() {
-  const { user } = useAuth();
-  const restore = async () => {
-    if (!user) return Alert.alert('Sign in required', 'Sign in before restoring purchases.');
-    try { await configureMembership(user.id); await restoreMembership(); Alert.alert('Purchases restored'); }
-    catch (error) { Alert.alert('Restore failed', error instanceof Error ? error.message : 'Unable to restore purchases.'); }
-  };
-  return <View><Text style={styles.intro}>Google Play securely manages payment methods, receipts, renewals, cancellations, and eligible refunds.</Text><PrimaryButton label="Manage Google Play Subscription" onPress={() => void openGooglePlaySubscriptions()} /><SecondaryButton label="Restore Purchases" onPress={() => void restore()} /></View>;
+  return (
+    <View>
+      <Text style={styles.intro}>Google Play billing is unavailable in this cleaned build.</Text>
+      <FriendlyNotice title="Billing disabled" body="Help and support remain available, but subscription billing has been removed." />
+    </View>
+  );
 }
 
 function SettingsContent() {
@@ -270,23 +140,11 @@ function LanguagesContent() {
 }
 
 function NotificationsContent() {
-  const { user } = useAuth();
-  const [preferences, setPreferences] = useState(DEFAULT_NOTIFICATIONS);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (!user) return;
-    void authenticatedRequest<{ notifications?: NotificationPreferences }>('/api/v1/account/me')
-      .then((account) => account.notifications && setPreferences(account.notifications))
-      .catch(() => undefined);
-  }, [user]);
-  if (!user) return <FriendlyNotice title="Notifications are unavailable" body="Try again after your secure session is ready." />;
-  const update = async (key: keyof NotificationPreferences, value: boolean) => {
-    const next = { ...preferences, [key]: value }; setPreferences(next);
-    try { await authenticatedRequest('/api/v1/notifications/preferences', { method: 'PUT', body: JSON.stringify(next) }); }
-    catch (error) { Alert.alert('Unable to save', error instanceof Error ? error.message : 'Try again.'); }
-  };
-  const enable = async () => { setBusy(true); try { await registerForAccountNotifications(); Alert.alert('Notifications enabled'); } catch (error) { Alert.alert('Unable to enable notifications', error instanceof Error ? error.message : 'Try again.'); } finally { setBusy(false); } };
-  return <View><SettingRow label="Membership reminders" onChange={(v) => void update('membership', v)} value={preferences.membership} /><SettingRow label="Product updates" onChange={(v) => void update('product_updates', v)} value={preferences.product_updates} /><SettingRow label="New languages" onChange={(v) => void update('new_languages', v)} value={preferences.new_languages} /><SettingRow label="Service alerts" onChange={(v) => void update('service_alerts', v)} value={preferences.service_alerts} /><SettingRow label="Marketing" onChange={(v) => void update('marketing', v)} value={preferences.marketing} /><PrimaryButton disabled={busy} label="Enable Device Notifications" onPress={() => void enable()} /></View>;
+  return (
+    <View>
+      <FriendlyNotice title="Notifications are unavailable" body="Push notification preferences are disabled while account services are removed." />
+    </View>
+  );
 }
 
 function HelpContent() {

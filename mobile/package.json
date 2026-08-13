@@ -15,7 +15,6 @@
     "@livekit/react-native-expo-plugin": "^1.0.2",
     "@livekit/react-native-krisp-noise-filter": "0.0.3",
     "@livekit/react-native-webrtc": "^144.1.2",
-    "@supabase/supabase-js": "^2.111.0",
     "expo": "~54.0.0",
     "expo-blur": "~15.0.8",
     "expo-constants": "~18.0.0",

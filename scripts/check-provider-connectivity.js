@@ -17,25 +17,6 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
-async function checkSupabase() {
-  const url = process.env.SUPABASE_URL?.replace(/\/+$/, "");
-  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
-  const secretKey = process.env.SUPABASE_SECRET_KEY;
-  if (!url || !publishableKey || !secretKey) {
-    return { pass: false, error: "missing required configuration" };
-  }
-  try {
-    const responses = await Promise.all([
-      fetchWithTimeout(`${url}/auth/v1/settings`, { headers: { apikey: publishableKey } }),
-      fetchWithTimeout(`${url}/rest/v1/`, { headers: { apikey: secretKey } })
-    ]);
-    if (responses.every((response) => response.ok)) return { pass: true };
-    return { pass: false, error: `HTTP ${responses.map((response) => response.status).join("/")}` };
-  } catch (error) {
-    return { pass: false, error: sanitizedFailure(error) };
-  }
-}
-
 function liveKitToken(apiKey, apiSecret) {
   const now = Math.floor(Date.now() / 1000);
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -76,14 +57,12 @@ async function checkLiveKit() {
 }
 
 async function main() {
-  const [supabase, livekit] = await Promise.all([checkSupabase(), checkLiveKit()]);
-  console.log(`Supabase: ${supabase.pass ? "PASS" : `FAIL - ${supabase.error}`}`);
+  const livekit = await checkLiveKit();
   console.log(`LiveKit: ${livekit.pass ? "PASS" : `FAIL - ${livekit.error}`}`);
-  process.exitCode = supabase.pass && livekit.pass ? 0 : 1;
+  process.exitCode = livekit.pass ? 0 : 1;
 }
 
 main().catch(() => {
-  console.log("Supabase: FAIL - unexpected check error");
   console.log("LiveKit: FAIL - unexpected check error");
   process.exitCode = 1;
 });
