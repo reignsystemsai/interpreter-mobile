@@ -84,14 +84,18 @@ export async function markCallNotificationOfferShown() {
   await SecureStore.setItemAsync(CALL_NOTIFICATIONS_OFFERED_KEY, '1');
 }
 
-export async function registerDeviceInstallation(phoneNumber: string, defaultRegion = deviceDefaultPhoneRegion()) {
+export async function registerDeviceInstallation(phoneNumber: string, defaultRegion = deviceDefaultPhoneRegion(), accessToken?: string) {
   const phoneNumberE164 = normalizeE164(phoneNumber, defaultRegion);
   if (!phoneNumberE164) throw new Error('Enter a valid phone number including area code.');
   const deviceId = await getDeviceId();
   const pushToken = await getPushToken().catch(() => null);
   const response = await fetch(`${API_BASE_URL}/api/v1/devices/register`, {
     method: 'POST',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
     body: JSON.stringify({
       appVersion: Constants.expoConfig?.version ?? null,
       defaultRegion,
