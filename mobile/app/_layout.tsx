@@ -5,7 +5,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { AuthProvider } from '../src/features/account/AuthProvider';
-import { CallableIdentityGate } from '../src/features/account/CallableIdentityGate';
+import { SpeakAuthGate } from '../src/features/account/SpeakAuthGate';
 import { CallOverlay } from '../src/features/calling/CallOverlay';
 import { ContactsProvider } from '../src/features/contacts/ContactsProvider';
 import { LanguagePreferencesProvider } from '../src/features/languages/LanguagePreferencesProvider';
@@ -16,7 +16,7 @@ registerGlobals();
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <CallableIdentityGate>
+      <SpeakAuthGate>
         <ApplyAvailableUpdate />
         <LanguagePreferencesProvider>
           <ContactsProvider>
@@ -31,7 +31,7 @@ export default function RootLayout() {
               />
           </ContactsProvider>
         </LanguagePreferencesProvider>
-      </CallableIdentityGate>
+      </SpeakAuthGate>
     </AuthProvider>
   );
 }
