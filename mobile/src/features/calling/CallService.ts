@@ -43,6 +43,7 @@ class BasicCallService {
   private listeners = new Set<(state: CallState) => void>();
   private call: ActiveCall | null = null;
   private room: Room | null = null;
+  private connectingCallId: string | null = null;
   private handledIncomingCallIds = new Set<string>();
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -90,7 +91,6 @@ class BasicCallService {
       });
       this.call = { callId: response.id, livekitUrl: response.livekitUrl, remoteLabel, role: 'caller', roomName: response.roomName, token: response.token };
       this.update({ callId: response.id });
-      await this.connect(this.call);
     } catch (error) {
       InCallManager.stopRingback();
       const callError = error instanceof CallError ? error : new CallError('call_failed', 'Unable to connect. Please try again.');
@@ -145,6 +145,7 @@ class BasicCallService {
   private async hangup({ endpoint = 'end', notifyBackend }: { endpoint?: 'decline' | 'end'; notifyBackend: boolean }) {
     const callId = this.state.callId;
     const deviceId = notifyBackend && callId ? await getDeviceId().catch(() => null) : null;
+    this.connectingCallId = null;
     await this.releaseRoom();
     this.call = null;
     this.setState(INITIAL_STATE);
@@ -162,14 +163,15 @@ class BasicCallService {
   }
 
   private async connect(call: ActiveCall) {
+    this.connectingCallId = call.callId;
     await this.requestMicrophone();
-    await AudioSession.stopAudioSession().catch(() => undefined);
+    if (Platform.OS === 'android') await AudioSession.stopAudioSession().catch(() => undefined);
     await AudioSession.configureAudio({
       android: { audioTypeOptions: { ...AndroidAudioTypePresets.communication, forceHandleAudioRouting: true }, preferredOutputList: ['bluetooth', 'headset', 'speaker', 'earpiece'] },
       ios: { defaultOutput: 'speaker' },
     });
     await AudioSession.setDefaultRemoteAudioTrackVolume(1);
-    await AudioSession.startAudioSession();
+    if (Platform.OS === 'android') await AudioSession.startAudioSession();
 
     const room = new Room({ adaptiveStream: true, audioCaptureDefaults: AUDIO_CAPTURE, publishDefaults: { audioPreset: AudioPresets.speech, dtx: true } });
     this.room = room;
@@ -196,9 +198,9 @@ class BasicCallService {
     if (this.room !== room || this.call !== call) throw new CallError('call_ended', 'Call ended.');
     await room.localParticipant.setMicrophoneEnabled(true, AUDIO_CAPTURE);
     if (Platform.OS === 'android') await AudioSession.selectAudioOutput('speaker');
-    else await AudioSession.selectAudioOutput('force_speaker');
     if (room.remoteParticipants.size > 0) markConnected();
     else this.update({ status: 'connecting' });
+    this.connectingCallId = null;
   }
 
   private async releaseRoom() {
@@ -209,7 +211,7 @@ class BasicCallService {
       await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
       await room.disconnect().catch(() => undefined);
     }
-    await AudioSession.stopAudioSession().catch(() => undefined);
+    if (Platform.OS === 'android') await AudioSession.stopAudioSession().catch(() => undefined);
     InCallManager.stopRingback();
     InCallManager.stopRingtone();
   }
@@ -241,6 +243,25 @@ class BasicCallService {
     const payload = (await response.json().catch(() => ({}))) as { call?: { status?: string }; found?: boolean };
     const remoteEnded = payload.found === false || payload.call?.status === 'ended';
     if (remoteEnded && this.state.callId === callId) await this.hangup({ notifyBackend: false });
+    const remoteConnected = payload.call?.status === 'connected';
+    if (
+      remoteConnected &&
+      this.state.callId === callId &&
+      this.state.role === 'caller' &&
+      this.state.status === 'ringing' &&
+      this.call?.callId === callId &&
+      !this.room &&
+      this.connectingCallId !== callId
+    ) {
+      this.update({ status: 'connecting' });
+      try {
+        await this.connect(this.call);
+      } catch (error) {
+        const callError = error instanceof CallError ? error : new CallError('call_failed', 'Unable to connect. Please try again.');
+        await this.hangup({ notifyBackend: true });
+        throw callError;
+      }
+    }
   }
 
   startPolling() {
