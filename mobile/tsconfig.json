@@ -13,5 +13,9 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
+  ],
+  "exclude": [
+    "app/phase3-test.tsx",
+    "src/shells/**"
   ]
 }

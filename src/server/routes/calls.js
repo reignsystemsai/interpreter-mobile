@@ -54,7 +54,7 @@ function toCallRecordJson(row) {
   };
 }
 
-router.post("/", async (req, res) => {
+router.post(["/", "/start"], async (req, res) => {
   if (!isSupabaseConfigured() || !isLiveKitConfigured()) return callError(res, 503, "calling_unavailable", "Calling is temporarily unavailable.");
   const callerDeviceId = cleanText(req.body?.callerDeviceId, 120);
   const recipientPhoneNumber = normalizeE164(req.body?.recipientPhoneNumber, req.body?.defaultRegion);
@@ -89,7 +89,14 @@ router.post("/", async (req, res) => {
     return callError(res, 502, "call_state_unavailable", "Unable to create the call.");
   }
 
-  return res.status(201).json({ ...toCallRecordJson(data), livekitUrl: process.env.LIVEKIT_URL, token });
+  return res.status(201).json({
+    ...toCallRecordJson(data),
+    callId: data.id,
+    callerToken: token,
+    livekitUrl: process.env.LIVEKIT_URL,
+    token,
+    translationEnabled: false
+  });
 });
 
 // Must be registered before GET "/:callId" — otherwise Express would match
