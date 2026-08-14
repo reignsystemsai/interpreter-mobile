@@ -1,6 +1,6 @@
 import { AudioSession } from '@livekit/react-native';
 import { AudioPresets, Room, RoomEvent, Track, type VideoTrack } from 'livekit-client';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { Alert, PermissionsAndroid, Platform } from 'react-native';
 import InCallManager from 'react-native-incall-manager';
 
 import { supabase } from '../../services/supabase';
@@ -102,8 +102,11 @@ class SpeakCallService {
     if (!callId) return;
     const identity = await getLocalCallableIdentity();
     if (!identity) throw new Error('CALL PROFILE\nCalling setup is required.');
-    const { error } = await supabase.from('app_calls').update({ answered_at: new Date().toISOString(), status: 'active' }).eq('id', callId).eq('recipient_device_id', identity.deviceId).eq('status', 'ringing');
-    if (error) throw new Error(`CALL CREATE\n${error.message}`);
+    const { data, error } = await supabase.rpc('answer_direct_app_call', {
+      p_call_id: callId,
+      p_recipient_device_id: identity.deviceId,
+    });
+    if (error || data !== 'active') throw new Error(`CALL ANSWER\n${error?.message || 'The call could not be activated.'}`);
     try {
       await this.connectSpeakRoom(callId, 'recipient', this.state.remoteLabel);
     } catch (connectError) {
@@ -114,15 +117,23 @@ class SpeakCallService {
 
   async declineCall() {
     const callId = this.state.callId;
+    const identity = await getLocalCallableIdentity();
     const cleanup = this.finish();
-    if (callId) await supabase.from('app_calls').update({ status: 'declined', ended_at: new Date().toISOString() }).eq('id', callId);
+    if (callId && identity) {
+      const { error } = await supabase.rpc('finish_direct_app_call', { p_call_id: callId, p_device_id: identity.deviceId, p_final_status: 'declined' });
+      if (error) throw new Error(`CALL DECLINE\n${error.message}`);
+    }
     await cleanup;
   }
 
   async endCall() {
     const callId = this.state.callId;
+    const identity = await getLocalCallableIdentity();
     const cleanup = this.finish();
-    if (callId) await supabase.from('app_calls').update({ ended_at: new Date().toISOString(), status: 'ended' }).eq('id', callId);
+    if (callId && identity) {
+      const { error } = await supabase.rpc('finish_direct_app_call', { p_call_id: callId, p_device_id: identity.deviceId, p_final_status: 'ended' });
+      if (error) throw new Error(`CALL END\n${error.message}`);
+    }
     await cleanup;
   }
 
@@ -194,14 +205,16 @@ class SpeakCallService {
     const remoteLabel = this.state.remoteLabel;
     InCallManager.stopRingback();
     this.set({ status: 'connecting' });
-    void this.connectSpeakRoom(callId, 'caller', remoteLabel).catch(async () => {
+    void this.connectSpeakRoom(callId, 'caller', remoteLabel).catch(async (error) => {
       await this.closeFailedCall(callId);
+      Alert.alert('Unable to connect', error instanceof Error ? error.message : 'The LiveKit room could not be joined.');
     });
   }
 
   private async closeFailedCall(callId: string) {
+    const identity = await getLocalCallableIdentity();
     const cleanup = this.finish();
-    await supabase.from('app_calls').update({ ended_at: new Date().toISOString(), status: 'ended' }).eq('id', callId);
+    if (identity) await supabase.rpc('finish_direct_app_call', { p_call_id: callId, p_device_id: identity.deviceId, p_final_status: 'ended' });
     await cleanup;
   }
 
