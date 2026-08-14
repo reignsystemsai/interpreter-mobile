@@ -7,7 +7,6 @@ create unique index if not exists speak_profiles_email_key
   on public.speak_profiles (lower(email))
   where email is not null;
 
-drop function if exists public.register_calling_profile(uuid, text, text);
 drop function if exists public.register_calling_profile(uuid, text, text, text, text);
 
 create function public.register_calling_profile(
