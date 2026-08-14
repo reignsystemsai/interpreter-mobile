@@ -190,6 +190,18 @@ class SpeakCallService {
     await AudioSession.selectAudioOutput(Platform.OS === 'ios' ? speakerEnabled ? 'force_speaker' : 'default' : speakerEnabled ? 'speaker' : 'earpiece');
     this.set({ speakerEnabled });
   }
+  async chooseBluetooth() {
+    if (!this.room) throw new Error('Call audio is not connected.');
+    if (Platform.OS === 'ios') {
+      await AudioSession.showAudioRoutePicker();
+      this.set({ speakerEnabled: false });
+      return;
+    }
+    const outputs = await AudioSession.getAudioOutputs();
+    if (!outputs.includes('bluetooth')) throw new Error('No Bluetooth audio device is connected.');
+    await AudioSession.selectAudioOutput('bluetooth');
+    this.set({ speakerEnabled: false });
+  }
   async toggleCamera() { if (!this.room) return; const enabled = !this.state.cameraEnabled; if (enabled && Platform.OS === 'android' && await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA) !== PermissionsAndroid.RESULTS.GRANTED) throw new Error('Camera permission denied.'); await this.room.localParticipant.setCameraEnabled(enabled); const track = enabled ? [...this.room.localParticipant.videoTrackPublications.values()].find((publication) => publication.track)?.track as VideoTrack | null ?? null : null; this.set({ cameraEnabled: enabled, localVideoTrack: track }); }
 
   private watchCallStatus(callId: string) {
