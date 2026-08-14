@@ -69,7 +69,8 @@ class SpeakCallService {
   private async watchIncoming() {
     const identity = await getLocalCallableIdentity();
     if (!identity) return false;
-    const { data: existingCalls } = await supabase.from('app_calls').select('id, caller_device_id, recipient_device_id, status').eq('recipient_device_id', identity.deviceId).eq('status', 'ringing').order('created_at', { ascending: false }).limit(1);
+    const recentCallCutoff = new Date(Date.now() - 90_000).toISOString();
+    const { data: existingCalls } = await supabase.from('app_calls').select('id, caller_device_id, recipient_device_id, status').eq('recipient_device_id', identity.deviceId).eq('status', 'ringing').gte('created_at', recentCallCutoff).order('created_at', { ascending: false }).limit(1);
     const existing = existingCalls?.[0] as AppCall | undefined;
     if (existing) this.receiveIncoming(existing);
     this.incomingChannel = supabase.channel(`incoming-calls-${identity.deviceId}`).on('postgres_changes', { event: 'INSERT', filter: `recipient_device_id=eq.${identity.deviceId}`, schema: 'public', table: 'app_calls' }, (payload) => this.receiveIncoming(payload.new as AppCall)).subscribe();
