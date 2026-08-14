@@ -9,6 +9,7 @@ type PreviewMode = 'incoming' | 'audio' | 'video';
 function stateFor(mode: PreviewMode): CallState {
   return {
     cameraEnabled: mode === 'video',
+    cameraFacingMode: 'user',
     callId: 'call-ui-preview',
     connectedAt: mode === 'incoming' ? null : Date.now() - 72_000,
     error: '',

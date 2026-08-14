@@ -9,11 +9,11 @@ import { isLocalMicrophoneTrack, SpeakMicrophoneAudioProcessor } from './SpeakMi
 
 export type CallStatus = 'idle' | 'ringing' | 'connecting' | 'connected' | 'reconnecting' | 'ended';
 export type CallRole = 'caller' | 'recipient' | null;
-export type CallState = { cameraEnabled: boolean; callId: string | null; connectedAt: number | null; error: string; localVideoTrack: VideoTrack | null; muted: boolean; remoteLabel: string; remotePhone: string; remoteVideoTrack: VideoTrack | null; role: CallRole; speakerEnabled: boolean; status: CallStatus };
+export type CallState = { cameraEnabled: boolean; cameraFacingMode: 'environment' | 'user'; callId: string | null; connectedAt: number | null; error: string; localVideoTrack: VideoTrack | null; muted: boolean; remoteLabel: string; remotePhone: string; remoteVideoTrack: VideoTrack | null; role: CallRole; speakerEnabled: boolean; status: CallStatus };
 type AppCall = { id: string; caller_device_id: string; recipient_device_id: string; status: 'ringing' | 'active' | 'declined' | 'ended' };
 type CreatedCall = { call_id: string; recipient_device_id: string };
 
-const INITIAL: CallState = { cameraEnabled: false, callId: null, connectedAt: null, error: '', localVideoTrack: null, muted: false, remoteLabel: '', remotePhone: '', remoteVideoTrack: null, role: null, speakerEnabled: false, status: 'idle' };
+const INITIAL: CallState = { cameraEnabled: false, cameraFacingMode: 'user', callId: null, connectedAt: null, error: '', localVideoTrack: null, muted: false, remoteLabel: '', remotePhone: '', remoteVideoTrack: null, role: null, speakerEnabled: false, status: 'idle' };
 const AUDIO = { autoGainControl: false, channelCount: 1, echoCancellation: true, noiseSuppression: false } as const;
 
 class SpeakCallService {
@@ -202,7 +202,16 @@ class SpeakCallService {
     await AudioSession.selectAudioOutput('bluetooth');
     this.set({ speakerEnabled: false });
   }
-  async toggleCamera() { if (!this.room) return; const enabled = !this.state.cameraEnabled; if (enabled && Platform.OS === 'android' && await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA) !== PermissionsAndroid.RESULTS.GRANTED) throw new Error('Camera permission denied.'); await this.room.localParticipant.setCameraEnabled(enabled); const track = enabled ? [...this.room.localParticipant.videoTrackPublications.values()].find((publication) => publication.track)?.track as VideoTrack | null ?? null : null; this.set({ cameraEnabled: enabled, localVideoTrack: track }); }
+  async toggleCamera() {
+    if (!this.room) throw new Error('Call video is not connected.');
+    const enabled = !this.state.cameraEnabled;
+    if (enabled && Platform.OS === 'android' && await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA) !== PermissionsAndroid.RESULTS.GRANTED) throw new Error('Camera permission denied.');
+    const publication = await this.room.localParticipant.setCameraEnabled(
+      enabled,
+      enabled ? { facingMode: this.state.cameraFacingMode } : undefined,
+    );
+    this.set({ cameraEnabled: enabled, localVideoTrack: enabled ? publication?.videoTrack ?? null : null });
+  }
 
   private watchCallStatus(callId: string) {
     this.stopCallChannel();

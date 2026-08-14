@@ -74,7 +74,7 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
           <Text style={styles.label}>{incoming ? 'Incoming Interpreter Call' : statusLabel}</Text>
           <Text numberOfLines={1} style={styles.remote}>{remote}</Text>
           <Text style={styles.status}>{state.connectedAt ? durationLabel(state.connectedAt, now) : statusLabel}</Text>
-          {state.localVideoTrack ? <VideoView mirror objectFit="cover" style={styles.localVideo} videoTrack={state.localVideoTrack} /> : previewVideo ? <View style={styles.previewLocalVideo}><Text style={styles.previewLocalText}>Local preview</Text></View> : null}
+          {state.localVideoTrack ? <VideoView mirror={state.cameraFacingMode === 'user'} objectFit="cover" style={styles.localVideo} videoTrack={state.localVideoTrack} /> : previewVideo ? <View style={styles.previewLocalVideo}><Text style={styles.previewLocalText}>Local preview</Text></View> : null}
           {incoming ? (
             <View style={styles.incomingRow}>
               <CallAction disabled={preview} label="Decline" onPress={action(() => void CallService.declineCall().catch((error) => Alert.alert('Unable to decline', error instanceof Error ? error.message : 'Please try again.')))} tone="red" />
