@@ -45,14 +45,12 @@ export async function ensureCallableIdentity() {
   const localIdentity = await getLocalCallableIdentity();
   if (!localIdentity) throw new Error('CALL PROFILE\nCalling setup is required.');
   if (registeredDeviceId === localIdentity.deviceId) return localIdentity;
-  const { data, error } = await supabase.functions.invoke('register-calling-device', {
-    body: {
-      device_id: localIdentity.deviceId,
-      display_name: localIdentity.displayName,
-      phone_e164: localIdentity.phoneE164,
-    },
+  const { data, error } = await supabase.rpc('register_calling_profile', {
+    p_device_id: localIdentity.deviceId,
+    p_display_name: localIdentity.displayName,
+    p_phone_e164: localIdentity.phoneE164,
   });
-  if (error || !data?.device_id) throw new Error('CALL PROFILE\nUnable to save the calling profile.');
+  if (error || data !== localIdentity.deviceId) throw new Error('CALL PROFILE\nUnable to save the calling profile.');
   registeredDeviceId = localIdentity.deviceId;
   return localIdentity;
 }
