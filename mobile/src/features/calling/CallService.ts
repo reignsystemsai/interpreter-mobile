@@ -155,7 +155,7 @@ class SpeakCallService {
     InCallManager.stopRingback();
     InCallManager.stopRingtone();
     InCallManager.stop();
-    await AudioSession.configureAudio({ ios: { defaultOutput: 'earpiece' } });
+    await AudioSession.configureAudio({ ios: { defaultOutput: 'speaker' } });
     await AudioSession.startAudioSession();
     room.on(RoomEvent.TrackSubscribed, (track) => { if (track.kind === Track.Kind.Audio) this.set({ connectedAt: this.state.connectedAt ?? Date.now(), status: 'connected' }); if (track.kind === Track.Kind.Video) this.set({ remoteVideoTrack: track as VideoTrack }); });
     room.on(RoomEvent.TrackUnsubscribed, (track) => { if (track.kind === Track.Kind.Video) this.set({ remoteVideoTrack: null }); });
@@ -186,12 +186,7 @@ class SpeakCallService {
     await this.room.localParticipant.setMicrophoneEnabled(!muted, AUDIO);
     this.set({ muted });
   }
-  async toggleSpeaker() {
-    if (!this.room) throw new Error('Call audio is not connected.');
-    const speakerEnabled = !this.state.speakerEnabled;
-    await AudioSession.selectAudioOutput(Platform.OS === 'ios' ? speakerEnabled ? 'force_speaker' : 'default' : speakerEnabled ? 'speaker' : 'earpiece');
-    this.set({ speakerEnabled });
-  }
+  async toggleSpeaker() { const speakerEnabled = !this.state.speakerEnabled; await AudioSession.selectAudioOutput(Platform.OS === 'ios' ? speakerEnabled ? 'force_speaker' : 'default' : speakerEnabled ? 'speaker' : 'earpiece'); this.set({ speakerEnabled }); }
   async toggleCamera() {
     if (!this.room) throw new Error('Call video is not connected.');
     const enabled = !this.state.cameraEnabled;
