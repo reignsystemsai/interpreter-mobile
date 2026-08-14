@@ -23,22 +23,36 @@ Deno.serve(async (request) => {
     if (!callId || !deviceId) return json({ error: 'call_id and device_id are required.' }, 400);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const livekitUrl = Deno.env.get('LIVEKIT_URL');
-    const livekitApiKey = Deno.env.get('LIVEKIT_API_KEY');
-    const livekitApiSecret = Deno.env.get('LIVEKIT_API_SECRET');
-    if (!supabaseUrl || !supabaseKey || !livekitUrl || !livekitApiKey || !livekitApiSecret) {
-      return json({ error: 'Token service is not configured.' }, 500);
+    const requestApiKey = request.headers.get('apikey')?.trim();
+    const livekitUrl = Deno.env.get('LIVEKIT_URL')?.trim();
+    const livekitApiKey = Deno.env.get('LIVEKIT_API_KEY')?.trim();
+    const livekitApiSecret = Deno.env.get('LIVEKIT_API_SECRET')?.trim();
+
+    const missing = [
+      !supabaseUrl && 'SUPABASE_URL',
+      !requestApiKey && 'apikey header',
+      !livekitUrl && 'LIVEKIT_URL',
+      !livekitApiKey && 'LIVEKIT_API_KEY',
+      !livekitApiSecret && 'LIVEKIT_API_SECRET',
+    ].filter(Boolean);
+    if (missing.length > 0) {
+      console.error('LiveKit token configuration missing:', missing);
+      return json({ error: 'Token service is not configured.', missing }, 500);
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(supabaseUrl!, requestApiKey!, {
+      auth: { persistSession: false },
+    });
     const { data: call, error: callError } = await supabase
       .from('app_calls')
       .select('id, caller_device_id, recipient_device_id, status')
       .eq('id', callId)
       .maybeSingle();
 
-    if (callError) return json({ error: 'Call lookup failed.' }, 500);
+    if (callError) {
+      console.error('LiveKit call lookup failed:', callError);
+      return json({ error: 'Call lookup failed.', detail: callError.message }, 500);
+    }
     if (!call || (call.caller_device_id !== deviceId && call.recipient_device_id !== deviceId)) {
       return json({ error: 'Call access denied.' }, 403);
     }
@@ -46,7 +60,7 @@ Deno.serve(async (request) => {
       return json({ error: 'Call is no longer active.' }, 409);
     }
 
-    const participantToken = new AccessToken(livekitApiKey, livekitApiSecret, {
+    const participantToken = new AccessToken(livekitApiKey!, livekitApiSecret!, {
       identity: deviceId,
       ttl: '10m',
     });
@@ -60,10 +74,11 @@ Deno.serve(async (request) => {
 
     return json({
       participant_token: await participantToken.toJwt(),
-      server_url: livekitUrl,
+      server_url: livekitUrl!,
     });
   } catch (error) {
-    console.error('LiveKit token failure:', error);
-    return json({ error: 'Token service failed.' }, 500);
+    const detail = error instanceof Error ? error.message : 'Unknown token-service failure.';
+    console.error('LiveKit token failure:', detail);
+    return json({ error: 'Token service failed.', detail }, 500);
   }
 });
