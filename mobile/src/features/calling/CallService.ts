@@ -181,7 +181,6 @@ class SpeakCallService {
   }
 
   async toggleMute() { if (!this.room) return; const muted = !this.state.muted; await this.room.localParticipant.setMicrophoneEnabled(!muted, AUDIO); this.set({ muted }); }
-  async toggleSpeaker() { const speakerEnabled = !this.state.speakerEnabled; await AudioSession.selectAudioOutput(Platform.OS === 'ios' ? speakerEnabled ? 'force_speaker' : 'default' : speakerEnabled ? 'speaker' : 'earpiece'); this.set({ speakerEnabled }); }
   async toggleCamera() {
     if (!this.room) throw new Error('Call video is not connected.');
     const enabled = !this.state.cameraEnabled;
