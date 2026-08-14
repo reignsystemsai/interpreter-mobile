@@ -21,6 +21,7 @@ class SpeakCallService {
   private room: Room | null = null;
   private incomingChannel: ReturnType<typeof supabase.channel> | null = null;
   private callChannel: ReturnType<typeof supabase.channel> | null = null;
+  private callStatusPoll: ReturnType<typeof setInterval> | null = null;
   private identityRetry: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<(state: CallState) => void>();
   private microphoneProcessor = new SpeakMicrophoneAudioProcessor();
@@ -179,6 +180,15 @@ class SpeakCallService {
 
   private watchCallStatus(callId: string) {
     this.stopCallChannel();
+    const refreshStatus = () => {
+      if (this.state.callId !== callId || this.state.status !== 'ringing') return;
+      void supabase
+        .from('app_calls')
+        .select('id, caller_device_id, recipient_device_id, status')
+        .eq('id', callId)
+        .maybeSingle()
+        .then(({ data }) => { if (data) this.handleCallStatus(callId, data as AppCall); });
+    };
     this.callChannel = supabase
       .channel(`call-status-${callId}`)
       .on('postgres_changes', { event: 'UPDATE', filter: `id=eq.${callId}`, schema: 'public', table: 'app_calls' }, (payload) => {
@@ -186,13 +196,9 @@ class SpeakCallService {
       })
       .subscribe((status) => {
         if (status !== 'SUBSCRIBED') return;
-        void supabase
-          .from('app_calls')
-          .select('id, caller_device_id, recipient_device_id, status')
-          .eq('id', callId)
-          .maybeSingle()
-          .then(({ data }) => { if (data) this.handleCallStatus(callId, data as AppCall); });
+        refreshStatus();
       });
+    this.callStatusPoll = setInterval(refreshStatus, 750);
   }
 
   private handleCallStatus(callId: string, call: AppCall) {
@@ -219,7 +225,13 @@ class SpeakCallService {
   }
 
   private stopIncomingChannel() { if (!this.incomingChannel) return; void supabase.removeChannel(this.incomingChannel); this.incomingChannel = null; }
-  private stopCallChannel() { if (!this.callChannel) return; void supabase.removeChannel(this.callChannel); this.callChannel = null; }
+  private stopCallChannel() {
+    if (this.callStatusPoll) clearInterval(this.callStatusPoll);
+    this.callStatusPoll = null;
+    if (!this.callChannel) return;
+    void supabase.removeChannel(this.callChannel);
+    this.callChannel = null;
+  }
   private async finish() {
     const room = this.room;
     this.room = null;
