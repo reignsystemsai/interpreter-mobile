@@ -212,6 +212,16 @@ class SpeakCallService {
     );
     this.set({ cameraEnabled: enabled, localVideoTrack: enabled ? publication?.videoTrack ?? null : null });
   }
+  async flipCamera() {
+    if (!this.room || !this.state.cameraEnabled) throw new Error('Turn on video before switching cameras.');
+    const publication = [...this.room.localParticipant.videoTrackPublications.values()]
+      .find((candidate) => candidate.source === Track.Source.Camera);
+    const track = publication?.videoTrack;
+    if (!track) throw new Error('Camera track is unavailable.');
+    const cameraFacingMode = this.state.cameraFacingMode === 'user' ? 'environment' : 'user';
+    await track.restartTrack({ facingMode: cameraFacingMode });
+    this.set({ cameraFacingMode, localVideoTrack: track });
+  }
 
   private watchCallStatus(callId: string) {
     this.stopCallChannel();
