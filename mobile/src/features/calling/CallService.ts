@@ -44,12 +44,6 @@ class SpeakCallService {
     this.watchCallStatus(call.call_id);
     InCallManager.start({ media: 'audio' });
     InCallManager.startRingback('_DEFAULT_');
-    try {
-      await this.connectSpeakRoom(call.call_id, 'caller', remoteLabel);
-    } catch (error) {
-      await this.closeFailedCall(call.call_id);
-      throw error;
-    }
   }
 
   startPolling() {
@@ -177,10 +171,32 @@ class SpeakCallService {
     this.callChannel = supabase
       .channel(`call-status-${callId}`)
       .on('postgres_changes', { event: 'UPDATE', filter: `id=eq.${callId}`, schema: 'public', table: 'app_calls' }, (payload) => {
-        const call = payload.new as AppCall;
-        if (call.status === 'declined' || call.status === 'ended') void this.finish();
+        this.handleCallStatus(callId, payload.new as AppCall);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') return;
+        void supabase
+          .from('app_calls')
+          .select('id, caller_device_id, recipient_device_id, status')
+          .eq('id', callId)
+          .maybeSingle()
+          .then(({ data }) => { if (data) this.handleCallStatus(callId, data as AppCall); });
+      });
+  }
+
+  private handleCallStatus(callId: string, call: AppCall) {
+    if (this.state.callId !== callId) return;
+    if (call.status === 'declined' || call.status === 'ended') {
+      void this.finish();
+      return;
+    }
+    if (call.status !== 'active' || this.state.role !== 'caller' || this.state.status !== 'ringing') return;
+    const remoteLabel = this.state.remoteLabel;
+    InCallManager.stopRingback();
+    this.set({ status: 'connecting' });
+    void this.connectSpeakRoom(callId, 'caller', remoteLabel).catch(async () => {
+      await this.closeFailedCall(callId);
+    });
   }
 
   private async closeFailedCall(callId: string) {
