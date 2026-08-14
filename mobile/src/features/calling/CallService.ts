@@ -83,15 +83,16 @@ class SpeakCallService {
     InCallManager.startRingtone('_DEFAULT_');
     this.set({ callId: call.id, remoteLabel: 'Interpreter contact', role: 'recipient', status: 'ringing' });
     this.watchCallStatus(call.id);
-    void this.loadRemoteProfile(call.id, call.caller_device_id);
+    void this.loadRemoteProfile(call.id);
   }
 
-  private async loadRemoteProfile(callId: string, deviceId: string) {
-    const { data } = await supabase
-      .from('speak_profiles')
-      .select('display_name, phone_e164')
-      .eq('device_id', deviceId)
-      .maybeSingle();
+  private async loadRemoteProfile(callId: string) {
+    const identity = await getLocalCallableIdentity();
+    if (!identity) return;
+    const { data } = await supabase.rpc('get_direct_call_remote_profile', {
+      p_call_id: callId,
+      p_device_id: identity.deviceId,
+    });
     if (this.state.callId !== callId || !data) return;
     this.set({
       remoteLabel: data.display_name || this.state.remoteLabel,
