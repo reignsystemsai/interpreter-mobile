@@ -19,6 +19,7 @@ class SpeakCallService {
   private state = INITIAL;
   private room: Room | null = null;
   private incomingChannel: ReturnType<typeof supabase.channel> | null = null;
+  private identityRetry: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<(state: CallState) => void>();
 
   getState() { return this.state; }
@@ -44,17 +45,31 @@ class SpeakCallService {
 
   startPolling() {
     let active = true;
-    void this.watchIncoming().then(() => { if (!active) this.stopIncomingChannel(); });
-    return () => { active = false; this.stopIncomingChannel(); };
+    const start = async () => {
+      const watching = await this.watchIncoming();
+      if (!active) {
+        this.stopIncomingChannel();
+        return;
+      }
+      if (!watching) this.identityRetry = setTimeout(() => void start(), 1_000);
+    };
+    void start();
+    return () => {
+      active = false;
+      if (this.identityRetry) clearTimeout(this.identityRetry);
+      this.identityRetry = null;
+      this.stopIncomingChannel();
+    };
   }
 
   private async watchIncoming() {
     const identity = await getLocalCallableIdentity();
-    if (!identity) return;
+    if (!identity) return false;
     const { data: existingCalls } = await supabase.from('app_calls').select('id, caller_device_id, recipient_device_id, status').eq('recipient_device_id', identity.deviceId).eq('status', 'ringing').order('created_at', { ascending: false }).limit(1);
     const existing = existingCalls?.[0] as AppCall | undefined;
     if (existing) this.receiveIncoming(existing);
     this.incomingChannel = supabase.channel(`incoming-calls-${identity.deviceId}`).on('postgres_changes', { event: 'INSERT', filter: `recipient_device_id=eq.${identity.deviceId}`, schema: 'public', table: 'app_calls' }, (payload) => this.receiveIncoming(payload.new as AppCall)).subscribe();
+    return true;
   }
 
   private receiveIncoming(call: AppCall) {

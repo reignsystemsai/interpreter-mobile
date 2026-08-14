@@ -84,7 +84,16 @@ export function CallOverlay() {
 
   if (state.status === 'idle') return null;
   return (
-    <Modal animationType="fade" onRequestClose={() => void CallService.endCall()} transparent visible><CallScreen state={state} /></Modal>
+    <Modal
+      animationType="fade"
+      onRequestClose={() => void (state.role === 'recipient' && state.status === 'ringing' ? CallService.declineCall() : CallService.endCall())}
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      transparent
+      visible
+    >
+      <CallScreen state={state} />
+    </Modal>
   );
 }
 

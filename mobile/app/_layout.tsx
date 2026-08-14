@@ -17,7 +17,6 @@ export default function RootLayout() {
       <ApplyAvailableUpdate />
       <LanguagePreferencesProvider>
         <ContactsProvider>
-          <CallOverlay />
           <StatusBar backgroundColor="#FFFFFF" style="dark" />
           <Stack
             screenOptions={{
@@ -26,6 +25,7 @@ export default function RootLayout() {
               headerShown: false,
             }}
           />
+          <CallOverlay />
         </ContactsProvider>
       </LanguagePreferencesProvider>
     </>
