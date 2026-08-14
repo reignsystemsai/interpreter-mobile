@@ -8,11 +8,11 @@ import { ensureCallableIdentity, getLocalCallableIdentity, normalizePhone } from
 
 export type CallStatus = 'idle' | 'ringing' | 'connecting' | 'connected' | 'reconnecting' | 'ended';
 export type CallRole = 'caller' | 'recipient' | null;
-export type CallState = { cameraEnabled: boolean; callId: string | null; connectedAt: number | null; error: string; localVideoTrack: VideoTrack | null; muted: boolean; remoteLabel: string; remoteVideoTrack: VideoTrack | null; role: CallRole; speakerEnabled: boolean; status: CallStatus };
+export type CallState = { cameraEnabled: boolean; callId: string | null; connectedAt: number | null; error: string; localVideoTrack: VideoTrack | null; muted: boolean; remoteLabel: string; remotePhone: string; remoteVideoTrack: VideoTrack | null; role: CallRole; speakerEnabled: boolean; status: CallStatus };
 type AppCall = { id: string; caller_device_id: string; recipient_device_id: string; status: 'ringing' | 'active' | 'declined' | 'ended' };
 type CreatedCall = { call_id: string; recipient_device_id: string };
 
-const INITIAL: CallState = { cameraEnabled: false, callId: null, connectedAt: null, error: '', localVideoTrack: null, muted: false, remoteLabel: '', remoteVideoTrack: null, role: null, speakerEnabled: false, status: 'idle' };
+const INITIAL: CallState = { cameraEnabled: false, callId: null, connectedAt: null, error: '', localVideoTrack: null, muted: false, remoteLabel: '', remotePhone: '', remoteVideoTrack: null, role: null, speakerEnabled: false, status: 'idle' };
 const AUDIO = { autoGainControl: true, channelCount: 1, echoCancellation: true, noiseSuppression: true } as const;
 
 class SpeakCallService {
@@ -37,7 +37,7 @@ class SpeakCallService {
     if (error || !call?.call_id) {
       throw new Error(`CALL CREATE\n${error?.message || 'The call could not be started.'}`);
     }
-    this.set({ callId: call.call_id, remoteLabel, role: 'caller', status: 'ringing' });
+    this.set({ callId: call.call_id, remoteLabel, remotePhone: phoneE164, role: 'caller', status: 'ringing' });
     InCallManager.start({ media: 'audio' });
     InCallManager.startRingback('_DEFAULT_');
     await this.connectSpeakRoom(call.call_id, 'caller', remoteLabel);
@@ -77,6 +77,20 @@ class SpeakCallService {
     InCallManager.start({ media: 'audio' });
     InCallManager.startRingtone('_DEFAULT_');
     this.set({ callId: call.id, remoteLabel: 'Interpreter contact', role: 'recipient', status: 'ringing' });
+    void this.loadRemoteProfile(call.id, call.caller_device_id);
+  }
+
+  private async loadRemoteProfile(callId: string, deviceId: string) {
+    const { data } = await supabase
+      .from('speak_profiles')
+      .select('display_name, phone_e164')
+      .eq('device_id', deviceId)
+      .maybeSingle();
+    if (this.state.callId !== callId || !data) return;
+    this.set({
+      remoteLabel: data.display_name || this.state.remoteLabel,
+      remotePhone: data.phone_e164 || '',
+    });
   }
 
   async acceptCall() {

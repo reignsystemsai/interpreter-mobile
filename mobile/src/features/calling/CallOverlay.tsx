@@ -18,13 +18,13 @@ function durationLabel(connectedAt: number | null, now: number) {
   return `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
 }
 
-async function openExternal(kind: 'facetime' | 'sms', recipient: string) {
+async function openExternal(kind: 'sms', recipient: string) {
   const url = `${kind}:${encodeURIComponent(recipient)}`;
   if (await Linking.canOpenURL(url)) {
     await Linking.openURL(url);
     return;
   }
-  Alert.alert(kind === 'sms' ? 'Messages unavailable' : 'FaceTime unavailable');
+  Alert.alert('Messages unavailable');
 }
 
 function Control({ disabled = false, label, onPress, selected = false }: { disabled?: boolean; label: string; onPress: () => void; selected?: boolean }) {
@@ -42,6 +42,8 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
   const action = (callback: () => void) => preview ? noop : callback;
   const incoming = state.role === 'recipient' && state.status === 'ringing';
   const remote = state.remoteLabel || 'Unknown caller';
+  const remotePhone = state.remotePhone;
+  const roomConnected = state.status === 'connected' || state.status === 'reconnecting';
   const previewVideo = preview && state.cameraEnabled;
   const statusLabel = state.status === 'idle' ? '' : LABELS[state.status];
 
@@ -62,11 +64,10 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
           ) : (
             <View style={styles.controlsArea}>
               <View style={styles.grid}>
-                <Control disabled={preview} label={state.muted ? 'Unmute' : 'Mute'} onPress={action(() => void CallService.toggleMute().catch((error) => Alert.alert('Mute unavailable', error instanceof Error ? error.message : 'Unable to change mute.')))} selected={state.muted} />
+                <Control disabled={preview || !roomConnected} label={state.muted ? 'Unmute' : 'Mute'} onPress={action(() => void CallService.toggleMute().catch((error) => Alert.alert('Mute unavailable', error instanceof Error ? error.message : 'Unable to change mute.')))} selected={state.muted} />
                 <Control disabled={preview} label="Speaker" onPress={action(() => void CallService.toggleSpeaker().catch((error) => Alert.alert('Speaker unavailable', error instanceof Error ? error.message : 'Unable to change speaker.')))} selected={state.speakerEnabled} />
-                <Control disabled={preview} label={state.cameraEnabled ? 'Camera Off' : 'Camera'} onPress={action(() => void CallService.toggleCamera().catch((error) => Alert.alert('Camera unavailable', error instanceof Error ? error.message : 'Unable to change camera.')))} selected={state.cameraEnabled} />
-                <Control disabled={preview} label="Message" onPress={action(() => void openExternal('sms', remote).catch(() => Alert.alert('Messages unavailable')))} />
-                <Control disabled={preview} label="FaceTime" onPress={action(() => void openExternal('facetime', remote).catch(() => Alert.alert('FaceTime unavailable')))} />
+                <Control disabled={preview || !roomConnected} label={state.cameraEnabled ? 'Video Off' : 'Video'} onPress={action(() => void CallService.toggleCamera().catch((error) => Alert.alert('Video unavailable', error instanceof Error ? error.message : 'Unable to change video.')))} selected={state.cameraEnabled} />
+                <Control disabled={preview || !remotePhone} label="Message" onPress={action(() => void openExternal('sms', remotePhone).catch(() => Alert.alert('Messages unavailable')))} />
               </View>
               <Pressable accessibilityRole="button" disabled={preview} onPress={action(() => void CallService.endCall())} style={styles.end}><Text style={styles.primaryText}>End Call</Text></Pressable>
             </View>
