@@ -6,7 +6,6 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
 
 import { CallOverlay } from '../src/features/calling/CallOverlay';
-import { CallingRegistrationGate } from '../src/features/calling/CallingRegistrationGate';
 import { ContactsProvider } from '../src/features/contacts/ContactsProvider';
 import { LanguagePreferencesProvider } from '../src/features/languages/LanguagePreferencesProvider';
 import { ApplyAvailableUpdate } from '../src/components/ApplyAvailableUpdate';
@@ -27,7 +26,6 @@ export default function RootLayout() {
               headerShown: false,
             }}
           />
-          <CallingRegistrationGate />
           <CallOverlay />
         </ContactsProvider>
       </LanguagePreferencesProvider>
