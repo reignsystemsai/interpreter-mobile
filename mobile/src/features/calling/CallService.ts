@@ -5,6 +5,7 @@ import InCallManager from 'react-native-incall-manager';
 
 import { supabase } from '../../services/supabase';
 import { ensureCallableIdentity, getLocalCallableIdentity, normalizePhone } from './CallableIdentity';
+import { isLocalMicrophoneTrack, SpeakMicrophoneAudioProcessor } from './SpeakMicrophoneAudioProcessor';
 
 export type CallStatus = 'idle' | 'ringing' | 'connecting' | 'connected' | 'reconnecting' | 'ended';
 export type CallRole = 'caller' | 'recipient' | null;
@@ -13,7 +14,7 @@ type AppCall = { id: string; caller_device_id: string; recipient_device_id: stri
 type CreatedCall = { call_id: string; recipient_device_id: string };
 
 const INITIAL: CallState = { cameraEnabled: false, callId: null, connectedAt: null, error: '', localVideoTrack: null, muted: false, remoteLabel: '', remotePhone: '', remoteVideoTrack: null, role: null, speakerEnabled: false, status: 'idle' };
-const AUDIO = { autoGainControl: true, channelCount: 1, echoCancellation: true, noiseSuppression: true } as const;
+const AUDIO = { autoGainControl: false, channelCount: 1, echoCancellation: true, noiseSuppression: false } as const;
 
 class SpeakCallService {
   private state = INITIAL;
@@ -22,6 +23,7 @@ class SpeakCallService {
   private callChannel: ReturnType<typeof supabase.channel> | null = null;
   private identityRetry: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<(state: CallState) => void>();
+  private microphoneProcessor = new SpeakMicrophoneAudioProcessor();
 
   getState() { return this.state; }
   subscribe(listener: (state: CallState) => void) { this.listeners.add(listener); listener(this.state); return () => { this.listeners.delete(listener); }; }
@@ -152,6 +154,9 @@ class SpeakCallService {
     }
     try {
       await room.localParticipant.setMicrophoneEnabled(true, AUDIO);
+      const microphoneTrack = [...room.localParticipant.audioTrackPublications.values()]
+        .find((publication) => publication.source === Track.Source.Microphone)?.track;
+      if (isLocalMicrophoneTrack(microphoneTrack)) await this.microphoneProcessor.attach(microphoneTrack);
     } catch (audioError) {
       throw new Error(`CALL AUDIO\n${audioError instanceof Error ? audioError.message : 'Unable to start call audio.'}`);
     }
@@ -190,6 +195,7 @@ class SpeakCallService {
     InCallManager.stopRingback();
     InCallManager.stopRingtone();
     this.set(INITIAL);
+    await this.microphoneProcessor.dispose();
     if (room) {
       room.removeAllListeners();
       await room.localParticipant.setCameraEnabled(false).catch(() => undefined);
