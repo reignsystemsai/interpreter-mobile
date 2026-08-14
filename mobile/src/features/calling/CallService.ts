@@ -19,6 +19,7 @@ class SpeakCallService {
   private state = INITIAL;
   private room: Room | null = null;
   private incomingChannel: ReturnType<typeof supabase.channel> | null = null;
+  private callChannel: ReturnType<typeof supabase.channel> | null = null;
   private identityRetry: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<(state: CallState) => void>();
 
@@ -38,9 +39,15 @@ class SpeakCallService {
       throw new Error(`CALL CREATE\n${error?.message || 'The call could not be started.'}`);
     }
     this.set({ callId: call.call_id, remoteLabel, remotePhone: phoneE164, role: 'caller', status: 'ringing' });
+    this.watchCallStatus(call.call_id);
     InCallManager.start({ media: 'audio' });
     InCallManager.startRingback('_DEFAULT_');
-    await this.connectSpeakRoom(call.call_id, 'caller', remoteLabel);
+    try {
+      await this.connectSpeakRoom(call.call_id, 'caller', remoteLabel);
+    } catch (error) {
+      await this.closeFailedCall(call.call_id);
+      throw error;
+    }
   }
 
   startPolling() {
@@ -77,6 +84,7 @@ class SpeakCallService {
     InCallManager.start({ media: 'audio' });
     InCallManager.startRingtone('_DEFAULT_');
     this.set({ callId: call.id, remoteLabel: 'Interpreter contact', role: 'recipient', status: 'ringing' });
+    this.watchCallStatus(call.id);
     void this.loadRemoteProfile(call.id, call.caller_device_id);
   }
 
@@ -100,17 +108,26 @@ class SpeakCallService {
     if (!identity) throw new Error('CALL PROFILE\nCalling setup is required.');
     const { error } = await supabase.from('app_calls').update({ answered_at: new Date().toISOString(), status: 'active' }).eq('id', callId).eq('recipient_device_id', identity.deviceId).eq('status', 'ringing');
     if (error) throw new Error(`CALL CREATE\n${error.message}`);
-    await this.connectSpeakRoom(callId, 'recipient', this.state.remoteLabel);
+    try {
+      await this.connectSpeakRoom(callId, 'recipient', this.state.remoteLabel);
+    } catch (connectError) {
+      await this.closeFailedCall(callId);
+      throw connectError;
+    }
   }
 
   async declineCall() {
-    if (this.state.callId) await supabase.from('app_calls').update({ status: 'declined', ended_at: new Date().toISOString() }).eq('id', this.state.callId);
-    await this.finish(false);
+    const callId = this.state.callId;
+    const cleanup = this.finish();
+    if (callId) await supabase.from('app_calls').update({ status: 'declined', ended_at: new Date().toISOString() }).eq('id', callId);
+    await cleanup;
   }
 
   async endCall() {
-    if (this.state.callId) await supabase.from('app_calls').update({ ended_at: new Date().toISOString(), status: 'ended' }).eq('id', this.state.callId);
-    await this.finish(false);
+    const callId = this.state.callId;
+    const cleanup = this.finish();
+    if (callId) await supabase.from('app_calls').update({ ended_at: new Date().toISOString(), status: 'ended' }).eq('id', callId);
+    await cleanup;
   }
 
   async connectSpeakRoom(callId: string, role: Exclude<CallRole, null>, remoteLabel: string) {
@@ -127,7 +144,7 @@ class SpeakCallService {
     room.on(RoomEvent.TrackUnsubscribed, (track) => { if (track.kind === Track.Kind.Video) this.set({ remoteVideoTrack: null }); });
     room.on(RoomEvent.Reconnecting, () => this.set({ status: 'reconnecting' }));
     room.on(RoomEvent.Reconnected, () => this.set({ status: 'connected' }));
-    room.on(RoomEvent.Disconnected, () => void this.finish(false));
+    room.on(RoomEvent.Disconnected, () => void this.endCall());
     try {
       await room.connect(data.server_url, data.participant_token);
     } catch (roomError) {
@@ -147,8 +164,40 @@ class SpeakCallService {
   async toggleSpeaker() { const speakerEnabled = !this.state.speakerEnabled; await AudioSession.selectAudioOutput(Platform.OS === 'ios' ? speakerEnabled ? 'force_speaker' : 'default' : speakerEnabled ? 'speaker' : 'earpiece'); this.set({ speakerEnabled }); }
   async toggleCamera() { if (!this.room) return; const enabled = !this.state.cameraEnabled; if (enabled && Platform.OS === 'android' && await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA) !== PermissionsAndroid.RESULTS.GRANTED) throw new Error('Camera permission denied.'); await this.room.localParticipant.setCameraEnabled(enabled); const track = enabled ? [...this.room.localParticipant.videoTrackPublications.values()].find((publication) => publication.track)?.track as VideoTrack | null ?? null : null; this.set({ cameraEnabled: enabled, localVideoTrack: track }); }
 
+  private watchCallStatus(callId: string) {
+    this.stopCallChannel();
+    this.callChannel = supabase
+      .channel(`call-status-${callId}`)
+      .on('postgres_changes', { event: 'UPDATE', filter: `id=eq.${callId}`, schema: 'public', table: 'app_calls' }, (payload) => {
+        const call = payload.new as AppCall;
+        if (call.status === 'declined' || call.status === 'ended') void this.finish();
+      })
+      .subscribe();
+  }
+
+  private async closeFailedCall(callId: string) {
+    const cleanup = this.finish();
+    await supabase.from('app_calls').update({ ended_at: new Date().toISOString(), status: 'ended' }).eq('id', callId);
+    await cleanup;
+  }
+
   private stopIncomingChannel() { if (!this.incomingChannel) return; void supabase.removeChannel(this.incomingChannel); this.incomingChannel = null; }
-  private async finish(notify: boolean) { void notify; const room = this.room; this.room = null; InCallManager.stopRingback(); InCallManager.stopRingtone(); if (room) { room.removeAllListeners(); await room.localParticipant.setCameraEnabled(false).catch(() => undefined); await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined); await room.disconnect().catch(() => undefined); } await AudioSession.stopAudioSession().catch(() => undefined); this.set(INITIAL); }
+  private stopCallChannel() { if (!this.callChannel) return; void supabase.removeChannel(this.callChannel); this.callChannel = null; }
+  private async finish() {
+    const room = this.room;
+    this.room = null;
+    this.stopCallChannel();
+    InCallManager.stopRingback();
+    InCallManager.stopRingtone();
+    this.set(INITIAL);
+    if (room) {
+      room.removeAllListeners();
+      await room.localParticipant.setCameraEnabled(false).catch(() => undefined);
+      await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
+      await room.disconnect().catch(() => undefined);
+    }
+    await AudioSession.stopAudioSession().catch(() => undefined);
+  }
 }
 
 export const CallService = new SpeakCallService();
