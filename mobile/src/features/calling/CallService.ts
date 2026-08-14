@@ -153,7 +153,7 @@ class SpeakCallService {
     InCallManager.stopRingback();
     InCallManager.stopRingtone();
     InCallManager.stop();
-    await AudioSession.configureAudio({ ios: { defaultOutput: 'speaker' } });
+    await AudioSession.configureAudio({ ios: { defaultOutput: 'earpiece' } });
     await AudioSession.startAudioSession();
     room.on(RoomEvent.TrackSubscribed, (track) => { if (track.kind === Track.Kind.Audio) this.set({ connectedAt: this.state.connectedAt ?? Date.now(), status: 'connected' }); if (track.kind === Track.Kind.Video) this.set({ remoteVideoTrack: track as VideoTrack }); });
     room.on(RoomEvent.TrackUnsubscribed, (track) => { if (track.kind === Track.Kind.Video) this.set({ remoteVideoTrack: null }); });
@@ -184,7 +184,12 @@ class SpeakCallService {
     await this.room.localParticipant.setMicrophoneEnabled(!muted, AUDIO);
     this.set({ muted });
   }
-  async toggleSpeaker() { const speakerEnabled = !this.state.speakerEnabled; await AudioSession.selectAudioOutput(Platform.OS === 'ios' ? speakerEnabled ? 'force_speaker' : 'default' : speakerEnabled ? 'speaker' : 'earpiece'); this.set({ speakerEnabled }); }
+  async toggleSpeaker() {
+    if (!this.room) throw new Error('Call audio is not connected.');
+    const speakerEnabled = !this.state.speakerEnabled;
+    await AudioSession.selectAudioOutput(Platform.OS === 'ios' ? speakerEnabled ? 'force_speaker' : 'default' : speakerEnabled ? 'speaker' : 'earpiece');
+    this.set({ speakerEnabled });
+  }
   async toggleCamera() { if (!this.room) return; const enabled = !this.state.cameraEnabled; if (enabled && Platform.OS === 'android' && await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA) !== PermissionsAndroid.RESULTS.GRANTED) throw new Error('Camera permission denied.'); await this.room.localParticipant.setCameraEnabled(enabled); const track = enabled ? [...this.room.localParticipant.videoTrackPublications.values()].find((publication) => publication.track)?.track as VideoTrack | null ?? null : null; this.set({ cameraEnabled: enabled, localVideoTrack: track }); }
 
   private watchCallStatus(callId: string) {
