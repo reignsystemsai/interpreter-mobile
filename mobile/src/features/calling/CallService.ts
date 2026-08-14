@@ -136,7 +136,10 @@ class SpeakCallService {
     const identity = await getLocalCallableIdentity();
     if (!identity) throw new Error('CALL PROFILE\nCalling setup is required.');
     this.set({ callId, remoteLabel, role, status: 'connecting' });
-    const { data, error } = await supabase.functions.invoke('livekit-token', { body: { call_id: callId, device_id: identity.deviceId } });
+    const { data, error } = await supabase.rpc('issue_livekit_call_token', {
+      p_call_id: callId,
+      p_device_id: identity.deviceId,
+    });
     if (error || !data?.server_url || !data?.participant_token) throw new Error(`CALL TOKEN\n${error?.message || 'LiveKit token could not be issued.'}`);
     const room = new Room({ audioCaptureDefaults: AUDIO, publishDefaults: { audioPreset: AudioPresets.speech } });
     this.room = room;
