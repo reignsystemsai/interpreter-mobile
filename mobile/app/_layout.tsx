@@ -3,6 +3,7 @@ import 'react-native-reanimated';
 import { registerGlobals } from '@livekit/react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { StyleSheet, View } from 'react-native';
 
 import { CallOverlay } from '../src/features/calling/CallOverlay';
 import { ContactsProvider } from '../src/features/contacts/ContactsProvider';
@@ -13,7 +14,7 @@ registerGlobals();
 
 export default function RootLayout() {
   return (
-    <>
+    <View style={styles.root}>
       <ApplyAvailableUpdate />
       <LanguagePreferencesProvider>
         <ContactsProvider>
@@ -28,6 +29,10 @@ export default function RootLayout() {
           <CallOverlay />
         </ContactsProvider>
       </LanguagePreferencesProvider>
-    </>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+});

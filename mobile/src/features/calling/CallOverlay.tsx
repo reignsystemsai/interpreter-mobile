@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Alert, Linking, Modal, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { Alert, Linking, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { VideoView } from '@livekit/react-native';
 
 import { CallService, type CallState } from './CallService';
@@ -79,25 +79,22 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
 }
 
 export function CallOverlay() {
-  const [state, setState] = useState(CallService.getState());
-  useEffect(() => CallService.subscribe(setState), []);
+  const state = useSyncExternalStore(
+    (listener) => CallService.subscribe(listener),
+    () => CallService.getState(),
+    () => CallService.getState(),
+  );
   useEffect(() => CallService.startPolling(), []);
 
   if (state.status === 'idle') return null;
   return (
-    <Modal
-      animationType="fade"
-      onRequestClose={() => void (state.role === 'recipient' && state.status === 'ringing' ? CallService.declineCall() : CallService.endCall())}
-      presentationStyle="overFullScreen"
-      statusBarTranslucent
-      transparent
-      visible
-    >
+    <View style={styles.overlay}>
       <CallScreen state={state} />
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  overlay: { ...StyleSheet.absoluteFillObject, elevation: 1000, zIndex: 1000 },
   backdrop: { backgroundColor: '#0B1220', flex: 1 }, screen: { flex: 1 }, audioBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#14213D' }, remoteVideo: { ...StyleSheet.absoluteFillObject }, previewRemoteVideo: { ...StyleSheet.absoluteFillObject, alignItems: 'center', backgroundColor: '#203A61', justifyContent: 'center' }, previewVideoText: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' }, previewLocalVideo: { alignItems: 'center', backgroundColor: '#486A96', borderColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, height: 150, justifyContent: 'center', position: 'absolute', right: 20, top: 82, width: 106 }, previewLocalText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700', textAlign: 'center' }, content: { alignItems: 'center', flex: 1, justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 36 }, label: { color: '#B8C4D9', fontSize: 14, fontWeight: '700', marginTop: 18 }, remote: { color: '#FFFFFF', fontSize: 30, fontWeight: '700', marginTop: 12, textAlign: 'center' }, status: { color: '#D5DCE8', fontSize: 16, marginTop: 8 }, localVideo: { borderColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, height: 150, position: 'absolute', right: 20, top: 82, width: 106 }, incomingRow: { flexDirection: 'row', gap: 18, marginBottom: 38, width: '100%' }, answer: { alignItems: 'center', backgroundColor: '#1F9D55', borderRadius: 12, flex: 1, paddingVertical: 18 }, decline: { alignItems: 'center', backgroundColor: '#C0392B', borderRadius: 12, flex: 1, paddingVertical: 18 }, controlsArea: { marginBottom: 16, width: '100%' }, grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 }, control: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 12, flexBasis: '30%', flexGrow: 1, minHeight: 58, justifyContent: 'center', paddingHorizontal: 8 }, controlSelected: { backgroundColor: '#075BFF' }, previewDisabled: { opacity: 0.88 }, controlText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', textAlign: 'center' }, end: { alignItems: 'center', backgroundColor: '#C0392B', borderRadius: 12, marginTop: 16, minHeight: 58, justifyContent: 'center' }, primaryText: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' }, pressed: { opacity: 0.72 },
 });
