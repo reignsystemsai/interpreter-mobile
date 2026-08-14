@@ -28,8 +28,6 @@ import { ContactsPermissionPanel } from '../src/features/contacts/ContactsPermis
 import { AppMenu, type MenuDestination } from '../src/features/menu/AppMenu';
 import { DestinationSheet } from '../src/features/menu/DestinationSheet';
 import { useLanguagePreferences } from '../src/features/languages/LanguagePreferencesProvider';
-import { CallingSetup } from '../src/features/calling/CallingSetup';
-import { getLocalCallableIdentity } from '../src/features/calling/CallableIdentity';
 import { UI_CONTROLS } from '../src/config/uiControls';
 
 const LANGUAGES = [
@@ -133,16 +131,11 @@ export default function InterpreterScreen() {
   const [genderTwo, setGenderTwo] = useState<Gender>('male');
   const [languageSide, setLanguageSide] = useState<LanguageSide>('one');
   const [overlay, setOverlay] = useState<Overlay>(null);
-  const [showCallingSetup, setShowCallingSetup] = useState(false);
 
   const { errorMessage, isActive, start, status, stop } = useRealtimeInterpreter(languageOne, languageTwo);
 
   useEffect(() => {
     recordAppReady();
-
-    void getLocalCallableIdentity().then((identity) => {
-      if (!identity) setShowCallingSetup(true);
-    });
   }, []);
 
   const statusText = useMemo(() => {
@@ -194,15 +187,7 @@ export default function InterpreterScreen() {
             accessibilityRole="button"
             disabled={conversationRunning}
             hitSlop={12}
-            onPress={() => {
-              void getLocalCallableIdentity().then((identity) => {
-                if (!identity) {
-                  setShowCallingSetup(true);
-                } else {
-                  setOverlay('contacts');
-                }
-              });
-            }}
+            onPress={() => setOverlay('contacts')}
             style={({ pressed }) => [
               styles.phoneButton,
               conversationRunning && styles.disabled,
@@ -346,12 +331,6 @@ export default function InterpreterScreen() {
           </View>
         </BlurView>
       </Modal>
-
-      <CallingSetup
-        visible={showCallingSetup}
-        onCancel={() => setShowCallingSetup(false)}
-        onComplete={() => setShowCallingSetup(false)}
-      />
 
       <DestinationSheet
         destination={
