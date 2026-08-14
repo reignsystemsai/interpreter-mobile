@@ -60,7 +60,7 @@ export function ContactsPermissionPanel({ autoRequest = false, onBack }: { autoR
       <View style={styles.titleRow}><Text style={styles.title}>My Contacts</Text><Pressable accessibilityLabel="Reload device contacts" onPress={() => void refresh()} style={styles.reloadButton}><Text style={styles.reloadText}>Reload</Text></Pressable></View>
       <TextInput autoCapitalize="none" onChangeText={setQuery} placeholder="Search contacts" placeholderTextColor="#98A2B3" style={styles.search} value={query} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <ScrollView contentContainerStyle={styles.contactList} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.contactList} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         {loading ? <Text style={styles.empty}>Loading contacts…</Text> : visibleContacts.map((contact) => (
           <Pressable key={contact.id} onPress={() => setSelectedId(contact.id)} style={({ pressed }) => [styles.contactRow, pressed && styles.pressed]}>
             <View style={styles.avatar}><Text style={styles.avatarText}>{contact.displayName.slice(0, 1).toUpperCase()}</Text></View>
