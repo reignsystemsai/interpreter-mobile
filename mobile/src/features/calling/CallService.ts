@@ -192,18 +192,6 @@ class SpeakCallService {
     await AudioSession.selectAudioOutput(Platform.OS === 'ios' ? speakerEnabled ? 'force_speaker' : 'default' : speakerEnabled ? 'speaker' : 'earpiece');
     this.set({ speakerEnabled });
   }
-  async chooseBluetooth() {
-    if (!this.room) throw new Error('Call audio is not connected.');
-    if (Platform.OS === 'ios') {
-      await AudioSession.showAudioRoutePicker();
-      this.set({ speakerEnabled: false });
-      return;
-    }
-    const outputs = await AudioSession.getAudioOutputs();
-    if (!outputs.includes('bluetooth')) throw new Error('No Bluetooth audio device is connected.');
-    await AudioSession.selectAudioOutput('bluetooth');
-    this.set({ speakerEnabled: false });
-  }
   async toggleCamera() {
     if (!this.room) throw new Error('Call video is not connected.');
     const enabled = !this.state.cameraEnabled;
@@ -251,7 +239,6 @@ class SpeakCallService {
     });
     if (error) throw new Error(error.message);
   }
-
   private watchCallStatus(callId: string) {
     this.stopCallChannel();
     const refreshStatus = () => {

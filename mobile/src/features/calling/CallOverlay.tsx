@@ -19,10 +19,9 @@ function durationLabel(connectedAt: number | null, now: number) {
   return `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
 }
 
-type ControlName = 'bluetooth' | 'flip' | 'message' | 'microphone' | 'speaker' | 'video';
+type ControlName = 'flip' | 'message' | 'microphone' | 'speaker' | 'video';
 
 function ControlIcon({ name }: { name: ControlName }) {
-  if (name === 'bluetooth') return <Svg height={27} viewBox="0 0 24 24" width={27}><Path d="m7 7 10 10-5 4V3l5 4L7 17" fill="none" stroke="#FFFFFF" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} /></Svg>;
   if (name === 'flip') return <Svg height={27} viewBox="0 0 24 24" width={27}><Path d="M7 7h10l2 3v7H5v-7l2-3Z" fill="none" stroke="#FFFFFF" strokeLinejoin="round" strokeWidth={1.8} /><Circle cx={12} cy={13} fill="none" r={2.7} stroke="#FFFFFF" strokeWidth={1.8} /><Path d="M8 3.5h7M15 3.5l-2-2M15 3.5l-2 2" fill="none" stroke="#FFFFFF" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} /></Svg>;
   if (name === 'microphone') return <Svg height={27} viewBox="0 0 24 24" width={27}><Rect fill="none" height={11} rx={4} stroke="#FFFFFF" strokeWidth={1.8} width={7} x={8.5} y={2.5} /><Path d="M5.5 10.5a6.5 6.5 0 0 0 13 0M12 17v4M8.5 21h7" fill="none" stroke="#FFFFFF" strokeLinecap="round" strokeWidth={1.8} /></Svg>;
   if (name === 'speaker') return <Svg height={27} viewBox="0 0 24 24" width={27}><Path d="M4 10v4h4l5 4V6l-5 4H4Z" fill="none" stroke="#FFFFFF" strokeLinejoin="round" strokeWidth={1.8} /><Path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="#FFFFFF" strokeLinecap="round" strokeWidth={1.8} /></Svg>;
@@ -89,8 +88,7 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
             <View style={styles.controlsArea}>
               <View style={styles.grid}>
                 <Control disabled={preview || !roomConnected} icon="microphone" label={state.muted ? 'Unmute' : 'Mute'} onPress={action(() => void CallService.toggleMute().catch((error) => Alert.alert('Mute unavailable', error instanceof Error ? error.message : 'Unable to change mute.')))} selected={state.muted} />
-                <Control disabled={preview || !roomConnected} icon="speaker" label="Speaker" onPress={action(() => void CallService.toggleSpeaker().catch((error) => Alert.alert('Speaker unavailable', error instanceof Error ? error.message : 'Unable to change speaker.')))} selected={state.speakerEnabled} />
-                <Control disabled={preview || !roomConnected} icon="bluetooth" label="Bluetooth" onPress={action(() => void CallService.chooseBluetooth().catch((error) => Alert.alert('Bluetooth unavailable', error instanceof Error ? error.message : 'Unable to select Bluetooth.')))} />
+                <Control disabled={preview} icon="speaker" label="Speaker" onPress={action(() => void CallService.toggleSpeaker().catch((error) => Alert.alert('Speaker unavailable', error instanceof Error ? error.message : 'Unable to change speaker.')))} selected={state.speakerEnabled} />
                 <Control disabled={preview || !roomConnected} icon="video" label={state.cameraEnabled ? 'Video Off' : 'Video'} onPress={action(() => void CallService.toggleCamera().catch((error) => Alert.alert('Video unavailable', error instanceof Error ? error.message : 'Unable to change video.')))} selected={state.cameraEnabled} />
                 <Control disabled={preview || !roomConnected || !state.cameraEnabled} icon="flip" label="Flip" onPress={action(() => void CallService.flipCamera().catch((error) => Alert.alert('Camera unavailable', error instanceof Error ? error.message : 'Unable to switch camera.')))} />
                 <Control disabled={preview || !state.callId} icon="message" label="Message" onPress={action(() => setMessagesOpen(true))} />
