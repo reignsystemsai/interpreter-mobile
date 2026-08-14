@@ -66,7 +66,7 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
   const action = (callback: () => void) => preview ? noop : callback;
   const incoming = state.role === 'recipient' && state.status === 'ringing';
   const remote = state.remoteLabel || 'Unknown caller';
-  const roomConnected = state.status === 'connected' || state.status === 'reconnecting';
+  const roomConnected = state.status === 'connected';
   const previewVideo = preview && state.cameraEnabled;
   const statusLabel = state.status === 'idle' ? '' : LABELS[state.status];
 

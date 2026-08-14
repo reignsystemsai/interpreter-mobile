@@ -180,7 +180,7 @@ class SpeakCallService {
     this.set({ connectedAt: Date.now(), status: 'connected' });
   }
 
-  async toggleMute() { if (!this.room) return; const muted = !this.state.muted; await this.room.localParticipant.setMicrophoneEnabled(!muted, AUDIO); this.set({ muted }); }
+  async toggleMute() { if (!this.room || this.state.status !== 'connected') return; const muted = !this.state.muted; await this.room.localParticipant.setMicrophoneEnabled(!muted, AUDIO); this.set({ muted }); }
   async toggleCamera() {
     if (!this.room) throw new Error('Call video is not connected.');
     const enabled = !this.state.cameraEnabled;
