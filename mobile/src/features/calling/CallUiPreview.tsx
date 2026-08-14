@@ -15,6 +15,7 @@ function stateFor(mode: PreviewMode): CallState {
     localVideoTrack: null,
     muted: false,
     remoteLabel: '+1 555 010 0200',
+    remotePhone: '+15550100200',
     remoteVideoTrack: null,
     role: mode === 'incoming' ? 'recipient' : 'caller',
     speakerEnabled: false,
