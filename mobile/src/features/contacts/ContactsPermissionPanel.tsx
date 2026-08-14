@@ -38,7 +38,7 @@ export function ContactsPermissionPanel({ autoRequest = false, onBack }: { autoR
     }).sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [contacts, query]);
 
-  if (selected) return <ContactDetails contact={selected} onBack={() => setSelectedId(null)} onRefresh={refresh} />;
+  if (selected) return <ContactDetails contact={selected} onBack={() => setSelectedId(null)} onClose={onBack} onRefresh={refresh} />;
 
   if (permission !== 'granted' && !contacts.length) return (
     <View>
@@ -82,7 +82,7 @@ function permissionLabel(permission: ReturnType<typeof useContacts>['permission'
   return 'Not requested';
 }
 
-function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterContact; onBack: () => void; onRefresh: () => Promise<void> }) {
+function ContactDetails({ contact, onBack, onClose, onRefresh }: { contact: InterpreterContact; onBack: () => void; onClose: () => void; onRefresh: () => Promise<void> }) {
   const [showLanguageSelection, setShowLanguageSelection] = useState(true);
   const [setupVisible, setSetupVisible] = useState(false);
   const [pendingContactPhone, setPendingContactPhone] = useState('');
@@ -112,6 +112,7 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
         return;
       }
       await ensureCallableIdentity();
+      onClose();
       await CallService.createCall(phoneNumberE164, contact.displayName);
     } catch (error) {
       if (error instanceof Error && error.message === 'This person does not have Interpreter yet.') {
@@ -147,7 +148,10 @@ function ContactDetails({ contact, onBack, onRefresh }: { contact: InterpreterCo
     const phone = pendingContactPhone;
     setPendingContactPhone('');
     setSetupVisible(false);
-    if (phone) void ensureCallableIdentity().then(() => CallService.createCall(phone, contact.displayName)).catch((error) => Alert.alert('Unable to connect', error instanceof Error ? error.message : 'Please try again.'));
+    if (phone) void ensureCallableIdentity().then(() => {
+      onClose();
+      return CallService.createCall(phone, contact.displayName);
+    }).catch((error) => Alert.alert('Unable to connect', error instanceof Error ? error.message : 'Please try again.'));
   };
 
   if (showLanguageSelection) return <>
