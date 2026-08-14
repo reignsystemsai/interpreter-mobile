@@ -149,6 +149,9 @@ class SpeakCallService {
     if (error || !data?.server_url || !data?.participant_token) throw new Error(`CALL TOKEN\n${error?.message || 'LiveKit token could not be issued.'}`);
     const room = new Room({ audioCaptureDefaults: AUDIO, publishDefaults: { audioPreset: AudioPresets.speech } });
     this.room = room;
+    InCallManager.stopRingback();
+    InCallManager.stopRingtone();
+    InCallManager.stop();
     await AudioSession.configureAudio({ ios: { defaultOutput: 'speaker' } });
     await AudioSession.startAudioSession();
     room.on(RoomEvent.TrackSubscribed, (track) => { if (track.kind === Track.Kind.Audio) this.set({ connectedAt: this.state.connectedAt ?? Date.now(), status: 'connected' }); if (track.kind === Track.Kind.Video) this.set({ remoteVideoTrack: track as VideoTrack }); });
@@ -238,6 +241,7 @@ class SpeakCallService {
     this.stopCallChannel();
     InCallManager.stopRingback();
     InCallManager.stopRingtone();
+    InCallManager.stop();
     this.set(INITIAL);
     await this.microphoneProcessor.dispose();
     if (room) {
