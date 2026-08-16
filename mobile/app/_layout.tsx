@@ -10,7 +10,7 @@ import { ContactsProvider } from '../src/features/contacts/ContactsProvider';
 import { LanguagePreferencesProvider } from '../src/features/languages/LanguagePreferencesProvider';
 import { ApplyAvailableUpdate } from '../src/components/ApplyAvailableUpdate';
 
-registerGlobals();
+registerGlobals({ autoConfigureAudioSession: false });
 
 export default function RootLayout() {
   return (
