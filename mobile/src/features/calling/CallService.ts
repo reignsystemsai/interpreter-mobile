@@ -150,7 +150,7 @@ class SpeakCallService {
       p_device_id: identity.deviceId,
     });
     if (error || !data?.server_url || !data?.participant_token) throw new Error(`CALL TOKEN\n${error?.message || 'LiveKit token could not be issued.'}`);
-    const room = new Room({ audioCaptureDefaults: AUDIO, publishDefaults: { audioPreset: AudioPresets.speech } });
+    const room = new Room({ audioCaptureDefaults: AUDIO, publishDefaults: { audioPreset: AudioPresets.music } });
     this.room = room;
     InCallManager.stopRingback();
     InCallManager.stopRingtone();
