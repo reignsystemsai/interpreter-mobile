@@ -155,7 +155,7 @@ class SpeakCallService {
     InCallManager.stopRingback();
     InCallManager.stopRingtone();
     InCallManager.stop();
-    await AudioSession.configureAudio({ ios: { defaultOutput: 'speaker' } });
+    await AudioSession.configureAudio({ ios: { defaultOutput: 'earpiece' } });
     await AudioSession.startAudioSession();
     room.on(RoomEvent.TrackSubscribed, (track) => { if (track.kind === Track.Kind.Audio) this.set({ connectedAt: this.state.connectedAt ?? Date.now(), status: 'connected' }); if (track.kind === Track.Kind.Video) this.set({ remoteVideoTrack: track as VideoTrack }); });
     room.on(RoomEvent.TrackUnsubscribed, (track) => { if (track.kind === Track.Kind.Video) this.set({ remoteVideoTrack: null }); });
