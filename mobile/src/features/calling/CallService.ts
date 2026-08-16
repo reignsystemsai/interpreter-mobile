@@ -15,7 +15,7 @@ type AppCall = { id: string; caller_device_id: string; recipient_device_id: stri
 type CreatedCall = { call_id: string; recipient_device_id: string };
 
 const INITIAL: CallState = { cameraEnabled: false, cameraFacingMode: 'user', callId: null, connectedAt: null, error: '', localVideoTrack: null, muted: false, remoteLabel: '', remotePhone: '', remoteVideoTrack: null, role: null, speakerEnabled: false, status: 'idle' };
-const AUDIO = { autoGainControl: false, channelCount: 1, echoCancellation: true, noiseSuppression: false } as const;
+const AUDIO = { autoGainControl: false, channelCount: 1, echoCancellation: true, noiseSuppression: true } as const;
 
 class SpeakCallService {
   private state = INITIAL;
