@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ai.interpreter.mobile",
-      "buildNumber": "86",
+      "buildNumber": "87",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "Interpreter.ai uses the microphone for translation and voice or video calls.",
