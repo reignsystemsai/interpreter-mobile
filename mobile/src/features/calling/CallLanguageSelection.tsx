@@ -9,6 +9,10 @@ const BLUE = '#075BFF';
 export const CALL_LANGUAGES = ['English', 'Spanish', 'Brazilian Portuguese', 'French', 'German', 'Italian', 'Russian', 'Mandarin Chinese', 'Japanese', 'Korean', 'Hindi', 'Indonesian', 'Vietnamese'] as const;
 export type CallLanguage = typeof CALL_LANGUAGES[number];
 export type CallVoice = 'female' | 'male';
+export const CALL_LANGUAGE_CODES: Record<CallLanguage, string> = {
+  English: 'en', Spanish: 'es', 'Brazilian Portuguese': 'pt', French: 'fr', German: 'de', Italian: 'it', Russian: 'ru',
+  'Mandarin Chinese': 'zh', Japanese: 'ja', Korean: 'ko', Hindi: 'hi', Indonesian: 'id', Vietnamese: 'vi',
+};
 
 export function CallLanguageSelection({ contact, onBack, onContactPress, onStart }: {
   contact: InterpreterContact;
