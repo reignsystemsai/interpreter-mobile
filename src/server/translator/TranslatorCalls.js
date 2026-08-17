@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const express = require("express");
 
-const { createVoiceToken, getLiveKitUrl, isLiveKitConfigured } = require("../livekit");
+const { getSupabaseAdmin, isSupabaseConfigured } = require("../supabase");
 const { LANGUAGE_NAMES, TranslatorBridge } = require("./TranslatorBridge");
 
 const router = express.Router();
@@ -9,6 +9,19 @@ const calls = new Map();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FINAL = new Set(["declined", "ended", "failed"]);
 const VOICES = new Set(["male", "female"]);
+
+async function issueTranslatorToken(roomName, identity) {
+  const admin = getSupabaseAdmin();
+  if (!admin) throw new Error("Supabase token signer is not configured");
+  const { data, error } = await admin.rpc("issue_translator_livekit_token", {
+    p_room_name: roomName,
+    p_identity: identity
+  });
+  if (error || !data?.participant_token || !data?.server_url) {
+    throw new Error(error?.message || "Translator token could not be issued");
+  }
+  return { participantToken: data.participant_token, serverUrl: data.server_url };
+}
 
 function publicCall(call) {
   return {
@@ -69,17 +82,17 @@ router.get("/:callId", (req, res) => {
 router.post("/:callId/answer", async (req, res) => {
   const call = calls.get(req.params.callId);
   if (!call || call.recipientIdentity !== req.body?.deviceId || call.status !== "ringing") return res.status(409).json({ error: "Translator Call is no longer available." });
-  if (!isLiveKitConfigured()) return res.status(503).json({ error: "Calling is not configured." });
+  if (!isSupabaseConfigured()) return res.status(503).json({ error: "Calling is not configured." });
   call.status = "connecting";
   try {
     const roomName = `translator-${call.id}`;
-    const bridgeToken = await createVoiceToken({ identity: `translator:${call.id}`, roomName });
-    const bridge = new TranslatorBridge(call, getLiveKitUrl(), bridgeToken);
+    const bridgeAccess = await issueTranslatorToken(roomName, `translator:${call.id}`);
+    const bridge = new TranslatorBridge(call, bridgeAccess.serverUrl, bridgeAccess.participantToken);
     await bridge.start();
     call.bridge = bridge;
     call.status = "active";
-    const participantToken = await createVoiceToken({ identity: call.recipientIdentity, roomName });
-    return res.json({ call: publicCall(call), serverUrl: getLiveKitUrl(), participantToken });
+    const recipientAccess = await issueTranslatorToken(roomName, call.recipientIdentity);
+    return res.json({ call: publicCall(call), serverUrl: recipientAccess.serverUrl, participantToken: recipientAccess.participantToken });
   } catch (error) {
     call.status = "failed"; call.endedAt = Date.now();
     await call.bridge?.stop().catch(() => undefined);
@@ -92,8 +105,13 @@ router.post("/:callId/token", async (req, res) => {
   const call = calls.get(req.params.callId);
   const deviceId = req.body?.deviceId;
   if (!participant(call, deviceId) || call.status !== "active") return res.status(409).json({ error: "Translator Call is not active." });
-  const participantToken = await createVoiceToken({ identity: deviceId, roomName: `translator-${call.id}` });
-  return res.json({ serverUrl: getLiveKitUrl(), participantToken });
+  try {
+    const access = await issueTranslatorToken(`translator-${call.id}`, deviceId);
+    return res.json({ serverUrl: access.serverUrl, participantToken: access.participantToken });
+  } catch (error) {
+    console.error("[Translator] token failed", { callId: call.id, reason: error instanceof Error ? error.message : "unknown" });
+    return res.status(502).json({ error: "Translator could not connect. Please try again." });
+  }
 });
 
 router.post("/:callId/end", async (req, res) => {
@@ -106,4 +124,4 @@ router.post("/:callId/end", async (req, res) => {
   return res.status(204).end();
 });
 
-module.exports = { calls, participant, publicCall, router };
+module.exports = { calls, issueTranslatorToken, participant, publicCall, router };
