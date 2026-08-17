@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ai.interpreter.mobile",
-      "buildNumber": "89",
+      "buildNumber": "91",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "UIUserInterfaceStyle": "Light",
