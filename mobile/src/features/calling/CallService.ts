@@ -85,7 +85,7 @@ class SpeakCallService {
     if (this.state.status !== 'idle' || call.status !== 'ringing') return;
     InCallManager.start({ media: 'audio' });
     InCallManager.startRingtone('_DEFAULT_');
-    this.set({ callId: call.id, remoteLabel: 'Interpreter contact', role: 'recipient', status: 'ringing' });
+    this.set({ callId: call.id, remoteLabel: '', remotePhone: '', role: 'recipient', status: 'ringing' });
     this.watchCallStatus(call.id);
     void this.loadRemoteProfile(call.id);
   }
@@ -99,7 +99,7 @@ class SpeakCallService {
     });
     if (this.state.callId !== callId || !data) return;
     this.set({
-      remoteLabel: data.display_name || this.state.remoteLabel,
+      remoteLabel: data.display_name || data.phone_e164 || 'Unknown caller',
       remotePhone: data.phone_e164 || '',
     });
   }

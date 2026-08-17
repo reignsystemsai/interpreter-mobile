@@ -75,7 +75,7 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
       <View style={styles.screen}>
         {state.remoteVideoTrack ? <VideoView objectFit="cover" style={styles.remoteVideo} videoTrack={state.remoteVideoTrack} /> : previewVideo ? <View style={styles.previewRemoteVideo}><Text style={styles.previewVideoText}>Remote video area</Text></View> : <View style={styles.audioBackdrop} />}
         <View style={styles.content}>
-          <Text style={styles.label}>{incoming ? 'Incoming Interpreter Call' : statusLabel}</Text>
+          <Text style={styles.label}>{incoming ? 'Incoming call' : statusLabel}</Text>
           <Text numberOfLines={1} style={styles.remote}>{remote}</Text>
           <Text style={styles.status}>{state.connectedAt ? durationLabel(state.connectedAt, now) : statusLabel}</Text>
           {state.localVideoTrack ? <VideoView mirror={state.cameraFacingMode === 'user'} objectFit="cover" style={styles.localVideo} videoTrack={state.localVideoTrack} /> : previewVideo ? <View style={styles.previewLocalVideo}><Text style={styles.previewLocalText}>Local preview</Text></View> : null}
