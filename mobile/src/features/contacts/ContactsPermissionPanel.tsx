@@ -5,7 +5,7 @@ import { Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInp
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import { type InterpreterContact, useContacts } from './ContactsProvider';
-import { CallLanguageSelection, type CallLanguage } from '../calling/CallLanguageSelection';
+import { CallLanguageSelection, type CallLanguage, type CallVoice } from '../calling/CallLanguageSelection';
 import { CallService } from '../calling/CallService';
 import { CallingSetup } from '../calling/CallingSetup';
 import { ensureCallableIdentity, getLocalCallableIdentity } from '../calling/CallableIdentity';
@@ -102,10 +102,12 @@ function ContactDetails({ contact, onBack, onClose, onRefresh }: { contact: Inte
     }
   };
 
-  const startContactCall = async (phoneNumberE164: string, callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => {
+  const startContactCall = async (phoneNumberE164: string, callerLanguage: CallLanguage, recipientLanguage: CallLanguage, callerVoice: CallVoice, recipientVoice: CallVoice) => {
     try {
       void callerLanguage;
       void recipientLanguage;
+      void callerVoice;
+      void recipientVoice;
       if (!await getLocalCallableIdentity()) {
         setPendingContactPhone(phoneNumberE164);
         setSetupVisible(true);
@@ -126,11 +128,11 @@ function ContactDetails({ contact, onBack, onClose, onRefresh }: { contact: Inte
     }
   };
 
-  const choosePhoneForCall = async (phoneNumberE164: string, callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => {
-    await startContactCall(phoneNumberE164, callerLanguage, recipientLanguage);
+  const choosePhoneForCall = async (phoneNumberE164: string, callerLanguage: CallLanguage, recipientLanguage: CallLanguage, callerVoice: CallVoice, recipientVoice: CallVoice) => {
+    await startContactCall(phoneNumberE164, callerLanguage, recipientLanguage, callerVoice, recipientVoice);
   };
 
-  const beginVoiceCall = async (callerLanguage: CallLanguage, recipientLanguage: CallLanguage) => {
+  const beginVoiceCall = async (callerLanguage: CallLanguage, recipientLanguage: CallLanguage, callerVoice: CallVoice, recipientVoice: CallVoice) => {
     const firstValidPhone = contact.phoneNumbers.find((item) => Boolean(parsePhoneNumberFromString(item.value, item.countryCode as CountryCode)?.isValid()));
     if (!firstValidPhone) {
       Alert.alert('This contact has no phone number saved.', undefined, [
@@ -141,7 +143,7 @@ function ContactDetails({ contact, onBack, onClose, onRefresh }: { contact: Inte
     }
     const phoneNumberE164 = parsePhoneNumberFromString(firstValidPhone.value, firstValidPhone.countryCode as CountryCode)?.number ?? '';
     if (!phoneNumberE164) return;
-    await choosePhoneForCall(phoneNumberE164, callerLanguage, recipientLanguage);
+    await choosePhoneForCall(phoneNumberE164, callerLanguage, recipientLanguage, callerVoice, recipientVoice);
   };
 
   const continueAfterSetup = () => {
@@ -159,7 +161,7 @@ function ContactDetails({ contact, onBack, onClose, onRefresh }: { contact: Inte
       contact={contact}
       onBack={onBack}
       onContactPress={() => setShowLanguageSelection(false)}
-      onStart={(callerLanguage, recipientLanguage) => void beginVoiceCall(callerLanguage, recipientLanguage)}
+      onStart={(callerLanguage, recipientLanguage, callerVoice, recipientVoice) => void beginVoiceCall(callerLanguage, recipientLanguage, callerVoice, recipientVoice)}
     />
     <CallingSetup onCancel={() => setSetupVisible(false)} onComplete={continueAfterSetup} visible={setupVisible} />
   </>;
