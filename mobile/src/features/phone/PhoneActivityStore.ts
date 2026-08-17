@@ -1,4 +1,4 @@
-export type PhoneTab = 'capsules' | 'recents' | 'connections' | 'keypad' | 'voice';
+export type PhoneTab = 'messages' | 'recents' | 'connections' | 'keypad' | 'voice';
 
 export type RecentCall = {
   callId: string;

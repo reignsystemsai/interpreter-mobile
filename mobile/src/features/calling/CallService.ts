@@ -219,8 +219,12 @@ class SpeakCallService {
   }
   async listMessages(): Promise<CallMessage[]> {
     const callId = this.state.callId;
+    if (!callId) return [];
+    return this.listMessagesForCall(callId);
+  }
+  async listMessagesForCall(callId: string): Promise<CallMessage[]> {
     const identity = await getLocalCallableIdentity();
-    if (!callId || !identity) return [];
+    if (!identity) return [];
     const { data, error } = await supabase.rpc('list_direct_call_messages', {
       p_call_id: callId,
       p_device_id: identity.deviceId,
@@ -235,8 +239,12 @@ class SpeakCallService {
   }
   async sendMessage(body: string) {
     const callId = this.state.callId;
+    if (!callId) throw new Error('Call messaging is unavailable.');
+    await this.sendMessageForCall(callId, body);
+  }
+  async sendMessageForCall(callId: string, body: string) {
     const identity = await getLocalCallableIdentity();
-    if (!callId || !identity) throw new Error('Call messaging is unavailable.');
+    if (!identity) throw new Error('Call messaging is unavailable.');
     const { error } = await supabase.rpc('send_direct_call_message', {
       p_body: body,
       p_call_id: callId,
