@@ -161,7 +161,7 @@ class SpeakCallService {
     await AudioSession.configureAudio({ ios: { defaultOutput: 'earpiece' } });
     await AudioSession.startAudioSession();
     await AudioSession.selectAudioOutput('default');
-    room.on(RoomEvent.TrackSubscribed, (track) => { if (track.kind === Track.Kind.Audio) this.set({ connectedAt: this.state.connectedAt ?? Date.now(), status: 'connected' }); if (track.kind === Track.Kind.Video) this.set({ remoteVideoTrack: track as VideoTrack }); });
+    room.on(RoomEvent.TrackSubscribed, (track) => { if (track.kind === Track.Kind.Video) this.set({ remoteVideoTrack: track as VideoTrack }); });
     room.on(RoomEvent.TrackUnsubscribed, (track) => { if (track.kind === Track.Kind.Video) this.set({ remoteVideoTrack: null }); });
     room.on(RoomEvent.Reconnecting, () => this.set({ status: 'reconnecting' }));
     room.on(RoomEvent.Reconnected, () => this.set({ status: 'connected' }));
@@ -173,6 +173,7 @@ class SpeakCallService {
     }
     try {
       await this.startMicrophone(room);
+      await this.waitForRemoteAudio(room);
     } catch (audioError) {
       throw new Error(`CALL AUDIO\n${audioError instanceof Error ? audioError.message : 'Unable to start call audio.'}`);
     }
@@ -288,6 +289,25 @@ class SpeakCallService {
     const microphoneTrack = publication?.audioTrack;
     if (!isLocalMicrophoneTrack(microphoneTrack)) throw new Error('Microphone track was not published.');
     await this.microphoneProcessor.attach(microphoneTrack);
+  }
+  private async waitForRemoteAudio(room: Room) {
+    const existingAudio = [...room.remoteParticipants.values()].some((participant) =>
+      [...participant.audioTrackPublications.values()].some((publication) => publication.track?.kind === Track.Kind.Audio),
+    );
+    if (existingAudio) return;
+    await new Promise<void>((resolve, reject) => {
+      const onSubscribed = (track: { kind: Track.Kind }) => {
+        if (track.kind !== Track.Kind.Audio) return;
+        clearTimeout(timeout);
+        room.off(RoomEvent.TrackSubscribed, onSubscribed);
+        resolve();
+      };
+      const timeout = setTimeout(() => {
+        room.off(RoomEvent.TrackSubscribed, onSubscribed);
+        reject(new Error('Remote audio was not received within 15 seconds.'));
+      }, 15_000);
+      room.on(RoomEvent.TrackSubscribed, onSubscribed);
+    });
   }
   private async waitForCleanup() { if (this.cleanupPromise) await this.cleanupPromise; }
   private stopCallChannel() {
