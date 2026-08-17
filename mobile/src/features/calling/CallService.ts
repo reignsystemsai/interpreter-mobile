@@ -23,6 +23,7 @@ class SpeakCallService {
   private incomingChannel: ReturnType<typeof supabase.channel> | null = null;
   private callChannel: ReturnType<typeof supabase.channel> | null = null;
   private callStatusPoll: ReturnType<typeof setInterval> | null = null;
+  private cleanupPromise: Promise<void> | null = null;
   private identityRetry: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<(state: CallState) => void>();
   private microphoneProcessor = new SpeakMicrophoneAudioProcessor();
@@ -32,6 +33,7 @@ class SpeakCallService {
   private set(patch: Partial<CallState>) { this.state = { ...this.state, ...patch }; this.listeners.forEach((listener) => listener(this.state)); }
 
   async createCall(phone: string, remoteLabel: string) {
+    await this.waitForCleanup();
     const identity = await ensureCallableIdentity();
     const phoneE164 = normalizePhone(phone);
     const { data, error } = await supabase.rpc('create_direct_app_call', {
@@ -73,12 +75,13 @@ class SpeakCallService {
     const recentCallCutoff = new Date(Date.now() - 90_000).toISOString();
     const { data: existingCalls } = await supabase.from('app_calls').select('id, caller_device_id, recipient_device_id, status').eq('recipient_device_id', identity.deviceId).eq('status', 'ringing').gte('created_at', recentCallCutoff).order('created_at', { ascending: false }).limit(1);
     const existing = existingCalls?.[0] as AppCall | undefined;
-    if (existing) this.receiveIncoming(existing);
-    this.incomingChannel = supabase.channel(`incoming-calls-${identity.deviceId}`).on('postgres_changes', { event: 'INSERT', filter: `recipient_device_id=eq.${identity.deviceId}`, schema: 'public', table: 'app_calls' }, (payload) => this.receiveIncoming(payload.new as AppCall)).subscribe();
+    if (existing) await this.receiveIncoming(existing);
+    this.incomingChannel = supabase.channel(`incoming-calls-${identity.deviceId}`).on('postgres_changes', { event: 'INSERT', filter: `recipient_device_id=eq.${identity.deviceId}`, schema: 'public', table: 'app_calls' }, (payload) => void this.receiveIncoming(payload.new as AppCall)).subscribe();
     return true;
   }
 
-  private receiveIncoming(call: AppCall) {
+  private async receiveIncoming(call: AppCall) {
+    await this.waitForCleanup();
     if (this.state.status !== 'idle' || call.status !== 'ringing') return;
     InCallManager.start({ media: 'audio' });
     InCallManager.startRingtone('_DEFAULT_');
@@ -276,6 +279,7 @@ class SpeakCallService {
   }
 
   private stopIncomingChannel() { if (!this.incomingChannel) return; void supabase.removeChannel(this.incomingChannel); this.incomingChannel = null; }
+  private async waitForCleanup() { if (this.cleanupPromise) await this.cleanupPromise; }
   private stopCallChannel() {
     if (this.callStatusPoll) clearInterval(this.callStatusPoll);
     this.callStatusPoll = null;
@@ -284,21 +288,28 @@ class SpeakCallService {
     this.callChannel = null;
   }
   private async finish() {
+    if (this.cleanupPromise) return this.cleanupPromise;
     const room = this.room;
     this.room = null;
     this.stopCallChannel();
     InCallManager.stopRingback();
     InCallManager.stopRingtone();
     InCallManager.stop();
-    this.set(INITIAL);
-    await this.microphoneProcessor.dispose();
-    if (room) {
-      room.removeAllListeners();
-      await room.localParticipant.setCameraEnabled(false).catch(() => undefined);
-      await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
-      await room.disconnect().catch(() => undefined);
-    }
-    await AudioSession.stopAudioSession().catch(() => undefined);
+    this.set({ status: 'ended' });
+    let cleanup: Promise<void>;
+    cleanup = (async () => {
+      await this.microphoneProcessor.dispose();
+      if (room) {
+        room.removeAllListeners();
+        await room.localParticipant.setCameraEnabled(false).catch(() => undefined);
+        await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
+        await room.disconnect().catch(() => undefined);
+      }
+      await AudioSession.stopAudioSession().catch(() => undefined);
+      this.set(INITIAL);
+    })().finally(() => { if (this.cleanupPromise === cleanup) this.cleanupPromise = null; });
+    this.cleanupPromise = cleanup;
+    return cleanup;
   }
 }
 
