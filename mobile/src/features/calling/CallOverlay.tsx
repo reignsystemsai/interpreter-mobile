@@ -4,6 +4,7 @@ import { VideoView } from '@livekit/react-native';
 import Svg, { Circle, Line, Path, Polyline, Rect } from 'react-native-svg';
 
 import { CallService, type CallMessage, type CallState } from './CallService';
+import { TranslatorCallService } from './TranslatorCallService';
 
 const LABELS: Record<Exclude<CallState['status'], 'idle'>, string> = {
   ringing: 'Ringing...',
@@ -35,21 +36,23 @@ function CallAction({ answered = false, disabled = false, label, onPress, tone }
   return <View style={styles.actionItem}><Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.actionCircle, tone === 'green' ? styles.actionGreen : styles.actionRed, pressed && styles.pressed]}><PhoneIcon answered={answered} /></Pressable><Text style={styles.actionText}>{label}</Text></View>;
 }
 
-export function CallScreen({ preview = false, state }: { preview?: boolean; state: CallState }) {
+type CallController = Pick<typeof CallService, 'acceptCall' | 'declineCall' | 'endCall' | 'toggleMute' | 'toggleSpeaker'> & Partial<Pick<typeof CallService, 'flipCamera' | 'listMessages' | 'sendMessage' | 'toggleCamera'>>;
+
+export function CallScreen({ allowMessages = true, allowVideo = true, controller = CallService, preview = false, state }: { allowMessages?: boolean; allowVideo?: boolean; controller?: CallController; preview?: boolean; state: CallState }) {
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<CallMessage[]>([]);
   const [messagesOpen, setMessagesOpen] = useState(false);
   const [sending, setSending] = useState(false);
   useEffect(() => {
-    if (!messagesOpen || preview) return;
+    if (!allowMessages || !controller.listMessages || !messagesOpen || preview) return;
     let active = true;
-    const refresh = () => void CallService.listMessages()
+    const refresh = () => void controller.listMessages!()
       .then((nextMessages) => { if (active) setMessages(nextMessages); })
       .catch(() => undefined);
     refresh();
     const timer = setInterval(refresh, 750);
     return () => { active = false; clearInterval(timer); };
-  }, [messagesOpen, preview]);
+  }, [allowMessages, controller, messagesOpen, preview]);
   const noop = () => undefined;
   const action = (callback: () => void) => preview ? noop : callback;
   const incoming = state.role === 'recipient' && state.status === 'ringing';
@@ -69,19 +72,19 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
           {state.localVideoTrack ? <VideoView mirror={state.cameraFacingMode === 'user'} objectFit="cover" style={styles.localVideo} videoTrack={state.localVideoTrack} /> : previewVideo ? <View style={styles.previewLocalVideo}><Text style={styles.previewLocalText}>Local preview</Text></View> : null}
           {incoming ? (
             <View style={styles.incomingRow}>
-              <CallAction disabled={preview} label="Decline" onPress={action(() => void CallService.declineCall().catch((error) => Alert.alert('Unable to decline', error instanceof Error ? error.message : 'Please try again.')))} tone="red" />
-              <CallAction answered disabled={preview} label="Answer" onPress={action(() => void CallService.acceptCall().catch((error) => Alert.alert('Unable to answer', error instanceof Error ? error.message : 'Please try again.')))} tone="green" />
+              <CallAction disabled={preview} label="Decline" onPress={action(() => void controller.declineCall().catch((error) => Alert.alert('Unable to decline', error instanceof Error ? error.message : 'Please try again.')))} tone="red" />
+              <CallAction answered disabled={preview} label="Answer" onPress={action(() => void controller.acceptCall().catch((error) => Alert.alert('Unable to answer', error instanceof Error ? error.message : 'Please try again.')))} tone="green" />
             </View>
           ) : (
             <View style={styles.controlsArea}>
               <View style={styles.grid}>
-                <Control disabled={preview || !roomConnected} icon="microphone" label={state.muted ? 'Unmute' : 'Mute'} onPress={action(() => void CallService.toggleMute().catch((error) => Alert.alert('Mute unavailable', error instanceof Error ? error.message : 'Unable to change mute.')))} selected={state.muted} />
-                <Control disabled={preview || !roomConnected} icon="speaker" label="Speaker" onPress={action(() => void CallService.toggleSpeaker().catch((error) => Alert.alert('Speaker unavailable', error instanceof Error ? error.message : 'Unable to change audio output.')))} selected={state.speakerEnabled} />
-                <Control disabled={preview || !roomConnected} icon="video" label={state.cameraEnabled ? 'Video Off' : 'Video'} onPress={action(() => void CallService.toggleCamera().catch((error) => Alert.alert('Video unavailable', error instanceof Error ? error.message : 'Unable to change video.')))} selected={state.cameraEnabled} />
-                <Control disabled={preview || !roomConnected || !state.cameraEnabled} icon="flip" label="Flip" onPress={action(() => void CallService.flipCamera().catch((error) => Alert.alert('Camera unavailable', error instanceof Error ? error.message : 'Unable to switch camera.')))} />
-                <Control disabled={preview || !state.callId} icon="message" label="Message" onPress={action(() => setMessagesOpen(true))} />
+                <Control disabled={preview || !roomConnected} icon="microphone" label={state.muted ? 'Unmute' : 'Mute'} onPress={action(() => void controller.toggleMute().catch((error) => Alert.alert('Mute unavailable', error instanceof Error ? error.message : 'Unable to change mute.')))} selected={state.muted} />
+                <Control disabled={preview || !roomConnected} icon="speaker" label="Speaker" onPress={action(() => void controller.toggleSpeaker().catch((error) => Alert.alert('Speaker unavailable', error instanceof Error ? error.message : 'Unable to change audio output.')))} selected={state.speakerEnabled} />
+                {allowVideo && controller.toggleCamera ? <Control disabled={preview || !roomConnected} icon="video" label={state.cameraEnabled ? 'Video Off' : 'Video'} onPress={action(() => void controller.toggleCamera!().catch((error) => Alert.alert('Video unavailable', error instanceof Error ? error.message : 'Unable to change video.')))} selected={state.cameraEnabled} /> : null}
+                {allowVideo && controller.flipCamera ? <Control disabled={preview || !roomConnected || !state.cameraEnabled} icon="flip" label="Flip" onPress={action(() => void controller.flipCamera!().catch((error) => Alert.alert('Camera unavailable', error instanceof Error ? error.message : 'Unable to switch camera.')))} /> : null}
+                {allowMessages && controller.listMessages && controller.sendMessage ? <Control disabled={preview || !state.callId} icon="message" label="Message" onPress={action(() => setMessagesOpen(true))} /> : null}
               </View>
-              <CallAction disabled={preview} label="End" onPress={action(() => void CallService.endCall().catch((error) => Alert.alert('Unable to end call', error instanceof Error ? error.message : 'Please try again.')))} tone="red" />
+              <CallAction disabled={preview} label="End" onPress={action(() => void controller.endCall().catch((error) => Alert.alert('Unable to end call', error instanceof Error ? error.message : 'Please try again.')))} tone="red" />
             </View>
           )}
           <Modal animationType="slide" onRequestClose={() => setMessagesOpen(false)} presentationStyle="fullScreen" visible={messagesOpen}>
@@ -100,8 +103,9 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
                   const body = draft.trim();
                   if (!body) return;
                   setSending(true);
-                  void CallService.sendMessage(body)
-                    .then(async () => { setDraft(''); setMessages(await CallService.listMessages()); })
+                  if (!controller.sendMessage || !controller.listMessages) return;
+                  void controller.sendMessage(body)
+                    .then(async () => { setDraft(''); setMessages(await controller.listMessages!()); })
                     .catch((error) => Alert.alert('Message unavailable', error instanceof Error ? error.message : 'Unable to send message.'))
                     .finally(() => setSending(false));
                 }} style={({ pressed }) => [styles.messageSend, (!draft.trim() || sending) && styles.previewDisabled, pressed && styles.pressed]}><Text style={styles.messageSendText}>Send</Text></Pressable>
@@ -115,17 +119,27 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
 }
 
 export function CallOverlay() {
-  const state = useSyncExternalStore(
+  const classicState = useSyncExternalStore(
     (listener) => CallService.subscribe(listener),
     () => CallService.getState(),
     () => CallService.getState(),
   );
-  useEffect(() => CallService.startPolling(), []);
+  const translatorState = useSyncExternalStore(
+    (listener) => TranslatorCallService.subscribe(listener),
+    () => TranslatorCallService.getState(),
+    () => TranslatorCallService.getState(),
+  );
+  useEffect(() => {
+    const stopClassic = CallService.startPolling();
+    const stopTranslator = TranslatorCallService.startPolling();
+    return () => { stopClassic(); stopTranslator(); };
+  }, []);
 
-  if (state.status === 'idle') return null;
+  if (translatorState.status !== 'idle') return <View style={styles.overlay}><CallScreen allowMessages={false} allowVideo={false} controller={TranslatorCallService} state={translatorState} /></View>;
+  if (classicState.status === 'idle') return null;
   return (
     <View style={styles.overlay}>
-      <CallScreen state={state} />
+      <CallScreen state={classicState} />
     </View>
   );
 }
