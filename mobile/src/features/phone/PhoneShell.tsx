@@ -1,11 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 
 import { CallService } from '../calling/CallService';
 import { ContactsPermissionPanel } from '../contacts/ContactsPermissionPanel';
-
-type PhoneTab = 'capsules' | 'recents' | 'connections' | 'keypad' | 'voice';
+import { getRecentCalls, subscribeRecentCalls, type PhoneTab } from './PhoneActivityStore';
 
 const BLUE = '#075BFF';
 const TABS: { key: PhoneTab; label: string }[] = [
@@ -44,14 +43,21 @@ function KeypadScreen() {
   </View>;
 }
 
-export function PhoneShell({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<PhoneTab>('connections');
+function RecentsScreen() {
+  const calls = useSyncExternalStore(subscribeRecentCalls, getRecentCalls, getRecentCalls);
+  if (!calls.length) return <EmptyScreen body="Completed and missed calls will appear here." title="No recent calls" />;
+  return <ScrollView contentContainerStyle={styles.recentList} showsVerticalScrollIndicator={false}>{calls.map((call) => <View key={call.id} style={styles.recentRow}><View style={[styles.recentDirection, call.kind === 'missed' && styles.recentMissed]}><Text style={[styles.recentDirectionText, call.kind === 'missed' && styles.recentMissedText]}>{call.kind === 'incoming' ? '↙' : call.kind === 'outgoing' ? '↗' : '×'}</Text></View><View style={styles.recentCopy}><Text numberOfLines={1} style={[styles.recentName, call.kind === 'missed' && styles.recentMissedText]}>{call.label}</Text><Text style={styles.recentMeta}>{call.kind.charAt(0).toUpperCase() + call.kind.slice(1)} call</Text></View><Text style={styles.recentTime}>{new Date(call.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</Text></View>)}</ScrollView>;
+}
+
+export function PhoneShell({ initialTab = 'connections', onClose }: { initialTab?: PhoneTab; onClose: () => void }) {
+  const [tab, setTab] = useState<PhoneTab>(initialTab);
+  useEffect(() => setTab(initialTab), [initialTab]);
   return <View style={styles.shell}>
     <View style={styles.topBar}><Pressable accessibilityRole="button" onPress={onClose} style={styles.done}><Text style={styles.doneText}>Home</Text></Pressable>{tab !== 'connections' ? <Text style={styles.screenTitle}>{TABS.find((item) => item.key === tab)?.label}</Text> : <View />}</View>
     <View style={styles.content}>
       {tab === 'connections' ? <ContactsPermissionPanel onBack={onClose} showHeader={false} /> : null}
       {tab === 'capsules' ? <EmptyScreen body="Your completed conversation summaries and action items will appear here." title="No Capsules yet" /> : null}
-      {tab === 'recents' ? <EmptyScreen body="Completed and missed Speak calls will appear here as call history becomes available." title="No recent calls" /> : null}
+      {tab === 'recents' ? <RecentsScreen /> : null}
       {tab === 'keypad' ? <KeypadScreen /> : null}
       {tab === 'voice' ? <EmptyScreen body="Saved voice messages will appear here." title="No Voice messages" /> : null}
     </View>
@@ -78,6 +84,16 @@ const styles = StyleSheet.create({
   keyText: { color: '#101828', fontSize: 25, fontWeight: '600' },
   callButton: { alignItems: 'center', backgroundColor: BLUE, borderRadius: 30, marginTop: 22, paddingHorizontal: 42, paddingVertical: 16 },
   callButtonText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
+  recentList: { paddingBottom: 24, paddingTop: 6 },
+  recentRow: { alignItems: 'center', borderBottomColor: '#EEF1F5', borderBottomWidth: 1, flexDirection: 'row', minHeight: 68, paddingHorizontal: 4 },
+  recentDirection: { alignItems: 'center', backgroundColor: '#EAF1FF', borderRadius: 20, height: 40, justifyContent: 'center', width: 40 },
+  recentMissed: { backgroundColor: '#FFF0F0' },
+  recentDirectionText: { color: BLUE, fontSize: 20, fontWeight: '700' },
+  recentCopy: { flex: 1, marginLeft: 12 },
+  recentName: { color: '#101828', fontSize: 16, fontWeight: '700' },
+  recentMissedText: { color: '#D92D20' },
+  recentMeta: { color: '#667085', fontSize: 12, marginTop: 3 },
+  recentTime: { color: '#98A2B3', fontSize: 12 },
   tabBar: { backgroundColor: 'rgba(255,255,255,0.96)', borderTopColor: '#E8EDF5', borderTopWidth: 1, flexDirection: 'row', marginHorizontal: -20, paddingBottom: 8, paddingHorizontal: 8, paddingTop: 9 },
   tab: { alignItems: 'center', flex: 1, minWidth: 0 },
   tabText: { color: '#7A8496', fontSize: 9, marginTop: 4 },

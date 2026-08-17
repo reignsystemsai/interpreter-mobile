@@ -4,6 +4,7 @@ import { Alert, PermissionsAndroid, Platform } from 'react-native';
 import InCallManager from 'react-native-incall-manager';
 
 import { supabase } from '../../services/supabase';
+import { recordRecentCall, requestPhoneOpen } from '../phone/PhoneActivityStore';
 import { ensureCallableIdentity, getLocalCallableIdentity, normalizePhone } from './CallableIdentity';
 import { isLocalMicrophoneTrack, SpeakMicrophoneAudioProcessor } from './SpeakMicrophoneAudioProcessor';
 
@@ -326,6 +327,10 @@ class SpeakCallService {
   private async finish() {
     if (this.cleanupPromise) return this.cleanupPromise;
     const room = this.room;
+    const completedCall = this.state.callId ? {
+      kind: this.state.role === 'caller' ? 'outgoing' as const : this.state.status === 'ringing' ? 'missed' as const : 'incoming' as const,
+      label: this.state.remoteLabel || this.state.remotePhone || 'Call',
+    } : null;
     this.room = null;
     this.stopCallChannel();
     InCallManager.stopRingback();
@@ -343,6 +348,10 @@ class SpeakCallService {
       }
       await AudioSession.stopAudioSession().catch(() => undefined);
       this.set(INITIAL);
+      if (completedCall) {
+        recordRecentCall(completedCall);
+        requestPhoneOpen('recents');
+      }
     })().finally(() => { if (this.cleanupPromise === cleanup) this.cleanupPromise = null; });
     this.cleanupPromise = cleanup;
     return cleanup;

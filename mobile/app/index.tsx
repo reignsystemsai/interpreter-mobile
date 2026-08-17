@@ -28,6 +28,7 @@ import { DestinationSheet } from '../src/features/menu/DestinationSheet';
 import { useLanguagePreferences } from '../src/features/languages/LanguagePreferencesProvider';
 import { UI_CONTROLS } from '../src/config/uiControls';
 import { PhoneShell } from '../src/features/phone/PhoneShell';
+import { subscribePhoneOpen, type PhoneTab } from '../src/features/phone/PhoneActivityStore';
 
 const LANGUAGES = [
   'English', 'Spanish', 'Brazilian Portuguese', 'French', 'German', 'Italian',
@@ -130,12 +131,18 @@ export default function InterpreterScreen() {
   const [genderTwo, setGenderTwo] = useState<Gender>('male');
   const [languageSide, setLanguageSide] = useState<LanguageSide>('one');
   const [overlay, setOverlay] = useState<Overlay>(null);
+  const [phoneInitialTab, setPhoneInitialTab] = useState<PhoneTab>('connections');
 
   const { errorMessage, isActive, start, status, stop } = useRealtimeInterpreter(languageOne, languageTwo);
 
   useEffect(() => {
     recordAppReady();
   }, []);
+
+  useEffect(() => subscribePhoneOpen((tab) => {
+    setPhoneInitialTab(tab);
+    setOverlay('contacts');
+  }), []);
 
   const statusText = useMemo(() => {
     if (['requesting_permission', 'creating_session', 'connecting', 'connected'].includes(status)) return 'Connecting...';
@@ -186,7 +193,10 @@ export default function InterpreterScreen() {
             accessibilityRole="button"
             disabled={conversationRunning}
             hitSlop={12}
-            onPress={() => setOverlay('contacts')}
+            onPress={() => {
+              setPhoneInitialTab('connections');
+              setOverlay('contacts');
+            }}
             style={({ pressed }) => [
               styles.phoneButton,
               conversationRunning && styles.disabled,
@@ -285,6 +295,7 @@ export default function InterpreterScreen() {
       />
 
       <ContactsSheet
+        initialTab={phoneInitialTab}
         onClose={() => setOverlay(null)}
         visible={overlay === 'contacts'}
       />
@@ -434,9 +445,11 @@ function LanguageButton({
 }
 
 function ContactsSheet({
+  initialTab,
   onClose,
   visible,
 }: {
+  initialTab: PhoneTab;
   onClose: () => void;
   visible: boolean;
 }) {
@@ -470,7 +483,7 @@ function ContactsSheet({
             <Text style={styles.contactsCloseText}>×</Text>
           </Pressable>
 
-          <PhoneShell onClose={onClose} />
+          <PhoneShell initialTab={initialTab} onClose={onClose} />
         </View>
       </BlurView>
     </Modal>
