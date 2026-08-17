@@ -21,6 +21,7 @@
       "buildNumber": "87",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "UIUserInterfaceStyle": "Light",
         "NSMicrophoneUsageDescription": "Interpreter.ai uses the microphone for translation and voice or video calls.",
         "NSCameraUsageDescription": "Interpreter.ai uses the camera when you start or accept a video call.",
         "UIBackgroundModes": [
@@ -56,7 +57,7 @@
       [
         "expo-contacts",
         {
-          "contactsPermission": "Allow Interpreter to access your contacts only when you choose My Contacts."
+          "contactsPermission": "Allow Speak to access contacts only when you open Connections."
         }
       ],
       [
