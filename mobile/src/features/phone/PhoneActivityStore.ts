@@ -1,9 +1,11 @@
 export type PhoneTab = 'capsules' | 'recents' | 'connections' | 'keypad' | 'voice';
 
 export type RecentCall = {
+  callId: string;
   id: string;
   kind: 'incoming' | 'missed' | 'outgoing';
   label: string;
+  phone: string;
   timestamp: number;
 };
 

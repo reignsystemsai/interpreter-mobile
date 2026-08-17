@@ -328,8 +328,10 @@ class SpeakCallService {
     if (this.cleanupPromise) return this.cleanupPromise;
     const room = this.room;
     const completedCall = this.state.callId ? {
+      callId: this.state.callId,
       kind: this.state.role === 'caller' ? 'outgoing' as const : this.state.status === 'ringing' ? 'missed' as const : 'incoming' as const,
       label: this.state.remoteLabel || this.state.remotePhone || 'Call',
+      phone: this.state.remotePhone,
     } : null;
     this.room = null;
     this.stopCallChannel();
