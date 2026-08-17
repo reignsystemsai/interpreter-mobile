@@ -172,10 +172,7 @@ class SpeakCallService {
       throw new Error(`CALL ROOM\n${roomError instanceof Error ? roomError.message : 'Unable to join the call room.'}`);
     }
     try {
-      await room.localParticipant.setMicrophoneEnabled(true, AUDIO);
-      const microphoneTrack = [...room.localParticipant.audioTrackPublications.values()]
-        .find((publication) => publication.source === Track.Source.Microphone)?.track;
-      if (isLocalMicrophoneTrack(microphoneTrack)) await this.microphoneProcessor.attach(microphoneTrack);
+      await this.startMicrophone(room);
     } catch (audioError) {
       throw new Error(`CALL AUDIO\n${audioError instanceof Error ? audioError.message : 'Unable to start call audio.'}`);
     }
@@ -184,7 +181,14 @@ class SpeakCallService {
     this.set({ connectedAt: Date.now(), status: 'connected' });
   }
 
-  async toggleMute() { if (!this.room || this.state.status !== 'connected') return; const muted = !this.state.muted; await this.room.localParticipant.setMicrophoneEnabled(!muted, AUDIO); this.set({ muted }); }
+  async toggleMute() {
+    const room = this.room;
+    if (!room || this.state.status !== 'connected') return;
+    const muted = !this.state.muted;
+    if (muted) await room.localParticipant.setMicrophoneEnabled(false);
+    else await this.startMicrophone(room);
+    this.set({ muted });
+  }
   async toggleCamera() {
     if (!this.room) throw new Error('Call video is not connected.');
     const enabled = !this.state.cameraEnabled;
@@ -279,6 +283,12 @@ class SpeakCallService {
   }
 
   private stopIncomingChannel() { if (!this.incomingChannel) return; void supabase.removeChannel(this.incomingChannel); this.incomingChannel = null; }
+  private async startMicrophone(room: Room) {
+    const publication = await room.localParticipant.setMicrophoneEnabled(true, AUDIO);
+    const microphoneTrack = publication?.audioTrack;
+    if (!isLocalMicrophoneTrack(microphoneTrack)) throw new Error('Microphone track was not published.');
+    await this.microphoneProcessor.attach(microphoneTrack);
+  }
   private async waitForCleanup() { if (this.cleanupPromise) await this.cleanupPromise; }
   private stopCallChannel() {
     if (this.callStatusPoll) clearInterval(this.callStatusPoll);
