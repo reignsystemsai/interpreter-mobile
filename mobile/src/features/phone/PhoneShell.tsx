@@ -49,7 +49,7 @@ export function PhoneShell({ onClose }: { onClose: () => void }) {
   return <View style={styles.shell}>
     <View style={styles.topBar}><Pressable accessibilityRole="button" onPress={onClose} style={styles.done}><Text style={styles.doneText}>Home</Text></Pressable>{tab !== 'connections' ? <Text style={styles.screenTitle}>{TABS.find((item) => item.key === tab)?.label}</Text> : <View />}</View>
     <View style={styles.content}>
-      {tab === 'connections' ? <ContactsPermissionPanel onBack={onClose} /> : null}
+      {tab === 'connections' ? <ContactsPermissionPanel onBack={onClose} showHeader={false} /> : null}
       {tab === 'capsules' ? <EmptyScreen body="Your completed conversation summaries and action items will appear here." title="No Capsules yet" /> : null}
       {tab === 'recents' ? <EmptyScreen body="Completed and missed Speak calls will appear here as call history becomes available." title="No recent calls" /> : null}
       {tab === 'keypad' ? <KeypadScreen /> : null}

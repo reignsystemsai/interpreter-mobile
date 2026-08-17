@@ -16,7 +16,7 @@ import {
 const APP_DOWNLOAD_URL = 'https://interpreter.ai/download';
 const BLUE = '#075BFF';
 
-export function ContactsPermissionPanel({ autoRequest = false, onBack }: { autoRequest?: boolean; onBack: () => void }) {
+export function ContactsPermissionPanel({ autoRequest = false, onBack, showHeader = true }: { autoRequest?: boolean; onBack: () => void; showHeader?: boolean }) {
   const { contacts, error, loading, permission, refresh, requestAndImport } = useContacts();
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -42,7 +42,7 @@ export function ContactsPermissionPanel({ autoRequest = false, onBack }: { autoR
 
   if (permission !== 'granted' && !contacts.length) return (
     <View>
-      <Header onBack={onBack} />
+      {showHeader ? <Header onBack={onBack} /> : null}
       <Text style={styles.title}>Connections</Text>
       <Text style={styles.body}>Allow access to display contacts stored on this device.</Text>
       <View style={styles.statusCard}><Text style={styles.statusLabel}>Contacts permission</Text><Text style={styles.statusValue}>{permissionLabel(permission)}</Text></View>
@@ -56,7 +56,7 @@ export function ContactsPermissionPanel({ autoRequest = false, onBack }: { autoR
 
   return (
     <View style={styles.listScreen}>
-      <Header onBack={onBack} />
+      {showHeader ? <Header onBack={onBack} /> : null}
       <View style={styles.titleRow}><Text style={styles.title}>Connections</Text><Pressable accessibilityLabel="Reload device contacts" onPress={() => void refresh()} style={styles.reloadButton}><Text style={styles.reloadText}>Reload</Text></Pressable></View>
       <TextInput autoCapitalize="none" onChangeText={setQuery} placeholder="Search contacts" placeholderTextColor="#98A2B3" style={styles.search} value={query} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
