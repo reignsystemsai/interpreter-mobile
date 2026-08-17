@@ -190,6 +190,12 @@ class SpeakCallService {
     else await this.startMicrophone(room);
     this.set({ muted });
   }
+  async toggleSpeaker() {
+    if (this.state.status !== 'connected') return;
+    const speakerEnabled = !this.state.speakerEnabled;
+    await AudioSession.selectAudioOutput(speakerEnabled ? 'force_speaker' : 'default');
+    this.set({ speakerEnabled });
+  }
   async toggleCamera() {
     if (!this.room) throw new Error('Call video is not connected.');
     const enabled = !this.state.cameraEnabled;

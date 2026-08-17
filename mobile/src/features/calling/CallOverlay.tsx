@@ -53,7 +53,7 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
   const noop = () => undefined;
   const action = (callback: () => void) => preview ? noop : callback;
   const incoming = state.role === 'recipient' && state.status === 'ringing';
-  const remote = state.remoteLabel || 'Unknown caller';
+  const remote = state.remoteLabel || '';
   const roomConnected = state.status === 'connected';
   const previewVideo = preview && state.cameraEnabled;
   const statusLabel = state.status === 'idle' ? '' : LABELS[state.status];
@@ -64,7 +64,7 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
         {state.remoteVideoTrack ? <VideoView objectFit="cover" style={styles.remoteVideo} videoTrack={state.remoteVideoTrack} /> : previewVideo ? <View style={styles.previewRemoteVideo}><Text style={styles.previewVideoText}>Remote video area</Text></View> : <View style={styles.audioBackdrop} />}
         <View style={styles.content}>
           <Text style={styles.label}>{incoming ? 'Incoming call' : statusLabel}</Text>
-          <Text numberOfLines={1} style={styles.remote}>{remote}</Text>
+          {remote ? <Text numberOfLines={1} style={styles.remote}>{remote}</Text> : <View style={styles.remotePlaceholder} />}
           <Text style={styles.status}>{statusLabel}</Text>
           {state.localVideoTrack ? <VideoView mirror={state.cameraFacingMode === 'user'} objectFit="cover" style={styles.localVideo} videoTrack={state.localVideoTrack} /> : previewVideo ? <View style={styles.previewLocalVideo}><Text style={styles.previewLocalText}>Local preview</Text></View> : null}
           {incoming ? (
@@ -76,6 +76,7 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
             <View style={styles.controlsArea}>
               <View style={styles.grid}>
                 <Control disabled={preview || !roomConnected} icon="microphone" label={state.muted ? 'Unmute' : 'Mute'} onPress={action(() => void CallService.toggleMute().catch((error) => Alert.alert('Mute unavailable', error instanceof Error ? error.message : 'Unable to change mute.')))} selected={state.muted} />
+                <Control disabled={preview || !roomConnected} icon="speaker" label="Speaker" onPress={action(() => void CallService.toggleSpeaker().catch((error) => Alert.alert('Speaker unavailable', error instanceof Error ? error.message : 'Unable to change audio output.')))} selected={state.speakerEnabled} />
                 <Control disabled={preview || !roomConnected} icon="video" label={state.cameraEnabled ? 'Video Off' : 'Video'} onPress={action(() => void CallService.toggleCamera().catch((error) => Alert.alert('Video unavailable', error instanceof Error ? error.message : 'Unable to change video.')))} selected={state.cameraEnabled} />
                 <Control disabled={preview || !roomConnected || !state.cameraEnabled} icon="flip" label="Flip" onPress={action(() => void CallService.flipCamera().catch((error) => Alert.alert('Camera unavailable', error instanceof Error ? error.message : 'Unable to switch camera.')))} />
                 <Control disabled={preview || !state.callId} icon="message" label="Message" onPress={action(() => setMessagesOpen(true))} />
@@ -90,10 +91,10 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
                 <Pressable accessibilityRole="button" onPress={() => setMessagesOpen(false)} style={styles.messageClose}><Text style={styles.messageCloseText}>Done</Text></Pressable>
               </View>
               <ScrollView contentContainerStyle={styles.messageList} style={styles.messageScroll}>
-                {messages.length ? messages.map((message) => <View key={message.id} style={[styles.messageBubble, message.mine ? styles.messageMine : styles.messageTheirs]}><Text style={styles.messageBody}>{message.body}</Text></View>) : <Text style={styles.messageEmpty}>No messages yet.</Text>}
+                {messages.length ? messages.map((message) => <View key={message.id} style={[styles.messageBubble, message.mine ? styles.messageMine : styles.messageTheirs]}><Text style={[styles.messageBody, message.mine && styles.messageMineBody]}>{message.body}</Text></View>) : <Text style={styles.messageEmpty}>No messages yet.</Text>}
               </ScrollView>
               <View style={styles.messageComposer}>
-                <TextInput accessibilityLabel="Message" editable={!sending} maxLength={2000} onChangeText={setDraft} placeholder="Message" placeholderTextColor="rgba(255,255,255,0.55)" style={styles.messageInput} value={draft} />
+                <TextInput accessibilityLabel="Message" editable={!sending} maxLength={2000} onChangeText={setDraft} placeholder="Message" placeholderTextColor="#98A2B3" style={styles.messageInput} value={draft} />
                 <Pressable accessibilityRole="button" disabled={sending || !draft.trim()} onPress={() => {
                   const body = draft.trim();
                   if (!body) return;
@@ -130,21 +131,22 @@ export function CallOverlay() {
 
 const styles = StyleSheet.create({
   overlay: { ...StyleSheet.absoluteFillObject, elevation: 1000, zIndex: 1000 },
-  messagePanel: { backgroundColor: 'rgba(18,32,56,0.94)', borderColor: 'rgba(255,255,255,0.30)', borderRadius: 28, borderWidth: 1, bottom: 24, left: 18, overflow: 'hidden', padding: 16, position: 'absolute', right: 18, top: 110 },
+  messagePanel: { backgroundColor: 'rgba(255,255,255,0.98)', borderColor: '#DDE5F1', borderRadius: 28, borderWidth: 1, bottom: 24, left: 18, overflow: 'hidden', padding: 16, position: 'absolute', right: 18, shadowColor: '#0B2559', shadowOpacity: 0.14, shadowRadius: 24, top: 110 },
   messageHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  messageTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700' },
+  messageTitle: { color: '#101828', fontSize: 20, fontWeight: '700' },
   messageClose: { paddingHorizontal: 8, paddingVertical: 6 },
   messageCloseText: { color: '#68A3FF', fontSize: 16, fontWeight: '700' },
   messageScroll: { flex: 1 },
   messageList: { gap: 8, paddingVertical: 8 },
   messageBubble: { borderRadius: 18, maxWidth: '82%', paddingHorizontal: 14, paddingVertical: 10 },
   messageMine: { alignSelf: 'flex-end', backgroundColor: '#075BFF' },
-  messageTheirs: { alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.18)' },
-  messageBody: { color: '#FFFFFF', fontSize: 16, lineHeight: 21 },
-  messageEmpty: { color: 'rgba(255,255,255,0.60)', marginTop: 24, textAlign: 'center' },
-  messageComposer: { alignItems: 'center', borderColor: 'rgba(255,255,255,0.22)', borderRadius: 22, borderWidth: 1, flexDirection: 'row', gap: 8, padding: 6 },
-  messageInput: { color: '#FFFFFF', flex: 1, fontSize: 16, minHeight: 38, paddingHorizontal: 10 },
+  messageTheirs: { alignSelf: 'flex-start', backgroundColor: '#EEF2F7' },
+  messageBody: { color: '#101828', fontSize: 16, lineHeight: 21 },
+  messageMineBody: { color: '#FFFFFF' },
+  messageEmpty: { color: '#667085', marginTop: 24, textAlign: 'center' },
+  messageComposer: { alignItems: 'center', borderColor: '#DDE5F1', borderRadius: 22, borderWidth: 1, flexDirection: 'row', gap: 8, padding: 6 },
+  messageInput: { color: '#101828', flex: 1, fontSize: 16, minHeight: 38, paddingHorizontal: 10 },
   messageSend: { backgroundColor: '#075BFF', borderRadius: 17, paddingHorizontal: 15, paddingVertical: 9 },
   messageSendText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
-  backdrop: { backgroundColor: '#0B1220', flex: 1 }, screen: { flex: 1 }, audioBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#14213D' }, remoteVideo: { ...StyleSheet.absoluteFillObject }, previewRemoteVideo: { ...StyleSheet.absoluteFillObject, alignItems: 'center', backgroundColor: '#203A61', justifyContent: 'center' }, previewVideoText: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' }, previewLocalVideo: { alignItems: 'center', backgroundColor: '#486A96', borderColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, height: 150, justifyContent: 'center', position: 'absolute', right: 20, top: 82, width: 106 }, previewLocalText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700', textAlign: 'center' }, content: { alignItems: 'center', flex: 1, justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 36 }, label: { color: '#B8C4D9', fontSize: 14, fontWeight: '700', marginTop: 18 }, remote: { color: '#FFFFFF', fontSize: 30, fontWeight: '700', marginTop: 12, textAlign: 'center' }, status: { color: '#D5DCE8', fontSize: 16, marginTop: 8 }, localVideo: { borderColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, height: 150, position: 'absolute', right: 20, top: 82, width: 106 }, incomingRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-around', marginBottom: 34, width: '100%' }, controlsArea: { alignItems: 'center', marginBottom: 12, width: '100%' }, grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginBottom: 22, rowGap: 18, width: '100%' }, controlItem: { alignItems: 'center', width: '33.333%' }, control: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.17)', borderColor: 'rgba(255,255,255,0.28)', borderRadius: 35, borderWidth: 1, height: 70, justifyContent: 'center', width: 70 }, controlSelected: { backgroundColor: '#075BFF', borderColor: 'rgba(255,255,255,0.54)' }, previewDisabled: { opacity: 0.38 }, controlText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600', marginTop: 8, textAlign: 'center' }, actionItem: { alignItems: 'center', minWidth: 96 }, actionCircle: { alignItems: 'center', borderColor: 'rgba(255,255,255,0.30)', borderRadius: 39, borderWidth: 1, height: 78, justifyContent: 'center', shadowColor: '#000000', shadowOffset: { height: 7, width: 0 }, shadowOpacity: 0.22, shadowRadius: 12, width: 78 }, actionGreen: { backgroundColor: '#30D158' }, actionRed: { backgroundColor: '#FF453A' }, actionText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginTop: 9 }, pressed: { opacity: 0.72, transform: [{ scale: 0.96 }] },
+  backdrop: { backgroundColor: '#FFFFFF', flex: 1 }, screen: { flex: 1 }, audioBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#FFFFFF' }, remoteVideo: { ...StyleSheet.absoluteFillObject }, previewRemoteVideo: { ...StyleSheet.absoluteFillObject, alignItems: 'center', backgroundColor: '#EAF1FF', justifyContent: 'center' }, previewVideoText: { color: '#101828', fontSize: 18, fontWeight: '700' }, previewLocalVideo: { alignItems: 'center', backgroundColor: '#DCE8FF', borderColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, height: 150, justifyContent: 'center', position: 'absolute', right: 20, top: 82, width: 106 }, previewLocalText: { color: '#101828', fontSize: 12, fontWeight: '700', textAlign: 'center' }, content: { alignItems: 'center', flex: 1, justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 36 }, label: { color: '#667085', fontSize: 14, fontWeight: '700', marginTop: 18 }, remote: { color: '#101828', fontSize: 30, fontWeight: '700', marginTop: 12, textAlign: 'center' }, remotePlaceholder: { minHeight: 48 }, status: { color: '#667085', fontSize: 16, marginTop: 8 }, localVideo: { borderColor: '#FFFFFF', borderRadius: 10, borderWidth: 1, height: 150, position: 'absolute', right: 20, top: 82, width: 106 }, incomingRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-around', marginBottom: 34, width: '100%' }, controlsArea: { alignItems: 'center', marginBottom: 12, width: '100%' }, grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginBottom: 22, rowGap: 18, width: '100%' }, controlItem: { alignItems: 'center', width: '33.333%' }, control: { alignItems: 'center', backgroundColor: '#075BFF', borderColor: '#C9DAFF', borderRadius: 35, borderWidth: 1, height: 70, justifyContent: 'center', shadowColor: '#075BFF', shadowOpacity: 0.12, shadowRadius: 10, width: 70 }, controlSelected: { backgroundColor: '#053EC4', borderColor: '#075BFF' }, previewDisabled: { opacity: 0.38 }, controlText: { color: '#344054', fontSize: 12, fontWeight: '600', marginTop: 8, textAlign: 'center' }, actionItem: { alignItems: 'center', minWidth: 96 }, actionCircle: { alignItems: 'center', borderColor: '#E5EAF2', borderRadius: 39, borderWidth: 1, height: 78, justifyContent: 'center', shadowColor: '#0B2559', shadowOffset: { height: 7, width: 0 }, shadowOpacity: 0.14, shadowRadius: 12, width: 78 }, actionGreen: { backgroundColor: '#30D158' }, actionRed: { backgroundColor: '#FF453A' }, actionText: { color: '#344054', fontSize: 14, fontWeight: '600', marginTop: 9 }, pressed: { opacity: 0.72, transform: [{ scale: 0.96 }] },
 });
