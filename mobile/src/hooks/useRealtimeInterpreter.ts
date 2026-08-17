@@ -241,6 +241,19 @@ export function useRealtimeInterpreter(languageOne: string, languageTwo: string)
   const connectRef = useRef<((reconnecting: boolean) => Promise<void>) | null>(null);
   const [diagnostic, setDiagnostic] = useState<ConnectionDiagnosticCode | null>(null);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    void fetch(`${getApiBaseUrl()}/health`, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    }).catch(() => undefined).finally(() => clearTimeout(timeout));
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, []);
+
   const routeAudioToSpeaker = useCallback(() => {
     InCallManager.start({ auto: true, media: 'audio' });
     InCallManager.setForceSpeakerphoneOn(true);
