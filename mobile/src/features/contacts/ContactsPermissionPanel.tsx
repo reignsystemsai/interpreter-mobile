@@ -43,7 +43,7 @@ export function ContactsPermissionPanel({ autoRequest = false, onBack }: { autoR
   if (permission !== 'granted' && !contacts.length) return (
     <View>
       <Header onBack={onBack} />
-      <Text style={styles.title}>My Contacts</Text>
+      <Text style={styles.title}>Connections</Text>
       <Text style={styles.body}>Allow access to display contacts stored on this device.</Text>
       <View style={styles.statusCard}><Text style={styles.statusLabel}>Contacts permission</Text><Text style={styles.statusValue}>{permissionLabel(permission)}</Text></View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -57,7 +57,7 @@ export function ContactsPermissionPanel({ autoRequest = false, onBack }: { autoR
   return (
     <View style={styles.listScreen}>
       <Header onBack={onBack} />
-      <View style={styles.titleRow}><Text style={styles.title}>My Contacts</Text><Pressable accessibilityLabel="Reload device contacts" onPress={() => void refresh()} style={styles.reloadButton}><Text style={styles.reloadText}>Reload</Text></Pressable></View>
+      <View style={styles.titleRow}><Text style={styles.title}>Connections</Text><Pressable accessibilityLabel="Reload device contacts" onPress={() => void refresh()} style={styles.reloadButton}><Text style={styles.reloadText}>Reload</Text></Pressable></View>
       <TextInput autoCapitalize="none" onChangeText={setQuery} placeholder="Search contacts" placeholderTextColor="#98A2B3" style={styles.search} value={query} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <ScrollView contentContainerStyle={styles.contactList} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -192,7 +192,7 @@ function CallIcon({ name }: { name: 'phone' | 'video' }) {
   return <Svg height={25} viewBox="0 0 24 24" width={25}><Rect fill="none" height={13} rx={3} stroke={BLUE} strokeWidth={1.8} width={13} x={2.5} y={5.5} /><Path d="m15.5 9 4-2.2c.8-.4 1.7.1 1.7 1v8.4c0 .9-.9 1.4-1.7 1l-4-2.2V9Z" fill="none" stroke={BLUE} strokeLinejoin="round" strokeWidth={1.8} /></Svg>;
 }
 
-function Header({ onBack }: { onBack: () => void }) { return <Pressable accessibilityRole="button" onPress={onBack} style={styles.back}><Text style={styles.backText}>‹ Calling</Text></Pressable>; }
+function Header({ onBack }: { onBack: () => void }) { return <Pressable accessibilityRole="button" onPress={onBack} style={styles.back}><Text style={styles.backText}>‹ Home</Text></Pressable>; }
 function Detail({ label, value }: { label: string; value: string }) { return <View style={styles.detailRow}><Text style={styles.fieldLabel}>{label}</Text><Text style={styles.detailValue}>{value}</Text></View>; }
 function PrimaryButton({ disabled = false, label, onPress }: { disabled?: boolean; label: string; onPress: () => void }) { return <Pressable disabled={disabled} onPress={onPress} style={[styles.primary, disabled && styles.disabled]}><Text style={styles.primaryText}>{label}</Text></Pressable>; }
 function SecondaryButton({ label, onPress }: { label: string; onPress: () => void }) { return <Pressable onPress={onPress} style={styles.secondary}><Text style={styles.secondaryText}>{label}</Text></Pressable>; }

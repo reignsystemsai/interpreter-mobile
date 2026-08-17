@@ -23,11 +23,11 @@ import { AudioWaveform } from '../src/components/AudioWaveform';
 import { useDemoAudioLevel } from '../src/hooks/useDemoAudioLevel';
 import { useRealtimeInterpreter } from '../src/hooks/useRealtimeInterpreter';
 import { recordAppReady } from '../src/services/performance';
-import { ContactsPermissionPanel } from '../src/features/contacts/ContactsPermissionPanel';
 import { AppMenu, type MenuDestination } from '../src/features/menu/AppMenu';
 import { DestinationSheet } from '../src/features/menu/DestinationSheet';
 import { useLanguagePreferences } from '../src/features/languages/LanguagePreferencesProvider';
 import { UI_CONTROLS } from '../src/config/uiControls';
+import { PhoneShell } from '../src/features/phone/PhoneShell';
 
 const LANGUAGES = [
   'English', 'Spanish', 'Brazilian Portuguese', 'French', 'German', 'Italian',
@@ -470,7 +470,7 @@ function ContactsSheet({
             <Text style={styles.contactsCloseText}>×</Text>
           </Pressable>
 
-          <ContactsPermissionPanel onBack={onClose} />
+          <PhoneShell onClose={onClose} />
         </View>
       </BlurView>
     </Modal>
