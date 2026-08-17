@@ -13,12 +13,6 @@ const LABELS: Record<Exclude<CallState['status'], 'idle'>, string> = {
   ended: 'Call ended',
 };
 
-function durationLabel(connectedAt: number | null, now: number) {
-  if (!connectedAt) return '';
-  const seconds = Math.floor((now - connectedAt) / 1000);
-  return `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
-}
-
 type ControlName = 'flip' | 'message' | 'microphone' | 'speaker' | 'video';
 
 function ControlIcon({ name }: { name: ControlName }) {
@@ -42,16 +36,10 @@ function CallAction({ answered = false, disabled = false, label, onPress, tone }
 }
 
 export function CallScreen({ preview = false, state }: { preview?: boolean; state: CallState }) {
-  const [now, setNow] = useState(Date.now());
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<CallMessage[]>([]);
   const [messagesOpen, setMessagesOpen] = useState(false);
   const [sending, setSending] = useState(false);
-  useEffect(() => {
-    if (!state.connectedAt) return;
-    const timer = setInterval(() => setNow(Date.now()), 1_000);
-    return () => clearInterval(timer);
-  }, [state.connectedAt]);
   useEffect(() => {
     if (!messagesOpen || preview) return;
     let active = true;
@@ -77,7 +65,7 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
         <View style={styles.content}>
           <Text style={styles.label}>{incoming ? 'Incoming call' : statusLabel}</Text>
           <Text numberOfLines={1} style={styles.remote}>{remote}</Text>
-          <Text style={styles.status}>{state.connectedAt ? durationLabel(state.connectedAt, now) : statusLabel}</Text>
+          <Text style={styles.status}>{statusLabel}</Text>
           {state.localVideoTrack ? <VideoView mirror={state.cameraFacingMode === 'user'} objectFit="cover" style={styles.localVideo} videoTrack={state.localVideoTrack} /> : previewVideo ? <View style={styles.previewLocalVideo}><Text style={styles.previewLocalText}>Local preview</Text></View> : null}
           {incoming ? (
             <View style={styles.incomingRow}>
