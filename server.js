@@ -7,6 +7,7 @@ const notificationRoutes = require("./src/server/routes/notifications");
 const subscriptionRoutes = require("./src/server/routes/subscriptions");
 const { isSupabaseConfigured } = require("./src/server/supabase");
 const { isLiveKitConfigured } = require("./src/server/livekit");
+const { router: translatorCallsRouter } = require("./src/server/translator/TranslatorCalls");
 require("dotenv").config();
 
 const app = express();
@@ -28,6 +29,7 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use("/api/v1/account", accountRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/subscriptions", subscriptionRoutes);
+app.use("/api/translator-calls", translatorCallsRouter);
 
 app.get("/health", (req, res) => {
   res.status(200).json({
