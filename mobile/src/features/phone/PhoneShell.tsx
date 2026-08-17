@@ -53,7 +53,7 @@ export function PhoneShell({ initialTab = 'connections', onClose }: { initialTab
   const [tab, setTab] = useState<PhoneTab>(initialTab);
   useEffect(() => setTab(initialTab), [initialTab]);
   return <View style={styles.shell}>
-    <View style={styles.topBar}><Pressable accessibilityRole="button" onPress={onClose} style={styles.done}><Text style={styles.doneText}>Home</Text></Pressable>{tab !== 'connections' ? <Text style={styles.screenTitle}>{TABS.find((item) => item.key === tab)?.label}</Text> : <View />}</View>
+    <View style={styles.topBar}><Pressable accessibilityRole="button" onPress={tab === 'voice' ? () => setTab('connections') : onClose} style={styles.done}><Text style={styles.doneText}>{tab === 'voice' ? 'Connections' : 'Home'}</Text></Pressable>{tab !== 'connections' ? <Text style={styles.screenTitle}>{TABS.find((item) => item.key === tab)?.label}</Text> : <View />}</View>
     <View style={styles.content}>
       {tab === 'connections' ? <ContactsPermissionPanel onBack={onClose} showHeader={false} /> : null}
       {tab === 'capsules' ? <EmptyScreen body="Your completed conversation summaries and action items will appear here." title="No Capsules yet" /> : null}
