@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { VideoView } from '@livekit/react-native';
 import Svg, { Circle, Line, Path, Polyline, Rect } from 'react-native-svg';
 
@@ -84,11 +84,12 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
               <CallAction disabled={preview} label="End" onPress={action(() => void CallService.endCall().catch((error) => Alert.alert('Unable to end call', error instanceof Error ? error.message : 'Please try again.')))} tone="red" />
             </View>
           )}
-          {messagesOpen ? (
-            <View style={styles.messagePanel}>
+          <Modal animationType="slide" onRequestClose={() => setMessagesOpen(false)} presentationStyle="fullScreen" visible={messagesOpen}>
+            <SafeAreaView style={styles.messagePanel}>
               <View style={styles.messageHeader}>
+                <Pressable accessibilityLabel="Back to call" accessibilityRole="button" onPress={() => setMessagesOpen(false)} style={styles.messageClose}><Text style={styles.messageCloseText}>‹ Back</Text></Pressable>
                 <Text style={styles.messageTitle}>Messages</Text>
-                <Pressable accessibilityRole="button" onPress={() => setMessagesOpen(false)} style={styles.messageClose}><Text style={styles.messageCloseText}>Done</Text></Pressable>
+                <View style={styles.messageHeaderSpacer} />
               </View>
               <ScrollView contentContainerStyle={styles.messageList} style={styles.messageScroll}>
                 {messages.length ? messages.map((message) => <View key={message.id} style={[styles.messageBubble, message.mine ? styles.messageMine : styles.messageTheirs]}><Text style={[styles.messageBody, message.mine && styles.messageMineBody]}>{message.body}</Text></View>) : <Text style={styles.messageEmpty}>No messages yet.</Text>}
@@ -105,8 +106,8 @@ export function CallScreen({ preview = false, state }: { preview?: boolean; stat
                     .finally(() => setSending(false));
                 }} style={({ pressed }) => [styles.messageSend, (!draft.trim() || sending) && styles.previewDisabled, pressed && styles.pressed]}><Text style={styles.messageSendText}>Send</Text></Pressable>
               </View>
-            </View>
-          ) : null}
+            </SafeAreaView>
+          </Modal>
         </View>
       </View>
     </SafeAreaView>
@@ -131,11 +132,12 @@ export function CallOverlay() {
 
 const styles = StyleSheet.create({
   overlay: { ...StyleSheet.absoluteFillObject, elevation: 1000, zIndex: 1000 },
-  messagePanel: { backgroundColor: 'rgba(255,255,255,0.98)', borderColor: '#DDE5F1', borderRadius: 28, borderWidth: 1, bottom: 24, left: 18, overflow: 'hidden', padding: 16, position: 'absolute', right: 18, shadowColor: '#0B2559', shadowOpacity: 0.14, shadowRadius: 24, top: 110 },
-  messageHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  messagePanel: { backgroundColor: '#FFFFFF', flex: 1, paddingHorizontal: 16, paddingTop: 8 },
+  messageHeader: { alignItems: 'center', borderBottomColor: '#E8EDF5', borderBottomWidth: 1, flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, minHeight: 48 },
   messageTitle: { color: '#101828', fontSize: 20, fontWeight: '700' },
   messageClose: { paddingHorizontal: 8, paddingVertical: 6 },
   messageCloseText: { color: '#68A3FF', fontSize: 16, fontWeight: '700' },
+  messageHeaderSpacer: { width: 64 },
   messageScroll: { flex: 1 },
   messageList: { gap: 8, paddingVertical: 8 },
   messageBubble: { borderRadius: 18, maxWidth: '82%', paddingHorizontal: 14, paddingVertical: 10 },
