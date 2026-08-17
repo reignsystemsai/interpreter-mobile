@@ -763,7 +763,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contactsSheet: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: '#FFFFFF',
     flex: 1,
     paddingBottom: 28,
     paddingHorizontal: 22,

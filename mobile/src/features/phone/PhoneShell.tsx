@@ -60,7 +60,7 @@ export function PhoneShell({ onClose }: { onClose: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  shell: { flex: 1 },
+  shell: { backgroundColor: '#FFFFFF', flex: 1 },
   topBar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 36 },
   done: { paddingHorizontal: 4, paddingVertical: 8 },
   doneText: { color: BLUE, fontSize: 16, fontWeight: '700' },
