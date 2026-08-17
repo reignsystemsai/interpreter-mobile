@@ -52,7 +52,7 @@ function languageLabel(language: string) {
 }
 
 function MenuIcon() {
-  return <Svg height={30} viewBox="0 0 32 32" width={30}>{[7, 16, 25].map((y) => <Line key={y} stroke={BLUE} strokeLinecap="round" strokeWidth={3} x1={5} x2={27} y1={y} y2={y} />)}</Svg>;
+  return <Svg height={30} viewBox="0 0 32 32" width={30}><Line stroke={BLUE} strokeLinecap="round" strokeWidth={2.6} x1={16} x2={16} y1={5} y2={27} /><Line stroke={BLUE} strokeLinecap="round" strokeWidth={2.6} x1={5} x2={27} y1={16} y2={16} /></Svg>;
 }
 
 function PhoneIcon() {
@@ -197,7 +197,7 @@ export default function InterpreterScreen() {
           </Pressable>
 
           <Pressable
-            accessibilityLabel="Open menu"
+            accessibilityLabel="Open more options"
             accessibilityRole="button"
             hitSlop={12}
             onPress={() => setOverlay('menu')}
