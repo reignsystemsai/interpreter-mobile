@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -208,13 +207,9 @@ export default function InterpreterScreen() {
           </Pressable>
 
           <View style={[styles.hero, compact && styles.heroCompact]}>
-            <Image
-              resizeMode="contain"
-              source={require('../assets/interpreter-bubble.png')}
-              style={[styles.logo, compact && styles.logoCompact]}
-            />
-            <Text style={styles.wordmark}>interpreter</Text>
-            <Text style={styles.tagline}>Speak any language.</Text>
+            <Text style={[styles.logoMark, compact && styles.logoMarkCompact]}>S</Text>
+            <Text style={styles.wordmark}>Speak</Text>
+            <Text style={styles.tagline}>The world speaks here.</Text>
           </View>
 
           <ListeningOrb
@@ -269,7 +264,7 @@ export default function InterpreterScreen() {
                   ? 'End Conversation'
                   : status === 'failed'
                     ? 'Try Again'
-                    : 'Start Conversation'}
+                    : 'Speak Now'}
               </Text>
             </LinearGradient>
           </Pressable>
@@ -583,16 +578,19 @@ const styles = StyleSheet.create({
   heroCompact: {
     marginTop: UI_CONTROLS.layout.hero.marginTopCompact,
   },
-  logo: {
-    height: UI_CONTROLS.layout.hero.logoSize,
-    width: UI_CONTROLS.layout.hero.logoSize,
-  },
-  logoCompact: {
-    height: UI_CONTROLS.layout.hero.logoSizeCompact,
-    width: UI_CONTROLS.layout.hero.logoSizeCompact,
-  },
-  wordmark: {
+  logoMark: {
     color: BLUE,
+    fontSize: 72,
+    fontWeight: '700',
+    lineHeight: 76,
+    shadowColor: '#14B8FF',
+    shadowOffset: { height: 0, width: 0 },
+    shadowOpacity: 0.65,
+    shadowRadius: 12,
+  },
+  logoMarkCompact: { fontSize: 58, lineHeight: 62 },
+  wordmark: {
+    color: '#101828',
     fontSize: 47,
     fontWeight: '800',
     letterSpacing: -2,
