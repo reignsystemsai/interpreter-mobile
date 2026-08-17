@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as Contacts from 'expo-contacts';
 import type { CountryCode } from 'libphonenumber-js';
-import { Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import { type InterpreterContact, useContacts } from './ContactsProvider';
 import { CallLanguageSelection, type CallLanguage, type CallVoice } from '../calling/CallLanguageSelection';
 import { CallService } from '../calling/CallService';
+import { TranslatorCallService } from '../calling/TranslatorCallService';
 import { CallingSetup } from '../calling/CallingSetup';
 import { ensureCallableIdentity, getLocalCallableIdentity } from '../calling/CallableIdentity';
 import {
@@ -83,9 +84,10 @@ function permissionLabel(permission: ReturnType<typeof useContacts>['permission'
 }
 
 function ContactDetails({ contact, onBack, onClose, onRefresh }: { contact: InterpreterContact; onBack: () => void; onClose: () => void; onRefresh: () => Promise<void> }) {
-  const [showLanguageSelection, setShowLanguageSelection] = useState(true);
+  const [showLanguageSelection, setShowLanguageSelection] = useState(false);
+  const [callTypeVisible, setCallTypeVisible] = useState(false);
   const [setupVisible, setSetupVisible] = useState(false);
-  const [pendingContactPhone, setPendingContactPhone] = useState('');
+  const [pendingCall, setPendingCall] = useState<null | { mode: 'classic'; phone: string } | { mode: 'translator'; phone: string; callerLanguage: CallLanguage; recipientLanguage: CallLanguage; callerVoice: CallVoice; recipientVoice: CallVoice }>(null);
 
   const invite = async () => {
     await Share.share({ message: `Download Interpreter so I can speak to you in your language.\n\n${APP_DOWNLOAD_URL}` });
@@ -102,20 +104,22 @@ function ContactDetails({ contact, onBack, onClose, onRefresh }: { contact: Inte
     }
   };
 
-  const startContactCall = async (phoneNumberE164: string, callerLanguage: CallLanguage, recipientLanguage: CallLanguage, callerVoice: CallVoice, recipientVoice: CallVoice) => {
+  const validPhone = () => {
+    const item = contact.phoneNumbers.find((candidate) => Boolean(parsePhoneNumberFromString(candidate.value, candidate.countryCode as CountryCode)?.isValid()));
+    return item ? parsePhoneNumberFromString(item.value, item.countryCode as CountryCode)?.number ?? '' : '';
+  };
+
+  const runCall = async (call: Exclude<typeof pendingCall, null>) => {
     try {
-      void callerLanguage;
-      void recipientLanguage;
-      void callerVoice;
-      void recipientVoice;
       if (!await getLocalCallableIdentity()) {
-        setPendingContactPhone(phoneNumberE164);
+        setPendingCall(call);
         setSetupVisible(true);
         return;
       }
       await ensureCallableIdentity();
       onClose();
-      await CallService.createCall(phoneNumberE164, contact.displayName);
+      if (call.mode === 'classic') await CallService.createCall(call.phone, contact.displayName);
+      else await TranslatorCallService.createCall(call.phone, contact.displayName, call.callerLanguage, call.recipientLanguage, call.callerVoice, call.recipientVoice);
     } catch (error) {
       if (error instanceof Error && error.message === 'This person does not have Interpreter yet.') {
         Alert.alert('Invite to Interpreter', undefined, [
@@ -128,40 +132,46 @@ function ContactDetails({ contact, onBack, onClose, onRefresh }: { contact: Inte
     }
   };
 
-  const choosePhoneForCall = async (phoneNumberE164: string, callerLanguage: CallLanguage, recipientLanguage: CallLanguage, callerVoice: CallVoice, recipientVoice: CallVoice) => {
-    await startContactCall(phoneNumberE164, callerLanguage, recipientLanguage, callerVoice, recipientVoice);
-  };
-
-  const beginVoiceCall = async (callerLanguage: CallLanguage, recipientLanguage: CallLanguage, callerVoice: CallVoice, recipientVoice: CallVoice) => {
-    const firstValidPhone = contact.phoneNumbers.find((item) => Boolean(parsePhoneNumberFromString(item.value, item.countryCode as CountryCode)?.isValid()));
-    if (!firstValidPhone) {
+  const requirePhone = () => {
+    const phone = validPhone();
+    if (!phone) {
       Alert.alert('This contact has no phone number saved.', undefined, [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Edit Contact', onPress: () => void editNativeContact() },
       ]);
-      return;
+      return '';
     }
-    const phoneNumberE164 = parsePhoneNumberFromString(firstValidPhone.value, firstValidPhone.countryCode as CountryCode)?.number ?? '';
-    if (!phoneNumberE164) return;
-    await choosePhoneForCall(phoneNumberE164, callerLanguage, recipientLanguage, callerVoice, recipientVoice);
+    return phone;
+  };
+
+  const beginClassicCall = () => {
+    setCallTypeVisible(false);
+    const phone = requirePhone();
+    if (phone) void runCall({ mode: 'classic', phone });
+  };
+
+  const beginTranslatorCall = (callerLanguage: CallLanguage, recipientLanguage: CallLanguage, callerVoice: CallVoice, recipientVoice: CallVoice) => {
+    const phone = requirePhone();
+    if (phone) void runCall({ mode: 'translator', phone, callerLanguage, recipientLanguage, callerVoice, recipientVoice });
   };
 
   const continueAfterSetup = () => {
-    const phone = pendingContactPhone;
-    setPendingContactPhone('');
+    const call = pendingCall;
+    setPendingCall(null);
     setSetupVisible(false);
-    if (phone) void ensureCallableIdentity().then(() => {
+    if (call) void ensureCallableIdentity().then(() => {
       onClose();
-      return CallService.createCall(phone, contact.displayName);
+      if (call.mode === 'classic') return CallService.createCall(call.phone, contact.displayName);
+      return TranslatorCallService.createCall(call.phone, contact.displayName, call.callerLanguage, call.recipientLanguage, call.callerVoice, call.recipientVoice);
     }).catch((error) => Alert.alert('Unable to connect', error instanceof Error ? error.message : 'Please try again.'));
   };
 
   if (showLanguageSelection) return <>
     <CallLanguageSelection
       contact={contact}
-      onBack={onBack}
+      onBack={() => setShowLanguageSelection(false)}
       onContactPress={() => setShowLanguageSelection(false)}
-      onStart={(callerLanguage, recipientLanguage, callerVoice, recipientVoice) => void beginVoiceCall(callerLanguage, recipientLanguage, callerVoice, recipientVoice)}
+      onStart={beginTranslatorCall}
     />
     <CallingSetup onCancel={() => setSetupVisible(false)} onComplete={continueAfterSetup} visible={setupVisible} />
   </>;
@@ -173,7 +183,7 @@ function ContactDetails({ contact, onBack, onClose, onRefresh }: { contact: Inte
       <Text style={styles.detailName}>{contact.displayName}</Text>
       <Text style={styles.userStatus}>iPhone contact</Text>
       <View style={styles.callGrid}>
-        <Pressable onPress={() => setShowLanguageSelection(true)} style={styles.callButton}><CallIcon name="phone" /><Text style={styles.callLabel}>Voice Call</Text></Pressable>
+        <Pressable onPress={() => setCallTypeVisible(true)} style={styles.callButton}><CallIcon name="phone" /><Text style={styles.callLabel}>Call</Text></Pressable>
         <Pressable onPress={() => Alert.alert('Coming soon', 'Video calling is not enabled yet.')} style={styles.callButton}><CallIcon name="video" /><Text style={styles.callLabel}>Video Call</Text><Text style={styles.comingSoon}>Coming Soon</Text></Pressable>
       </View>
       <PrimaryButton label="Invite to Interpreter" onPress={() => void invite().catch(() => Alert.alert('Unable to open invite'))} />
@@ -185,6 +195,16 @@ function ContactDetails({ contact, onBack, onClose, onRefresh }: { contact: Inte
       </View>
       <SecondaryButton label="Edit in Contacts" onPress={() => void editNativeContact()} />
     </ScrollView>
+    <Modal animationType="fade" onRequestClose={() => setCallTypeVisible(false)} transparent visible={callTypeVisible}>
+      <Pressable onPress={() => setCallTypeVisible(false)} style={styles.callTypeBackdrop}>
+        <View style={styles.callTypeCard}>
+          <Text style={styles.callTypeTitle}>Choose call type</Text>
+          <Text style={styles.callTypeBody}>Call {contact.displayName} normally or use live translation.</Text>
+          <Pressable accessibilityRole="button" onPress={beginClassicCall} style={styles.callTypeOption}><Text style={styles.callTypeOptionTitle}>Classic Call</Text><Text style={styles.callTypeOptionBody}>Use the phone normally</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => { setCallTypeVisible(false); setShowLanguageSelection(true); }} style={styles.callTypeOption}><Text style={styles.callTypeOptionTitle}>Translator Call</Text><Text style={styles.callTypeOptionBody}>Choose languages and male or female</Text></Pressable>
+        </View>
+      </Pressable>
+    </Modal>
     <CallingSetup onCancel={() => setSetupVisible(false)} onComplete={continueAfterSetup} visible={setupVisible} />
   </>;
 }
@@ -207,4 +227,5 @@ const styles = StyleSheet.create({
   contactList: { paddingBottom: 28, paddingTop: 8 }, contactRow: { alignItems: 'center', flexDirection: 'row', minHeight: 68 }, avatar: { alignItems: 'center', backgroundColor: '#EAF1FF', borderRadius: 20, height: 40, justifyContent: 'center', width: 40 }, avatarText: { color: BLUE, fontSize: 17, fontWeight: '800' }, contactCopy: { flex: 1, marginLeft: 11 }, contactName: { color: '#101828', fontSize: 16, fontWeight: '700' }, contactMeta: { color: '#667085', fontSize: 11, marginTop: 3 }, chevron: { color: BLUE, fontSize: 28 }, empty: { color: '#667085', fontSize: 14, lineHeight: 21, paddingHorizontal: 15, paddingVertical: 28, textAlign: 'center' }, pressed: { opacity: 0.62 },
   details: { paddingBottom: 34 }, detailAvatar: { alignItems: 'center', alignSelf: 'center', backgroundColor: '#EAF1FF', borderRadius: 40, height: 80, justifyContent: 'center', width: 80 }, detailAvatarText: { color: BLUE, fontSize: 34, fontWeight: '800' }, detailName: { color: '#101828', fontSize: 25, fontWeight: '800', marginTop: 9, textAlign: 'center' }, userStatus: { color: '#667085', fontSize: 13, marginTop: 4, textAlign: 'center' }, callGrid: { flexDirection: 'row', gap: 10, marginTop: 17 }, callButton: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.52)', borderRadius: 18, flex: 1, minHeight: 88, justifyContent: 'center', padding: 8 }, callLabel: { color: '#344054', fontSize: 12, fontWeight: '600', marginTop: 6, textAlign: 'center' }, comingSoon: { color: '#98A2B3', fontSize: 9, marginTop: 2 }, sectionTitle: { color: '#344054', fontSize: 15, fontWeight: '800', marginBottom: 7, marginTop: 20 }, detailCard: { backgroundColor: 'rgba(255,255,255,0.52)', borderRadius: 18, paddingHorizontal: 15 }, detailRow: { paddingVertical: 11 }, fieldLabel: { color: '#667085', fontSize: 11, fontWeight: '700' }, detailValue: { color: '#101828', fontSize: 15, lineHeight: 21, marginTop: 3 }, input: { backgroundColor: '#FFFFFF', borderColor: '#DDE5F1', borderRadius: 15, borderWidth: 1, color: '#101828', fontSize: 15, marginTop: 9, paddingHorizontal: 14, paddingVertical: 12 },
   numberBackdrop: { alignItems: 'center', backgroundColor: 'rgba(8,18,38,0.22)', flex: 1, justifyContent: 'center', padding: 24 }, numberCard: { backgroundColor: 'rgba(248,251,255,0.92)', borderRadius: 26, maxWidth: 420, padding: 22, width: '100%' }, numberTitle: { color: '#101828', fontSize: 22, fontWeight: '800', textAlign: 'center' }, numberBody: { color: '#667085', fontSize: 14, lineHeight: 20, marginTop: 7, textAlign: 'center' },
+  callTypeBackdrop: { alignItems: 'center', backgroundColor: 'rgba(8,18,38,0.28)', flex: 1, justifyContent: 'center', padding: 24 }, callTypeCard: { backgroundColor: '#FFFFFF', borderRadius: 26, maxWidth: 420, padding: 22, width: '100%' }, callTypeTitle: { color: '#101828', fontSize: 23, fontWeight: '800' }, callTypeBody: { color: '#667085', fontSize: 14, lineHeight: 20, marginBottom: 10, marginTop: 6 }, callTypeOption: { backgroundColor: '#F4F7FB', borderColor: '#DDE5F1', borderRadius: 17, borderWidth: 1, marginTop: 10, padding: 16 }, callTypeOptionTitle: { color: BLUE, fontSize: 17, fontWeight: '800' }, callTypeOptionBody: { color: '#667085', fontSize: 13, marginTop: 4 },
 });
